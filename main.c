@@ -57,7 +57,24 @@ int main(int argc, char** argv) {
 
     while(RUNNING) {
         ch = getch();
-        //Console switching
+        // Code switch
+        // FIXME: When switching codes the layers change in memory but the buffer isnt rendered right
+        if(ch == CTL_TAB){
+            Layer* top = top_type_layer(&ccode, LAYER_CODE);
+            if(top == NULL){
+                continue;
+            }
+            remove_layer(&ccode, top);
+            Layer* next = top_type_layer(&ccode, LAYER_CODE);
+            if(next == NULL){
+                push_layer_to_top(&ccode, top);
+                continue;
+            }
+            push_layer_to_top(&ccode, next);
+            push_layer_to_bot(&ccode, top);
+        }
+
+        // Console switching
         if(ch == CUSTOM_KEY_ESCAPE || CLOSE_CONSOLE){
             int index = contains_layer(&ccode, console_layer);
             if(index == -1 && !CLOSE_CONSOLE){
@@ -84,11 +101,14 @@ int main(int argc, char** argv) {
         }
         int propagated_ch = ch;
         clear();
+        if(ch != -1){
+            print_layers(&ccode);
+        }
         for (int i = arrlen(ccode.layers) - 1; i >= 0; i--){
             Layer* layer = ccode.layers[i];
             propagated_ch = ch;
             if(stop_input_propagation < i){
-                propagated_ch = 0;
+                propagated_ch = -1;
             }
             switch(layer->type){
                 case LAYER_CODE: {

@@ -24,8 +24,42 @@ void push_layer_to_top(CCode* ccode, Layer* to_top){
     arrins(ccode->layers, 0, to_top);
 }
 
+void push_layer_to_bot(CCode* ccode, Layer* to_bot){
+    if (arrlen(ccode->layers) > 0 && ccode->layers[arrlen(ccode->layers)-1] == to_bot) {
+        return;
+    }
+
+    // Remove the layer if it is present in layers
+    for(int i = 0; i < arrlen(ccode->layers); i++){
+        if(ccode->layers[i] == to_bot){
+            arrdel(ccode->layers, i);
+            break;
+        }
+    }
+
+    // insert to bot
+    arrput(ccode->layers, to_bot);
+}
+
 Layer* top_layer(CCode* ccode){
     return arrlen(ccode->layers) > 0 ? ccode->layers[0] : NULL;
+}
+
+
+void remove_layer(CCode* ccode, Layer* target){
+    for(int i = 0; i < arrlen(ccode->layers); i++){
+        if(ccode->layers[i] == target){
+            arrdel(ccode->layers, i);
+            break;
+        }
+    }
+}
+
+Layer* top_type_layer(CCode* ccode, LayerType type){
+    for(int i = 0; i < arrlen(ccode->layers); i++){
+        if(ccode->layers[i]->type == type) return ccode->layers[i];
+    }
+    return NULL;
 }
 
 int contains_layer(CCode* ccode, Layer* layer){
@@ -34,6 +68,11 @@ int contains_layer(CCode* ccode, Layer* layer){
     }
     return -1;
 }
+// alias
+#define at_index_layer contains_layer
+
+#define default_filename_length 8
+static char* default_filename = "untitled";
 
 Layer* new_layer_code(){
     Layer* code = malloc(sizeof(Layer));
@@ -48,8 +87,13 @@ Layer* new_layer_code(){
         free(code);
         return NULL;
     }
-    lcd->filepath = NULL;
+    lcd->filename = NULL;
+    for(size_t i = 0; i < default_filename_length; i++){
+        arrput(lcd->filename, default_filename[i]);
+    }
+    arrput(lcd->filename, '\0');
     lcd->code_buffer = NULL;
+    lcd->saved = false;
     code->layer_data = lcd;
 
     return code;
@@ -75,7 +119,6 @@ Layer* new_layer_console(){
     console->layer_data = lcd;
     return console;
 }
-
 
 
 void layer_code_handle_keypress(CCode* ccode, Layer* layer, int chr){
@@ -109,7 +152,7 @@ void layer_code_handle_keypress(CCode* ccode, Layer* layer, int chr){
     if(ccode->cursor->y >= arrlen(code_data->code_buffer)){
         return;
     }
-    
+
     // add character to buffer that we have our curses on
     if((chr >= 0 && chr <= 255) && isprint(chr)){
         char* line = code_data->code_buffer[ccode->cursor->y];
@@ -128,6 +171,7 @@ void layer_code_handle_keypress(CCode* ccode, Layer* layer, int chr){
         } else {
             arrput(line, (char)chr);
         }
+        code_data->saved = false;
         arrput(line, '\0');
         
         ccode->cursor->x++;
@@ -170,6 +214,7 @@ void layer_code_handle_keypress(CCode* ccode, Layer* layer, int chr){
             
             ccode->cursor->y--;
         }
+        code_data->saved = false;
     }
     // new line
     else if(chr == CUSTOM_KEY_ENTER){
@@ -203,9 +248,10 @@ void layer_code_handle_keypress(CCode* ccode, Layer* layer, int chr){
         code_data->code_buffer[ccode->cursor->y] = current_line;
         
         arrins(code_data->code_buffer, ccode->cursor->y + 1, new_line);
-        
+
         ccode->cursor->y++;
         ccode->cursor->x = 0;
+        code_data->saved = false;
     }
     // moving cursor with keys
     else if(chr >= KEY_DOWN && chr <= KEY_RIGHT){
@@ -282,8 +328,9 @@ void layer_code_handle_keypress(CCode* ccode, Layer* layer, int chr){
     
     char top_line[x+1];
     size_t size = 0;
-    char* file_name = code_data->filepath ? code_data->filepath : "untitled*";
-    size = snprintf(top_line, x + 1, "%s", file_name);
+    assert(code_data->filename != NULL && "code_data->filename should not be NULL");
+    char* file_name = code_data->filename;
+    size = snprintf(top_line, x + 1, "%s%s", file_name, code_data->saved ? "" : "*");
 
     if ((int)size > x) size = x;
     for (int i = size; i < x; i++) {
@@ -338,14 +385,48 @@ void layer_code_handle_keypress(CCode* ccode, Layer* layer, int chr){
 }
 
 
-void read_file_to_layer(CCode* ccode, const char* filepath){
+void write_code_layer_to_file(CCode* ccode){
+    Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
+    // No code layer to save
+    if(top_code_layer == NULL){
+        return;
+    }
+    LayerCodeData* lcd = (LayerCodeData*) top_code_layer->layer_data; 
+
+    Nob_String_Builder sb = {0};
+    // build code layer to continues string for writing
+    for(int line_n = 0; line_n < arrlen(lcd->code_buffer); line_n++){
+        char* line = lcd->code_buffer[line_n];
+        nob_sb_append_cstr(&sb, line);
+        nob_da_append(&sb, '\n');
+    }
+
+    if(nob_write_entire_file(lcd->filename, sb.items, sb.count)){
+        lcd->saved = true;
+    }
+
+    nob_sb_free(sb);
+}
+
+
+void read_file_to_code_layer(CCode* ccode, const char* filename_start, size_t size){
 	Nob_String_Builder sb = {0};
-	if(!nob_read_entire_file(filepath, &sb)){
+    Nob_String_Builder filename = {0};
+    nob_da_append_many(&filename, filename_start, size);
+    nob_da_append(&filename, '\0');
+
+	if(!nob_read_entire_file(filename.items, &sb)){
 		fprintf(stderr, "Error reading file\n");
 		nob_sb_free(sb);
 	}
 	Layer* file_layer = new_layer_code();
 	LayerCodeData* lcd = (LayerCodeData*) file_layer->layer_data;
+    size_t zero = 0;
+    arrsetlen(lcd->filename, zero);
+    nob_da_foreach(char, c, &filename){
+        arrput(lcd->filename, *c);
+    }
+
 	char* line = NULL;
 	nob_da_foreach(char, c, &sb){
 		if(*c == '\t'){
@@ -365,8 +446,28 @@ void read_file_to_layer(CCode* ccode, const char* filepath){
    		arrput(line, '\0');
 	    arrput(lcd->code_buffer, line);
 	}
+    lcd->saved = true;
 	push_layer_to_top(ccode, file_layer);
 	nob_sb_free(sb);
+    nob_sb_free(filename);
+}
+
+
+void change_filename(CCode* ccode, const char* new_filename, size_t size){
+    Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
+    // No filename to change
+    if(top_code_layer == NULL){
+        return;
+    }
+
+    LayerCodeData* lcd = (LayerCodeData*)top_code_layer->layer_data;
+    size_t zero = 0;
+    arrsetlen(lcd->filename, zero);
+    lcd->filename = NULL;
+    for(size_t i = 0; i < size; i++){
+        arrput(lcd->filename, new_filename[i]);
+    }
+    arrput(lcd->filename, '\0');
 }
 
 
@@ -380,6 +481,9 @@ void console_execute_command(CCode* ccode, const char* buffer){
 		printf("Empty tokens\n");
 		return;
 	}
+    // TODO: Make some system that eliminates these long if statments
+
+    // Quit
 	if(
 		arrlen(to.tokens) >= 1 && 
 		to.tokens[0].type == TOKEN_COMMAND &&
@@ -387,20 +491,47 @@ void console_execute_command(CCode* ccode, const char* buffer){
 	){
 		RUNNING = false;
 	}
+    // Read and open file
 	else if(
 		arrlen(to.tokens) >= 2 &&
 		to.tokens[0].type == TOKEN_COMMAND &&
-		to.tokens[0].command_type == COMMAND_OPEN
-	){
-		if(to.tokens[1].type == TOKEN_STRING){
-			char filepath[to.tokens[1].string.size + 1];
-			memcpy(filepath, to.tokens[1].string.start, to.tokens[1].string.size);
-			filepath[to.tokens[1].string.size] = '\0';
-			read_file_to_layer(ccode, filepath);
-		}
+		to.tokens[0].command_type == COMMAND_OPEN &&
+        to.tokens[1].type == TOKEN_STRING
+    ){
+        read_file_to_code_layer(ccode, to.tokens[1].string.start, to.tokens[1].string.size);
 	}
+    // Goto line 
+    else if(
+        arrlen(to.tokens) >= 2 &&
+        to.tokens[0].type == TOKEN_COMMAND &&
+        to.tokens[0].command_type == COMMAND_GOTO &&
+        to.tokens[1].type == TOKEN_INTEGER &&
+        to.tokens[1].integer >= 0
+    ){
+        ccode->cursor->y = to.tokens[1].integer;
 
-	// TODO: Remove debug
+        if(arrlen(to.tokens) >= 3 && to.tokens[2].type == TOKEN_INTEGER && to.tokens[2].integer >= 0){
+            printf("setting cursor X to %d\n", to.tokens[2].integer);
+            ccode->cursor->x = to.tokens[2].integer;
+        }
+    }
+    // Change name
+    else if(
+        arrlen(to.tokens) >= 2 &&
+        to.tokens[0].type == TOKEN_COMMAND &&
+        to.tokens[0].command_type == COMMAND_CHANGE_NAME &&
+        to.tokens[1].type == TOKEN_STRING
+    ){
+        change_filename(ccode, to.tokens[1].string.start, to.tokens[1].string.size);
+    }
+    else if(
+        arrlen(to.tokens) >= 1 &&
+        to.tokens[0].type == TOKEN_COMMAND &&
+        to.tokens[0].command_type == COMMAND_WRITE 
+    ){
+        write_code_layer_to_file(ccode);
+    }
+
 	printf("Tokenization output:\n");
 	for(size_t i = 0; i < arrlenu(to.tokens); i++ ){
 		if(to.tokens[i].type == TOKEN_STRING || to.tokens[i].type == TOKEN_COMMAND){
@@ -490,7 +621,11 @@ char* layertype_to_str(LayerType lt){
 }
 
 void print_layer(Layer* l){
-    printf("  Layer: %p type: %s\n", l, layertype_to_str(l->type));
+    if(l->type == LAYER_CODE){
+        printf("  Layer: %p type: %s filename: %s\n", l, layertype_to_str(l->type), ((LayerCodeData*)l->layer_data)->filename);
+    }else{
+        printf("  Layer: %p type: %s\n", l, layertype_to_str(l->type));
+    }
 }
 
 
@@ -506,8 +641,8 @@ void free_layer(Layer* layer){
                 }
                 arrfree(lcd->code_buffer);
             }
-            if(lcd->filepath){
-                arrfree(lcd->filepath);
+            if(lcd->filename){
+                arrfree(lcd->filename);
             }
             free(lcd);
         }

@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <stdint.h>
+#include <assert.h>
 
 typedef enum {LAYER_CODE=0, LAYER_CONSOLE} LayerType;
 typedef enum {TOKEN_INVALID = 0, TOKEN_COMMAND, TOKEN_STRING, TOKEN_INTEGER, TOKEN_UNKNOWN} ConsoleTokenType;
@@ -43,7 +44,8 @@ typedef struct {
 } TokenizerState;
 
 typedef struct {
-    char* filepath;
+    char* filename;
+    bool saved;
     char** code_buffer;
 } LayerCodeData;
 
