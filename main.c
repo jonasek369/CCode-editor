@@ -10,6 +10,13 @@
 #include "layers.h"
 
 
+/*
+
+    CCode main
+
+*/
+
+
 void print_layers(CCode* ccode){
     printf("Layers:\n");
     for(size_t i = 0; i < arrlenu(ccode->layers); i++){
@@ -30,14 +37,7 @@ int main(int argc, char** argv) {
     NOB_UNUSED(argc);
     NOB_UNUSED(argv);
 
-    Cursor cursor = {0};
-    cursor.x      = 0;
-    cursor.y      = 0;
-    cursor.xoff   = 0;
-    cursor.yoff   = 0;
-
     CCode ccode   = {0};
-    ccode.cursor  = &cursor;
     ccode.layers  = NULL;
 
     // keep console in memory and reuse it 
@@ -58,8 +58,7 @@ int main(int argc, char** argv) {
     while(RUNNING) {
         ch = getch();
         // Code switch
-        // FIXME: When switching codes the layers change in memory but the buffer isnt rendered right
-        if(ch == CTL_TAB){
+        if(ch == CTL_TAB && top_layer(&ccode)->type != LAYER_CONSOLE){
             Layer* top = top_type_layer(&ccode, LAYER_CODE);
             if(top == NULL){
                 continue;
@@ -101,9 +100,9 @@ int main(int argc, char** argv) {
         }
         int propagated_ch = ch;
         clear();
-        if(ch != -1){
+        /*if(ch != -1){
             print_layers(&ccode);
-        }
+        }*/
         for (int i = arrlen(ccode.layers) - 1; i >= 0; i--){
             Layer* layer = ccode.layers[i];
             propagated_ch = ch;
@@ -125,8 +124,10 @@ int main(int argc, char** argv) {
                 }
             }
         }
+        draw_ui(&ccode);
         refresh();
     }
+
 
     if(contains_layer(&ccode, console_layer) == -1){
         free_layer(console_layer);
