@@ -81,6 +81,29 @@ void parse_string(TokenizerState* ts, Token* out) {
     }
 }
 
+
+void parse_unquoted_string(TokenizerState* ts, Token* out){
+	size_t start = ts->index;
+
+	while(
+		ts->source[ts->index] != '\0' 									   &&
+		!is_whitespace[(uint8_t)ts->source[ts->index]]                     &&
+		!(isdigit(ts->source[ts->index]) || ts->source[ts->index] == '-' ) &&
+		ts->source[ts->index] != '"'                                       
+		){
+		ts->index++;
+	}
+	int32_t size = ts->index-start;
+	if(size == 0){
+		out->type = TOKEN_INVALID;
+		return;
+	}
+
+	out->type = TOKEN_STRING;
+    out->string.start = ts->source + start;
+    out->string.size = ts->index-start;
+}
+
 void parse_number(TokenizerState* ts, Token* out){
 	size_t start = ts->index;
 	ts->index++; // In case the value had - we skip first characters
@@ -102,25 +125,20 @@ int next_token(TokenizerState* ts, Token* out){
 	if(isdigit(c) || c == '-'){
 		parse_number(ts, out);
 		return 0;
-	}
-
-	switch(c){
-		case '"': {
-			parse_string(ts, out);
-			break;
+	}else if(c == '"'){
+		parse_string(ts, out);
+		return 0;
+	}else if(c == ':'){
+		size_t pre_parse = ts->index;
+		parse_command(ts, out);
+		if(out->command_type != COMMAND_INVALID){
+			return 0;				
 		}
-		case ':': {
-			size_t pre_parse = ts->index;
-			parse_command(ts, out);
-			if(out->command_type != COMMAND_INVALID){
-				break;				
-			}
-			ts->index = pre_parse;
-		}
-		// TODO: Maybe add again the unqouted strings?
-		default: {
-			return 1;
-		}
+		ts->index = pre_parse; // Rollback buffer iteration
+		return 1; // Invalid command or separator
+	}else {
+		parse_unquoted_string(ts, out);
+		return out->type == TOKEN_INVALID;
 	}
 
 	return out->type == TOKEN_INVALID;
