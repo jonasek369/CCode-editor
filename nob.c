@@ -15,7 +15,7 @@ int main(int argc, char **argv)
     "-I", incl,
     "-o", "main.exe", "main.c",
     "A:/CCoder/wincon/pdcurses.a",
-    "-Wall", "-Wextra"
+    "-Wall", "-Wextra", "-lregex"
 );
     if (!nob_cmd_run_sync_and_reset(&cmd)) return 1;
     nob_cmd_append(&cmd, "./main.exe");

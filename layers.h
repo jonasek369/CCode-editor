@@ -2,7 +2,9 @@
 #define _H_LAYERS
 
 #include "defines.h"
+
 #include "tokenizer.h"
+#include "syntax_highlighting.h"
 
 #define NOB_IMPLEMENTATION
 #include "nob.h"
@@ -267,75 +269,116 @@ void write_code_layer_to_file(CCode* ccode){
 */
 
 
+
+void find_jump(CCode* ccode, char *finding, int32_t size, int32_t nth_occurence) {
+    if (!ccode || !finding || size <= 0 || nth_occurence <= 0) {
+        return;
+    }
+    Layer* layer = top_type_layer(ccode, LAYER_CODE);
+    if (!layer) return;
+    LayerCodeData* lcd = (LayerCodeData*) layer->layer_data;
+    if (!lcd || !lcd->cursor) return;
+
+    char* substr = malloc(size+1);
+    memcpy(substr, finding, size);
+    substr[size] = '\0';
+
+    int32_t found = 0;
+    for(int32_t nline = 0; nline < arrlen(lcd->code_buffer); nline++){
+        char* line = lcd->code_buffer[nline];
+        char* pos = line;
+        while ((pos = strstr(pos, substr)) != NULL) {
+            found++;
+            if (found == nth_occurence) {
+                lcd->cursor->x = (pos - line);
+                lcd->cursor->y = nline;
+                free(substr);
+                return;
+            }
+            pos++;
+        }
+    }
+    free(substr);
+}
+
+
+
 void console_execute_command(CCode* ccode, const char* buffer){
     TokenizationOutput to = {0};
     if(tokenize_console_command(buffer, &to)){
         fprintf(stderr, "Error while tokenizing console command\n");
         return;
     }
-    if(arrlen(to.tokens) == 0){
-        printf("Empty tokens\n");
+    if (arrlen(to.tokens) < 1 || to.tokens[0].type != TOKEN_COMMAND) {
         return;
     }
-    // TODO: Make some system that eliminates these long if statments
 
-    // Quit
-    if(
-        arrlen(to.tokens) >= 1                    && 
-        to.tokens[0].type == TOKEN_COMMAND        &&
-        to.tokens[0].command_type == COMMAND_QUIT
-    ){
-        RUNNING = false;
-    }
-    // Read and open file
-    else if(
-        arrlen(to.tokens) >= 2 &&
-        to.tokens[0].type == TOKEN_COMMAND        &&
-        to.tokens[0].command_type == COMMAND_OPEN &&
-        to.tokens[1].type == TOKEN_STRING
-    ){
-        read_file_to_code_layer(ccode, to.tokens[1].string.start, to.tokens[1].string.size);
-    }
-    // Goto line 
-    else if(
-        arrlen(to.tokens) >= 2                    &&
-        to.tokens[0].type == TOKEN_COMMAND        &&
-        to.tokens[0].command_type == COMMAND_GOTO &&
-        to.tokens[1].type == TOKEN_INTEGER        &&
-        to.tokens[1].integer >= 0
-    ){
-        Cursor* cursor = top_code_layer_cursor(ccode);
-        if(!cursor){
-            return;
+    switch (to.tokens[0].command_type) {
+        case COMMAND_QUIT: {
+            RUNNING = false;
+            break;
+        } 
+    
+        case COMMAND_OPEN: {
+            if (arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_STRING) {
+                read_file_to_code_layer(ccode, to.tokens[1].string.start, to.tokens[1].string.size);
+            }
+            break;
+        } 
+    
+        case COMMAND_GOTO: {
+            if (arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_INTEGER && to.tokens[1].integer >= 0) {
+                Cursor* cursor = top_code_layer_cursor(ccode);
+                if (!cursor) break;
+    
+                cursor->y = to.tokens[1].integer;
+                if (arrlen(to.tokens) >= 3 && to.tokens[2].type == TOKEN_INTEGER && to.tokens[2].integer >= 0) {
+                    cursor->x = to.tokens[2].integer;
+                }
+            }
+            break;
+        } 
+    
+        case COMMAND_CHANGE_NAME: {
+            if (arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_STRING) {
+                change_filename(ccode, to.tokens[1].string.start, to.tokens[1].string.size);
+            }
+            break;
+        } 
+    
+        case COMMAND_WRITE: {
+            write_code_layer_to_file(ccode);
+            break;
+        } 
+    
+        case COMMAND_SYS: {
+            assert(0 && "Not implemented");
+            break;
         }
-        cursor->y = to.tokens[1].integer;
+    
+        case COMMAND_SAVE: {
+            if (arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_STRING) {
+                change_filename(ccode, to.tokens[1].string.start, to.tokens[1].string.size);
+                write_code_layer_to_file(ccode);
+            }
+            break;
+        }
 
-        if(arrlen(to.tokens) >= 3 && to.tokens[2].type == TOKEN_INTEGER && to.tokens[2].integer >= 0){
-            printf("setting cursor X to %d\n", to.tokens[2].integer);
-            cursor->x = to.tokens[2].integer;
+        case COMMAND_FIND: {
+            if (arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_STRING) {
+                int32_t nth_occurence = 1;
+                if(arrlen(to.tokens) >= 3 && to.tokens[2].type == TOKEN_INTEGER){
+                    nth_occurence = to.tokens[2].integer;
+                }
+                find_jump(ccode, to.tokens[1].string.start, to.tokens[1].string.size, nth_occurence);
+            }
+            break;
         }
-    }
-    // Change name
-    else if(
-        arrlen(to.tokens) >= 2                           &&
-        to.tokens[0].type == TOKEN_COMMAND               &&
-        to.tokens[0].command_type == COMMAND_CHANGE_NAME &&
-        to.tokens[1].type == TOKEN_STRING
-    ){
-        change_filename(ccode, to.tokens[1].string.start, to.tokens[1].string.size);
-    }
-    else if(
-        arrlen(to.tokens) >= 1                     &&
-        to.tokens[0].type == TOKEN_COMMAND         &&
-        to.tokens[0].command_type == COMMAND_WRITE 
-    ){
-        write_code_layer_to_file(ccode);
-    } else if(
-        arrlen(to.tokens) >= 2                   &&
-        to.tokens[0].type == TOKEN_COMMAND       &&
-        to.tokens[0].command_type == COMMAND_SYS 
-    ){
-        assert(0 && "Not implemented");
+    
+        default: {
+            // Unknown command
+            break;
+        } 
     }
 
     printf("Tokenization output:\n");
@@ -357,21 +400,13 @@ void console_execute_command(CCode* ccode, const char* buffer){
 
     Layer character handling
 
-    TODO: Split render and update in separate function
-
 */
 
-void layer_code_handle_keypress(CCode* ccode, Layer* layer, int chr){
+void layer_code_update(CCode* ccode, Layer* layer, int chr){
     if(!ccode || !layer || layer->type != LAYER_CODE || layer->layer_data == NULL){
         return;
     }
     LayerCodeData* code_data = (LayerCodeData*) layer->layer_data;
-    
-    int y, x;
-    getmaxyx(stdscr, y, x);
-    
-    int content_height = y - 1;
-    int content_width = x;
 
     if(code_data->code_buffer == NULL){
         char* line = NULL;
@@ -550,6 +585,12 @@ void layer_code_handle_keypress(CCode* ccode, Layer* layer, int chr){
         }
     }
     
+    int y, x;
+    getmaxyx(stdscr, y, x);
+    
+    int content_height = y - 1;
+    int content_width = x;
+    
     int screen_y = code_data->cursor->y - code_data->cursor->yoff;
     if(screen_y < 0){
         code_data->cursor->yoff = code_data->cursor->y;
@@ -563,59 +604,78 @@ void layer_code_handle_keypress(CCode* ccode, Layer* layer, int chr){
     } else if(screen_x >= content_width){
         code_data->cursor->xoff = code_data->cursor->x - content_width + 1;
     }
-
-    clear();
-    
-    // Draw content lines with offset
-    int buffer_size = arrlen(code_data->code_buffer);
-    for(int screen_line = 0; screen_line < content_height; screen_line++){
-        int buffer_line = screen_line + code_data->cursor->yoff;
-        
-        if(buffer_line >= buffer_size){
-            break;
-        }
-        
-        char* line = code_data->code_buffer[buffer_line];
-        if(line != NULL){
-            int line_len = strlen(line);
-            
-            if(code_data->cursor->xoff < line_len){
-                int chars_to_display = line_len - code_data->cursor->xoff;
-                if(chars_to_display > content_width){
-                    chars_to_display = content_width;
-                }
-                
-                char display_line[chars_to_display + 1];
-                strncpy(display_line, line + code_data->cursor->xoff, chars_to_display);
-                display_line[chars_to_display] = '\0';
-                
-                mvprintw(screen_line + 1, 0, "%s", display_line);
-            }
-        }
-    }
-    
-    // int cursor_screen_y = code_data->cursor->y - code_data->cursor->yoff + 1;
-    // int cursor_screen_x = code_data->cursor->x - code_data->cursor->xoff;
-    
-    // if(cursor_screen_y >= 1 && cursor_screen_y < y && 
-    //    cursor_screen_x >= 0 && cursor_screen_x < x){
-    //     move(cursor_screen_y, cursor_screen_x);
-    // }
-    
-    // refresh();
 }
 
 
-
-void layer_console_handle_keypress(CCode* ccode, Layer* layer, int chr){
-    if(!ccode || !layer || layer->type != LAYER_CONSOLE || layer->layer_data == NULL){
+void layer_code_render(CCode* ccode, Layer* layer) {
+    if (!ccode || !layer || layer->type != LAYER_CODE || layer->layer_data == NULL) {
         return;
     }
-    LayerConsoleData* console_data = (LayerConsoleData*) layer->layer_data;
+    LayerCodeData* code_data = (LayerCodeData*) layer->layer_data;
 
     int y, x;
     getmaxyx(stdscr, y, x);
 
+    int content_height = y - 1;
+    int content_width = x;
+
+    //clear();
+
+    int buffer_size = arrlen(code_data->code_buffer);
+
+    // allocate visible buffer
+    char **visible_buffer = malloc(sizeof(char*) * content_height);
+
+    for (int screen_line = 0; screen_line < content_height; screen_line++) {
+        int buffer_line = screen_line + code_data->cursor->yoff;
+
+        if (buffer_line >= buffer_size) {
+            visible_buffer[screen_line] = strdup(""); // empty line
+            continue;
+        }
+
+        char* line = code_data->code_buffer[buffer_line];
+        if (!line) {
+            visible_buffer[screen_line] = strdup("");
+            continue;
+        }
+
+        int line_len = strlen(line);
+        if (code_data->cursor->xoff >= line_len) {
+            visible_buffer[screen_line] = strdup(""); // scrolled past end of line
+        } else {
+            int chars_to_display = line_len - code_data->cursor->xoff;
+            if (chars_to_display > content_width) {
+                chars_to_display = content_width;
+            }
+
+            visible_buffer[screen_line] = malloc(chars_to_display + 1);
+            strncpy(visible_buffer[screen_line],
+                    line + code_data->cursor->xoff,
+                    chars_to_display);
+            visible_buffer[screen_line][chars_to_display] = '\0';
+        }
+
+        // now print from visible buffer instead of slicing inline
+        //mvprintw(screen_line + 1, 0, "%s", visible_buffer[screen_line]);
+    }
+    apply_c_syntax_highlighting(visible_buffer, content_height);
+
+    // cleanup
+    for (int i = 0; i < content_height; i++) {
+        free(visible_buffer[i]);
+    }
+    free(visible_buffer);
+}
+
+
+void layer_console_update(CCode* ccode, Layer* layer, int chr){
+    if(!ccode || !layer || layer->type != LAYER_CONSOLE || layer->layer_data == NULL){
+        return;
+    }
+    LayerConsoleData* console_data = (LayerConsoleData*) layer->layer_data;
+    int y, x;
+    getmaxyx(stdscr, y, x);
     if((chr >= 0 && chr <= 255) && isprint(chr)){
         int line_len = arrlen(console_data->console_buffer);
         
@@ -657,6 +717,17 @@ void layer_console_handle_keypress(CCode* ccode, Layer* layer, int chr){
             console_data->console_buffer_x++;
         }
     }
+}
+
+
+void layer_console_render(CCode* ccode, Layer* layer){
+    if(!ccode || !layer || layer->type != LAYER_CONSOLE || layer->layer_data == NULL){
+        return;
+    }
+    LayerConsoleData* console_data = (LayerConsoleData*) layer->layer_data;
+    int y, x;
+    getmaxyx(stdscr, y, x);
+    
     //clear();
     char top_line[x+1];
     size_t size = snprintf(top_line, x + 1, "%s", console_data->console_buffer);
@@ -664,12 +735,22 @@ void layer_console_handle_keypress(CCode* ccode, Layer* layer, int chr){
     for (int i = size; i < x; i++) top_line[i] = ' ';
     top_line[x] = '\0';
     
-
     attron(A_REVERSE);
     mvprintw(y-1, 0, "%s", top_line);
     attroff(A_REVERSE);
     // move(y-1, console_data->console_buffer_x);
     // refresh();
+}
+
+
+void layer_console_handle_keypress(CCode* ccode, Layer* layer, int chr){
+    layer_console_update(ccode, layer, chr);
+    layer_console_render(ccode, layer);
+}
+
+void layer_code_handle_keypress(CCode* ccode, Layer* layer, int chr){
+    layer_code_update(ccode, layer, chr);
+    layer_code_render(ccode, layer);
 }
 
 

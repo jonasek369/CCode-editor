@@ -38,8 +38,11 @@ void parse_command(TokenizerState* ts, Token* out){
 	}else if(command_length == 4 && strncmp(start, ":sys", 4) == 0){
 		out->command_type = COMMAND_SYS;
 		return;
-	}else if(command_length == 3 && strncmp(start, ":op", 3) == 0){
+	}else if(command_length == 2 && strncmp(start, ":o", 2) == 0){
 		out->command_type = COMMAND_OPEN;
+		return;
+	}else if(command_length == 2 && strncmp(start, ":f", 2) == 0){
+		out->command_type = COMMAND_FIND;
 		return;
 	}
 

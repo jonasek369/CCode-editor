@@ -13,10 +13,12 @@
 #include <stdint.h>
 #include <assert.h>
 #include <math.h>
+#include <regex.h>
+#include "curses.h"
 
 typedef enum {LAYER_CODE=0, LAYER_CONSOLE} LayerType;
 typedef enum {TOKEN_INVALID = 0, TOKEN_COMMAND, TOKEN_STRING, TOKEN_INTEGER, TOKEN_UNKNOWN} ConsoleTokenType;
-typedef enum {COMMAND_INVALID = 0, COMMAND_OPEN, COMMAND_QUIT, COMMAND_GOTO, COMMAND_SAVE, COMMAND_WRITE, COMMAND_CHANGE_NAME, COMMAND_SYS} CommandType;
+typedef enum {COMMAND_INVALID = 0, COMMAND_OPEN, COMMAND_QUIT, COMMAND_GOTO, COMMAND_SAVE, COMMAND_WRITE, COMMAND_CHANGE_NAME, COMMAND_SYS, COMMAND_FIND} CommandType;
 
 static const bool is_whitespace[256] = {
   [' '] = 1, ['\t'] = 1, ['\n'] = 1, ['\r'] = 1

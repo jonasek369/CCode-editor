@@ -1,8 +1,6 @@
 #include <ctype.h>
 #include <stdbool.h>
 
-#include "curses.h"
-
 #define STB_DS_IMPLEMENTATION
 #include "stb_ds.h"
 
@@ -54,6 +52,8 @@ int main(int argc, char** argv) {
     noecho();
 
     move(1, 0);
+
+    init_colors();
 
     while(RUNNING) {
         ch = getch();
