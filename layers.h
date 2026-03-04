@@ -44,6 +44,8 @@ Layer* new_layer_code(){
     lcd->cursor->xoff = 0;
     lcd->cursor->yoff = 0;
 
+    lcd->finding_substr = NULL;
+
     lcd->filename = NULL;
     for(size_t i = 0; i < default_filename_length; i++){
         arrput(lcd->filename, default_filename[i]);
@@ -85,19 +87,21 @@ Layer* new_layer_console(){
 
 
 void push_layer_to_top(CCode* ccode, Layer* to_top){
-    if (arrlen(ccode->layers) > 0 && ccode->layers[0] == to_top) {
+    if (!to_top)
         return;
-    }
 
-    // Remove the layer if it is present in layers
-    for(int i = 0; i < arrlen(ccode->layers); i++){
-        if(ccode->layers[i] == to_top){
+    size_t len = arrlenu(ccode->layers);
+
+    if (len > 0 && ccode->layers[0] == to_top)
+        return;
+
+    for (size_t i = 0; i < len; i++){
+        if (ccode->layers[i] == to_top){
             arrdel(ccode->layers, i);
             break;
         }
     }
 
-    // insert to top
     arrins(ccode->layers, 0, to_top);
 }
 
@@ -269,7 +273,21 @@ void write_code_layer_to_file(CCode* ccode){
 */
 
 
+char* stringview_to_str(const char* view, size_t size) {
+    if (!view || size == 0) {
+        char* str = malloc(1);
+        if (!str) return NULL;
+        str[0] = '\0';
+        return str;
+    }
 
+    char* str = malloc(size + 1);
+    if (!str) return NULL;
+
+    memcpy(str, view, size);
+    str[size] = '\0';
+    return str;
+}
 void find_jump(CCode* ccode, char *finding, int32_t size, int32_t nth_occurence) {
     if (!ccode || !finding || size <= 0 || nth_occurence <= 0) {
         return;
@@ -279,9 +297,25 @@ void find_jump(CCode* ccode, char *finding, int32_t size, int32_t nth_occurence)
     LayerCodeData* lcd = (LayerCodeData*) layer->layer_data;
     if (!lcd || !lcd->cursor) return;
 
+    int y, x;
+    getmaxyx(stdscr, y, x);
+    (void)x;
+
     char* substr = malloc(size+1);
     memcpy(substr, finding, size);
     substr[size] = '\0';
+
+    if(lcd->finding_substr == NULL){
+        FindingSubstr* fss = malloc(sizeof(FindingSubstr));
+
+        fss->substr = substr;
+        fss->at_nth_occurence = nth_occurence;
+
+        lcd->finding_substr = fss;
+    }
+
+    int32_t first_x = 0;
+    int32_t first_y = 0;
 
     int32_t found = 0;
     for(int32_t nline = 0; nline < arrlen(lcd->code_buffer); nline++){
@@ -289,16 +323,54 @@ void find_jump(CCode* ccode, char *finding, int32_t size, int32_t nth_occurence)
         char* pos = line;
         while ((pos = strstr(pos, substr)) != NULL) {
             found++;
+            if(found == 1){
+                first_x = (pos-line);
+                first_y = nline;
+            }
             if (found == nth_occurence) {
                 lcd->cursor->x = (pos - line);
                 lcd->cursor->y = nline;
-                free(substr);
+
+                // not sure if i like xoff yet
+                //lcd->cursor->xoff = lcd->cursor->x - x / 2;
+                lcd->cursor->yoff = lcd->cursor->y - y / 2;
+
+                // if (lcd->cursor->xoff < 0) lcd->cursor->xoff = 0;
+                if (lcd->cursor->yoff < 0) lcd->cursor->yoff = 0;
+
                 return;
-            }
+    }
             pos++;
         }
     }
-    free(substr);
+    if(found < nth_occurence){
+        if(lcd->finding_substr != NULL){
+            lcd->finding_substr->at_nth_occurence = 1;
+        }
+        lcd->cursor->x = first_x;
+        lcd->cursor->y = first_y;
+    }
+
+    if(found == 0){
+        CLOSE_CONSOLE = FALSE;
+        Layer* console = top_type_layer(ccode, LAYER_CONSOLE);
+        LayerConsoleData* layer_console_data = (LayerConsoleData*) console->layer_data;
+    
+        arrsetlen(layer_console_data->console_buffer, 0);
+    
+        char message[128];
+        size_t message_size = snprintf(message, sizeof(message), "Could not find '%s'", lcd->finding_substr->substr);
+    
+        for(size_t i = 0; i < message_size; i++){
+            arrput(layer_console_data->console_buffer, message[i]);
+        }
+        arrput(layer_console_data->console_buffer, '\0');
+        layer_console_data->console_buffer_x = arrlen(layer_console_data->console_buffer)-1;
+    
+        free(lcd->finding_substr->substr);
+        free(lcd->finding_substr);
+        lcd->finding_substr = NULL;
+    }
 }
 
 
@@ -402,11 +474,23 @@ void console_execute_command(CCode* ccode, const char* buffer){
 
 */
 
+
+size_t compute_byte_offset(char **lines, int num_lines, int line, int col) {
+    size_t offset = 0;
+    for (int i = 0; i < line; i++) {
+        offset += strlen(lines[i]) + 1; // +1 for '\n'
+    }
+    offset += col;
+    return offset;
+}
+
 void layer_code_update(CCode* ccode, Layer* layer, int chr){
     if(!ccode || !layer || layer->type != LAYER_CODE || layer->layer_data == NULL){
         return;
     }
     LayerCodeData* code_data = (LayerCodeData*) layer->layer_data;
+
+    bool inFindSubstrMode = code_data->finding_substr != NULL;
 
     if(code_data->code_buffer == NULL){
         char* line = NULL;
@@ -426,6 +510,35 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
 
     if(code_data->cursor->y >= arrlen(code_data->code_buffer)){
         return;
+    }
+
+    int y, x;
+    getmaxyx(stdscr, y, x);
+
+    if(inFindSubstrMode){
+        FindingSubstr* fss = code_data->finding_substr;
+
+        bool change = false;
+        if(chr == KEY_RIGHT){
+            fss->at_nth_occurence++;
+            change = true;
+            chr = -1;
+        }else if(chr == KEY_LEFT){
+            if(fss->at_nth_occurence - 1 >= 1){
+                fss->at_nth_occurence--;
+                change = true;
+            }
+            chr = -1;
+        }
+        if(change){
+            find_jump(ccode, fss->substr, strlen(fss->substr), fss->at_nth_occurence);
+        }
+        if(chr == CUSTOM_KEY_ENTER){
+            free(fss->substr);
+            free(fss);
+            code_data->finding_substr = NULL;
+            chr = -1;
+        }
     }
 
     // add character to buffer that we have our curses on
@@ -529,7 +642,7 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
         code_data->saved = false;
     }
     // moving cursor with keys
-    else if(chr >= KEY_DOWN && chr <= KEY_RIGHT){
+    else if(!inFindSubstrMode && chr >= KEY_DOWN && chr <= KEY_RIGHT){
         switch(chr){
             case KEY_DOWN: {
                 if(arrlen(code_data->code_buffer) <= code_data->cursor->y+1){
@@ -584,10 +697,33 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
             }
         }
     }
+    else if(!inFindSubstrMode && chr == CTL_PGUP){
+        // -2 makes it so last line = first line
+        code_data->cursor->y -= (y-2)*2;
+        if(code_data->cursor->y < 0){
+            code_data->cursor->y = 0;
+        }
+    }
+    else if(!inFindSubstrMode && chr == CTL_PGDN){
+        code_data->cursor->y += (y-2)*2;
+    }
+
+    else if (!inFindSubstrMode && chr == CTL_UP) {
+        if (code_data->cursor->yoff > 0) {
+            code_data->cursor->yoff--;
+        }
+    }
+    else if (!inFindSubstrMode && chr == CTL_DOWN) {
+        int screen_rows = y-1;
+        int buffer_size = arrlen(code_data->code_buffer);
     
-    int y, x;
-    getmaxyx(stdscr, y, x);
+        int max_scroll = buffer_size - screen_rows;
+        if (max_scroll < 0) max_scroll = 0;
     
+        if (code_data->cursor->yoff < max_scroll) {
+            code_data->cursor->yoff++;
+        }
+    }
     int content_height = y - 1;
     int content_width = x;
     
@@ -659,7 +795,7 @@ void layer_code_render(CCode* ccode, Layer* layer) {
         // now print from visible buffer instead of slicing inline
         //mvprintw(screen_line + 1, 0, "%s", visible_buffer[screen_line]);
     }
-    apply_c_syntax_highlighting(visible_buffer, content_height);
+    apply_c_syntax_highlighting(visible_buffer, content_height, code_data->cursor, code_data->finding_substr);
 
     // cleanup
     for (int i = 0; i < content_height; i++) {
@@ -675,6 +811,7 @@ void layer_console_update(CCode* ccode, Layer* layer, int chr){
     }
     LayerConsoleData* console_data = (LayerConsoleData*) layer->layer_data;
     int y, x;
+    (void)y;
     getmaxyx(stdscr, y, x);
     if((chr >= 0 && chr <= 255) && isprint(chr)){
         int line_len = arrlen(console_data->console_buffer);
@@ -698,8 +835,8 @@ void layer_console_update(CCode* ccode, Layer* layer, int chr){
             console_data->console_buffer_x++;
         }
     } else if(chr == CUSTOM_KEY_ENTER){
-        console_execute_command(ccode, console_data->console_buffer);
         CLOSE_CONSOLE = true;
+        console_execute_command(ccode, console_data->console_buffer);
     } else if(chr == CUSTOM_KEY_BACKSPACE){
         if(console_data->console_buffer_x > 0 && arrlen(console_data->console_buffer) > 1){
             (void) arrpop(console_data->console_buffer);
@@ -757,6 +894,7 @@ void layer_code_handle_keypress(CCode* ccode, Layer* layer, int chr){
 void draw_ui(CCode* ccode) {
     Layer** layers = all_type_layers(ccode, LAYER_CODE);
     Cursor* top_code_cursor = top_code_layer_cursor(ccode);
+    Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);;
     Layer* layer_at_top = top_layer(ccode);
 
     if (!layers || arrlen(layers) == 0 || top_code_cursor == NULL || layer_at_top == NULL) {
@@ -798,8 +936,20 @@ void draw_ui(CCode* ccode) {
     attron(A_REVERSE);
     mvprintw(0, 0, "%s", top_line);
     attroff(A_REVERSE);
-    size_t bot_line_size = snprintf(NULL, 0, "%d:%d", top_code_cursor->y, top_code_cursor->x);
-    mvprintw(y - 1, x - bot_line_size, "%d:%d", top_code_cursor->y, top_code_cursor->x);
+
+    char mode = 'I';
+
+    if(((LayerCodeData*) top_code_layer->layer_data)->finding_substr != NULL){
+        mode = 'J';
+    }
+
+    if(layer_at_top->type == LAYER_CONSOLE){
+        mode = 'C';
+    }
+
+
+    size_t bot_line_size = snprintf(NULL, 0, "%c%d:%d", mode, top_code_cursor->y, top_code_cursor->x);
+    mvprintw(y - 1, x - bot_line_size, "%c%d:%d", mode, top_code_cursor->y, top_code_cursor->x);
 
     if(layer_at_top->type == LAYER_CODE){
         LayerCodeData* lcd = (LayerCodeData*) layer_at_top->layer_data;

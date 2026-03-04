@@ -16,7 +16,6 @@
 #define COLOR_PREPROCESSOR 5
 #define COLOR_TYPE 6
 #define COLOR_OPERATOR 7
-#define COLOR_DEFAULT 8
 
 /*
 
@@ -108,9 +107,10 @@ bool is_delimiter(char c) {
     return strchr(" \t(){}[].,;", c) != NULL || is_operator(c);
 }
 
-void apply_c_syntax_highlighting(char** visible_buffer, int32_t content_height) {
+void apply_c_syntax_highlighting(char** visible_buffer, int32_t content_height, Cursor* c, FindingSubstr* fss) {
     static bool in_multiline_comment = false;
     
+    bool inFindingSubStr = fss != NULL;
 
     for (int row = 0; row < content_height; row++) {
         if (visible_buffer[row] == NULL) continue;
@@ -308,6 +308,18 @@ void apply_c_syntax_highlighting(char** visible_buffer, int32_t content_height) 
             attroff(COLOR_PAIR(COLOR_DEFAULT));
         }
     }
+
+    if(inFindingSubStr){
+        move(c->y - c->yoff + 1, c->x - c->xoff);
+        attron(A_BLINK);
+        char* str = fss->substr;
+        while(*str != 0){
+            addch(*str);
+            str++;
+        }
+        attroff(A_BLINK);
+    }
+
 }
 
 void apply_c_syntax_highlighting_line(char* line, int row, bool* in_multiline_comment) {

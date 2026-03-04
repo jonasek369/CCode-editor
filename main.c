@@ -7,7 +7,6 @@
 
 #include "layers.h"
 
-
 /*
 
     CCode main
@@ -31,17 +30,26 @@ void free_ccode(CCode* ccode){
     arrfree(ccode->layers);
 }
 
-int main(int argc, char** argv) {
-    NOB_UNUSED(argc);
-    NOB_UNUSED(argv);
 
+
+void handle_args(CCode* ccode, int argc, char** argv){
+    if(argc <= 1){
+        return;
+    }
+    read_file_to_code_layer(ccode, argv[1], strlen(argv[1]));
+}
+
+
+int main(int argc, char** argv) {
     CCode ccode   = {0};
     ccode.layers  = NULL;
 
-    // keep console in memory and reuse it 
-    Layer* console_layer = new_layer_console();
+    handle_args(&ccode, argc, argv);
 
-    arrpush(ccode.layers, new_layer_code());
+    if(ccode.layers == NULL){
+        arrpush(ccode.layers, new_layer_code());
+    }
+
 
     int ch;
 
@@ -72,19 +80,20 @@ int main(int argc, char** argv) {
             push_layer_to_top(&ccode, next);
             push_layer_to_bot(&ccode, top);
         }
-
         // Console switching
         if(ch == CUSTOM_KEY_ESCAPE || CLOSE_CONSOLE){
-            int index = contains_layer(&ccode, console_layer);
-            if(index == -1 && !CLOSE_CONSOLE){
-                push_layer_to_top(&ccode, console_layer);
-            }else{
-                LayerConsoleData* lcd = (LayerConsoleData*)console_layer->layer_data;
-                size_t zero = 0; // using variable to circumvent -Wtype-limits
-                arrsetlen(lcd->console_buffer, zero);
-                arrput(lcd->console_buffer, '\0');
-                arrdel(ccode.layers, index);
-                lcd->console_buffer_x = 0;
+            Layer* top_console = top_type_layer(&ccode, LAYER_CONSOLE);
+        
+            if(!top_console && !CLOSE_CONSOLE){
+                Layer* new_layer = new_layer_console();
+                push_layer_to_top(&ccode, new_layer);
+            } else if(top_console){
+                int index = contains_layer(&ccode, top_console);
+                if(index != -1){
+                    free_layer(ccode.layers[index]);
+                    arrdel(ccode.layers, index);
+                }
+        
                 if(CLOSE_CONSOLE){
                     CLOSE_CONSOLE = false;
                 }
@@ -126,11 +135,6 @@ int main(int argc, char** argv) {
         }
         draw_ui(&ccode);
         refresh();
-    }
-
-
-    if(contains_layer(&ccode, console_layer) == -1){
-        free_layer(console_layer);
     }
     free_ccode(&ccode);
 

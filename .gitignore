@@ -1,0 +1,6 @@
+/PDCurses
+*.old
+*.exe
+stb_ds.h
+nob.c
+nob.h
