@@ -165,7 +165,9 @@ int tokenize_console_command(const char* buffer, TokenizationOutput* out){
 		if(!next_token(&ts, &tok)){
 			arrput(out->tokens, tok);
 		}else{
-			ts.index++;
+			if(ts.source[ts.index] != '\0'){
+				ts.index++;				
+			}
 		}
 	}
 

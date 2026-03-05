@@ -206,10 +206,14 @@ void read_file_to_code_layer(CCode* ccode, const char* filename_start, size_t si
             arrput(line, ' ');
             arrput(line, ' ');
         }else if(*c == '\n'){
+            arrput(line, '\n');
             arrput(line, '\0');
             arrput(lcd->code_buffer, line);
             line = NULL;
-        }else{
+        }else if(*c == '\r'){
+            continue;
+        }
+        else{
             arrput(line, *c);
         }
     }
@@ -255,7 +259,6 @@ void write_code_layer_to_file(CCode* ccode){
     for(int line_n = 0; line_n < arrlen(lcd->code_buffer); line_n++){
         char* line = lcd->code_buffer[line_n];
         nob_sb_append_cstr(&sb, line);
-        nob_da_append(&sb, '\n');
     }
 
     if(nob_write_entire_file(lcd->filename, sb.items, sb.count)){
@@ -403,12 +406,13 @@ void console_execute_command(CCode* ccode, const char* buffer){
     
         case COMMAND_GOTO: {
             if (arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_INTEGER && to.tokens[1].integer >= 0) {
-                Cursor* cursor = top_code_layer_cursor(ccode);
-                if (!cursor) break;
+                Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
+                LayerCodeData* lcd = top_code_layer->layer_data;
+                if (!lcd->cursor) break;
     
-                cursor->y = to.tokens[1].integer;
+                lcd->cursor->y = to.tokens[1].integer > arrlen(lcd->code_buffer) ? arrlen(lcd->code_buffer) : to.tokens[1].integer;
                 if (arrlen(to.tokens) >= 3 && to.tokens[2].type == TOKEN_INTEGER && to.tokens[2].integer >= 0) {
-                    cursor->x = to.tokens[2].integer;
+                    lcd->cursor->x = to.tokens[2].integer;
                 }
             }
             break;
@@ -597,39 +601,46 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
     else if(chr == CUSTOM_KEY_BACKSPACE){
         char* line = code_data->code_buffer[code_data->cursor->y];
         int line_len = arrlen(line);
-        
+    
         if(code_data->cursor->x > 0 && line_len > 1){
-            (void) arrpop(line);
+            (void)arrpop(line);                 // remove '\0'
             arrdel(line, code_data->cursor->x - 1);
             arrput(line, '\0');
-            
+    
             code_data->cursor->x--;
-            
+    
             code_data->code_buffer[code_data->cursor->y] = line;
-        } else if(code_data->cursor->x == 0 && code_data->cursor->y > 0){
+        }
+        else if(code_data->cursor->x == 0 && code_data->cursor->y > 0){
             char* current_line = code_data->code_buffer[code_data->cursor->y];
             char* prev_line = code_data->code_buffer[code_data->cursor->y - 1];
-            
+    
             int prev_line_len = arrlen(prev_line);
-            code_data->cursor->x = (prev_line_len > 0) ? prev_line_len - 1 : 0;
-            
-            if(prev_line_len > 0){
+    
+            code_data->cursor->x = (prev_line_len >= 2) ? prev_line_len - 2 : 0;
+    
+            if(prev_line_len >= 2){
+                (void) arrpop(prev_line);
                 (void) arrpop(prev_line);
             }
-            
+    
             int current_line_len = arrlen(current_line);
-            for(int i = 0; i < current_line_len - 1; i++){
+
+            for(int i = 0; i < current_line_len - 2; i++){
                 arrput(prev_line, current_line[i]);
             }
+    
+            arrput(prev_line, '\n');
             arrput(prev_line, '\0');
-            
+    
             code_data->code_buffer[code_data->cursor->y - 1] = prev_line;
-            
+    
             arrfree(current_line);
             arrdel(code_data->code_buffer, code_data->cursor->y);
-            
+    
             code_data->cursor->y--;
         }
+    
         code_data->saved = false;
     }
     // new line
@@ -640,17 +651,18 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
         if(code_data->cursor->x < 0){
             code_data->cursor->x = 0;
         }
-        if(code_data->cursor->x > line_len - 1){
-            code_data->cursor->x = (line_len > 0) ? line_len - 1 : 0;
+        if(code_data->cursor->x > line_len){
+            code_data->cursor->x = line_len;
         }
         
         char* new_line = NULL;
         
-        if(line_len > 0 && code_data->cursor->x < line_len - 1){
-            for(int i = code_data->cursor->x; i < line_len - 1; i++){
+        if(line_len > 0 && code_data->cursor->x < line_len - 2){
+            for(int i = code_data->cursor->x; i < line_len - 2; i++){
                 arrput(new_line, current_line[i]);
             }
         }
+        arrput(new_line, '\n');
         arrput(new_line, '\0');
         
         if(line_len > 0){
@@ -658,8 +670,9 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
             while(arrlen(current_line) > code_data->cursor->x){
                 (void) arrpop(current_line);
             }
-            arrput(current_line, '\0');
         }
+        arrput(current_line, '\n');
+        arrput(current_line, '\0');
         
         code_data->code_buffer[code_data->cursor->y] = current_line;
         
@@ -677,9 +690,9 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
                     break;
                 }
                 char* new_line = code_data->code_buffer[code_data->cursor->y+1];
-                int length = (int) strlen(new_line);
+                int length = arrlen(new_line)-2;
                 if(length < code_data->cursor->x){
-                    code_data->cursor->x = length;
+                    code_data->cursor->x = length >= 0 ? length : 0;
                 }
                 code_data->cursor->y++;
                 break;
@@ -689,9 +702,9 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
                     break;
                 }
                 char* new_line = code_data->code_buffer[code_data->cursor->y-1];
-                int length = (int)strlen(new_line);
+                int length = arrlen(new_line)-2;
                 if(length < code_data->cursor->x){
-                    code_data->cursor->x = length;
+                    code_data->cursor->x = length >= 0 ? length : 0;
                 }
                 code_data->cursor->y--;
                 break;
@@ -705,14 +718,14 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
                     break;
                 }
                 char* new_line = code_data->code_buffer[code_data->cursor->y-1];
-                int length = (int)strlen(new_line);
-                code_data->cursor->x = length;
+                int length = arrlen(new_line)-2;
+                code_data->cursor->x = length >= 0 ? length : 0;
                 code_data->cursor->y--;
                 break;
             }
             case KEY_RIGHT: {
                 char* current_line = code_data->code_buffer[code_data->cursor->y];
-                if(code_data->cursor->x < arrlen(current_line)-1){
+                if(code_data->cursor->x < arrlen(current_line)-2){
                     code_data->cursor->x++;
                     break;
                 }
@@ -751,6 +764,12 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
         if (code_data->cursor->yoff < max_scroll) {
             code_data->cursor->yoff++;
         }
+    }
+    else if (!inFindSubstrMode && chr == 7){
+        for(size_t i = 0; i < arrlenu(code_data->code_buffer[code_data->cursor->y]); i++){
+            printf("%d ", code_data->code_buffer[code_data->cursor->y][i]);
+        }
+        printf("\n");
     }
     int content_height = y - 1;
     int content_width = x;

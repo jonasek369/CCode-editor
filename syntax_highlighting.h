@@ -114,14 +114,12 @@ void apply_c_syntax_highlighting(char** visible_buffer, int32_t content_height, 
 
     for (int row = 0; row < content_height; row++) {
         if (visible_buffer[row] == NULL) continue;
-        
         char* line = visible_buffer[row];
         int col = 0;
         int len = strlen(line);
         
         move(row+1, 0);
         clrtoeol();  // Clear only this line to end, not whole screen
-        
         while (col < len) {
             // Handle multi-line comments continuation
             if (in_multiline_comment) {
