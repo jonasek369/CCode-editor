@@ -4,6 +4,7 @@
 #define CUSTOM_KEY_BACKSPACE 8
 #define CUSTOM_KEY_ENTER 13
 #define CUSTOM_KEY_ESCAPE 27
+#define CUSTOM_CTL_F 6
 
 #include <stdbool.h>
 #include <stdint.h>

@@ -65,6 +65,9 @@ int main(int argc, char** argv) {
 
     while(RUNNING) {
         ch = getch();
+        /*if(ch != -1){
+            printf("%d\n", ch);
+        }*/
         // Code switch
         if(ch == CTL_TAB && top_layer(&ccode)->type != LAYER_CONSOLE){
             Layer* top = top_type_layer(&ccode, LAYER_CODE);

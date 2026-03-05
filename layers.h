@@ -359,14 +359,17 @@ void find_jump(CCode* ccode, char *finding, int32_t size, int32_t nth_occurence)
         arrsetlen(layer_console_data->console_buffer, 0);
     
         char message[128];
-        size_t message_size = snprintf(message, sizeof(message), "Could not find '%s'", lcd->finding_substr->substr);
+        char* str = stringview_to_str(finding, size);
+        size_t message_size = snprintf(message, sizeof(message), "Could not find '%s'", str);
     
         for(size_t i = 0; i < message_size; i++){
             arrput(layer_console_data->console_buffer, message[i]);
         }
         arrput(layer_console_data->console_buffer, '\0');
         layer_console_data->console_buffer_x = arrlen(layer_console_data->console_buffer)-1;
-    
+        
+        free(str);
+
         free(lcd->finding_substr->substr);
         free(lcd->finding_substr);
         lcd->finding_substr = NULL;
@@ -442,6 +445,15 @@ void console_execute_command(CCode* ccode, const char* buffer){
                 if(arrlen(to.tokens) >= 3 && to.tokens[2].type == TOKEN_INTEGER){
                     nth_occurence = to.tokens[2].integer;
                 }
+                Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
+                if(top_code_layer){
+                    LayerCodeData* lcd = top_code_layer->layer_data;
+                    if(lcd->finding_substr != NULL){
+                        free(lcd->finding_substr->substr);
+                        free(lcd->finding_substr);
+                        lcd->finding_substr = NULL;
+                    }
+                }
                 find_jump(ccode, to.tokens[1].string.start, to.tokens[1].string.size, nth_occurence);
             }
             break;
@@ -510,6 +522,22 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
 
     if(code_data->cursor->y >= arrlen(code_data->code_buffer)){
         return;
+    }
+
+
+    if(chr == CUSTOM_CTL_F){
+        Layer* console_in_layers = top_type_layer(ccode, LAYER_CONSOLE);
+        if(console_in_layers == NULL){
+            Layer* new_console = new_layer_console();
+            push_layer_to_top(ccode, new_console);
+            LayerConsoleData* console_data = new_console->layer_data;
+            arrsetlen(console_data->console_buffer, 0);
+            arrput(console_data->console_buffer, ':');
+            arrput(console_data->console_buffer, 'f');
+            arrput(console_data->console_buffer, ' ');
+            arrput(console_data->console_buffer, '\0');
+            console_data->console_buffer_x = 3;
+        }
     }
 
     int y, x;
