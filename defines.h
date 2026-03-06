@@ -93,4 +93,6 @@ typedef struct {
 bool RUNNING = true;
 bool CLOSE_CONSOLE = false;
 
+#define LABEL(x) x:
+
 #endif

@@ -543,6 +543,12 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
             console_data->console_buffer_x = 3;
         }
     }
+    // TODO: Make the tab size user adjustable
+    if(chr == 9){
+        for(size_t i = 0; i < 4; i++){
+            layer_code_update(ccode, layer, ' ');
+        }
+    }
 
     int y, x;
     getmaxyx(stdscr, y, x);
@@ -765,6 +771,38 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
             code_data->cursor->yoff++;
         }
     }
+    else if (!inFindSubstrMode && chr == CTL_RIGHT){
+        // skip all spaces
+        #define current_cursor_char code_data->code_buffer[code_data->cursor->y][code_data->cursor->x]
+        #define not_special(x) (x != '\0' && x != '\n' && x != ' ' && x != '(' && x != ')')
+        #define is_parenths(x) (x == '(' || x == ')')
+
+        // TODO: Remove this goto hack
+        if(current_cursor_char == '\n' && arrlen(code_data->code_buffer) > code_data->cursor->y+1){
+            code_data->cursor->x = 0;
+            code_data->cursor->y++;
+            goto carried_to_next_line;
+        }
+
+        while(current_cursor_char == ' '){
+            code_data->cursor->x++;
+        }
+
+        if(is_parenths(current_cursor_char)){
+            code_data->cursor->x++;
+        }
+
+        while(not_special(current_cursor_char)){
+            code_data->cursor->x++;   
+        }
+
+        LABEL(carried_to_next_line)
+        #undef current_cursor_char
+        #undef not_special
+        #undef is_parenths
+    }
+
+    /* For debug CTRL + G*/
     else if (!inFindSubstrMode && chr == 7){
         for(size_t i = 0; i < arrlenu(code_data->code_buffer[code_data->cursor->y]); i++){
             printf("%d ", code_data->code_buffer[code_data->cursor->y][i]);
