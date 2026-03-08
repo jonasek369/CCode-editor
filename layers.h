@@ -86,6 +86,7 @@ Layer* new_layer_console(){
 */
 
 
+
 void push_layer_to_top(CCode* ccode, Layer* to_top){
     if (!to_top)
         return;
@@ -275,6 +276,86 @@ void write_code_layer_to_file(CCode* ccode){
 
 */
 
+char* layertype_to_str(LayerType lt){
+    if(lt == LAYER_CODE){
+        return "LAYER_CODE";
+    }else if(lt == LAYER_CONSOLE){
+        return "LAYER_CONSOLE";
+    }
+    return "(null)";
+}
+
+
+void print_layer(Layer* l){
+    if(l->type == LAYER_CODE){
+        printf("  Layer: %p type: %s filename: %s\n", l, layertype_to_str(l->type), ((LayerCodeData*)l->layer_data)->filename);
+    }else{
+        printf("  Layer: %p type: %s\n", l, layertype_to_str(l->type));
+    }
+}
+
+
+void free_layer(Layer* layer){
+    if(!layer) return;
+
+    if(layer->type == LAYER_CODE){
+        LayerCodeData* lcd = (LayerCodeData*) layer->layer_data;
+        if(lcd){
+            if(lcd->code_buffer){
+                for(size_t i = 0; i < arrlenu(lcd->code_buffer); i++){
+                    arrfree(lcd->code_buffer[i]);
+                }
+                arrfree(lcd->code_buffer);
+            }
+            if(lcd->filename){
+                arrfree(lcd->filename);
+            }
+            free(lcd);
+        }
+    } else if(layer->type == LAYER_CONSOLE){
+        LayerConsoleData* lcd = (LayerConsoleData*) layer->layer_data;
+        if(lcd){
+            if(lcd->console_buffer){
+                arrfree(lcd->console_buffer);
+            }
+            free(lcd);
+        }
+    }
+    free(layer);
+}
+
+void message_to_console(CCode* ccode, const char* message){
+    if(CLOSE_CONSOLE){
+        CLOSE_CONSOLE = false;
+    }
+    Layer* console = top_type_layer(ccode, LAYER_CONSOLE);
+    LayerConsoleData* layer_console_data = (LayerConsoleData*) console->layer_data;
+    arrsetlen(layer_console_data->console_buffer, 0);
+
+    for(size_t i = 0; i < strlen(message); i++){
+        arrput(layer_console_data->console_buffer, message[i]);
+    }
+
+    arrput(layer_console_data->console_buffer, '\0');
+    layer_console_data->console_buffer_x = arrlen(layer_console_data->console_buffer)-1;
+}
+
+
+void close_code_layer(CCode* ccode, bool forced){
+    Layer* to_close = top_type_layer(ccode, LAYER_CODE);
+    if(!to_close){
+        return;
+    }
+    LayerCodeData* lcd = to_close->layer_data;
+    if(lcd->saved == false && forced == false){
+        message_to_console(ccode, "Cannot close unsaved file save it or use ':c!' to force close");
+        return;
+    }else{
+        free_layer(to_close);
+        remove_layer(ccode, to_close);
+    }
+}
+
 
 char* stringview_to_str(const char* view, size_t size) {
     if (!view || size == 0) {
@@ -291,6 +372,8 @@ char* stringview_to_str(const char* view, size_t size) {
     str[size] = '\0';
     return str;
 }
+
+
 void find_jump(CCode* ccode, char *finding, int32_t size, int32_t nth_occurence) {
     if (!ccode || !finding || size <= 0 || nth_occurence <= 0) {
         return;
@@ -342,7 +425,7 @@ void find_jump(CCode* ccode, char *finding, int32_t size, int32_t nth_occurence)
                 if (lcd->cursor->yoff < 0) lcd->cursor->yoff = 0;
 
                 return;
-    }
+            }
             pos++;
         }
     }
@@ -355,22 +438,11 @@ void find_jump(CCode* ccode, char *finding, int32_t size, int32_t nth_occurence)
     }
 
     if(found == 0){
-        CLOSE_CONSOLE = FALSE;
-        Layer* console = top_type_layer(ccode, LAYER_CONSOLE);
-        LayerConsoleData* layer_console_data = (LayerConsoleData*) console->layer_data;
-    
-        arrsetlen(layer_console_data->console_buffer, 0);
-    
         char message[128];
         char* str = stringview_to_str(finding, size);
-        size_t message_size = snprintf(message, sizeof(message), "Could not find '%s'", str);
-    
-        for(size_t i = 0; i < message_size; i++){
-            arrput(layer_console_data->console_buffer, message[i]);
-        }
-        arrput(layer_console_data->console_buffer, '\0');
-        layer_console_data->console_buffer_x = arrlen(layer_console_data->console_buffer)-1;
-        
+        snprintf(message, sizeof(message), "Could not find '%s'", str);
+        message_to_console(ccode, message);
+
         free(str);
 
         free(lcd->finding_substr->substr);
@@ -380,6 +452,28 @@ void find_jump(CCode* ccode, char *finding, int32_t size, int32_t nth_occurence)
 }
 
 
+char* run_command_buffer(const char* cmd)
+{
+    FILE* fp = popen(cmd, "r");
+    if (!fp) return NULL;
+
+    char* buf = NULL;
+    char tmp[1024];
+
+    while (fgets(tmp, sizeof(tmp), fp)) {
+        for (char* p = tmp; *p; p++) {
+            if(*p == '\n'){
+                continue;
+            }
+            arrput(buf, *p);
+        }
+    }
+
+    pclose(fp);
+
+    arrput(buf, '\0');
+    return buf;
+}
 
 void console_execute_command(CCode* ccode, const char* buffer){
     TokenizationOutput to = {0};
@@ -431,7 +525,41 @@ void console_execute_command(CCode* ccode, const char* buffer){
         } 
     
         case COMMAND_SYS: {
-            assert(0 && "Not implemented");
+            if (arrlen(to.tokens) >= 2) {
+                char* command = NULL;
+                for(size_t i = 1; i < arrlenu(to.tokens); i++){
+                    if(to.tokens[i].type == TOKEN_STRING){
+                        for(size_t j = 0; j < to.tokens[i].string.size; j++){
+                            arrput(command, to.tokens[i].string.start[j]);
+                        }
+                    }else if(to.tokens[i].type == TOKEN_INTEGER){
+                        char itoa_str[64];
+                        itoa(to.tokens[i].integer, itoa_str, 10);
+                        for(size_t j = 0; j < strlen(itoa_str); j++){
+                            arrput(command, itoa_str[j]);
+                        }
+                    }
+                    if(i != arrlenu(to.tokens)-1){
+                        arrput(command, ' ');
+                    }
+                }
+                arrput(command, '\0');
+            
+                char* output = run_command_buffer(command);
+
+                if(output == NULL){
+                    arrfree(command);
+                    return;
+                }
+            
+                if (arrlen(output) > 1) {
+                    message_to_console(ccode, output);
+                }else {
+                    message_to_console(ccode, "Command didnt respond");
+                }
+                arrfree(output);
+                arrfree(command);
+            }
             break;
         }
     
@@ -462,7 +590,17 @@ void console_execute_command(CCode* ccode, const char* buffer){
             }
             break;
         }
-    
+        
+        case COMMAND_CLOSE: {
+            close_code_layer(ccode, false);
+            break;
+        }
+
+        case COMMAND_FORCE_CLOSE: {
+            close_code_layer(ccode, true);
+            break;
+        }
+
         default: {
             // Unknown command
             break;
@@ -491,15 +629,6 @@ void console_execute_command(CCode* ccode, const char* buffer){
 */
 
 
-size_t compute_byte_offset(char **lines, int num_lines, int line, int col) {
-    size_t offset = 0;
-    for (int i = 0; i < line; i++) {
-        offset += strlen(lines[i]) + 1; // +1 for '\n'
-    }
-    offset += col;
-    return offset;
-}
-
 void layer_code_update(CCode* ccode, Layer* layer, int chr){
     if(!ccode || !layer || layer->type != LAYER_CODE || layer->layer_data == NULL){
         return;
@@ -519,6 +648,7 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
         int add_n = code_data->cursor->y - arrlen(code_data->code_buffer) + 1;
         for(int i = 0; i < add_n; i++){
             char* line = NULL;
+            arrput(line, '\n');
             arrput(line, '\0');
             arrput(code_data->code_buffer, line);
         }
@@ -772,34 +902,55 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
         }
     }
     else if (!inFindSubstrMode && chr == CTL_RIGHT){
-        // skip all spaces
-        #define current_cursor_char code_data->code_buffer[code_data->cursor->y][code_data->cursor->x]
-        #define not_special(x) (x != '\0' && x != '\n' && x != ' ' && x != '(' && x != ')')
-        #define is_parenths(x) (x == '(' || x == ')')
+        int x = code_data->cursor->x;
+        char *line = code_data->code_buffer[code_data->cursor->y];
+        int len = arrlen(line)-2;
 
-        // TODO: Remove this goto hack
-        if(current_cursor_char == '\n' && arrlen(code_data->code_buffer) > code_data->cursor->y+1){
+        if(x >= len){
             code_data->cursor->x = 0;
             code_data->cursor->y++;
             goto carried_to_next_line;
         }
 
-        while(current_cursor_char == ' '){
-            code_data->cursor->x++;
-        }
-
-        if(is_parenths(current_cursor_char)){
-            code_data->cursor->x++;
-        }
-
-        while(not_special(current_cursor_char)){
-            code_data->cursor->x++;   
-        }
+        while(x < len && isspace(line[x]))
+            x++;
+        
+        while(x < len && ispunct(line[x]) && !isspace(line[x]))
+            x++;
+        
+        while(x < len && isalnum(line[x]))
+            x++;
+        
+        code_data->cursor->x = x;
 
         LABEL(carried_to_next_line)
-        #undef current_cursor_char
-        #undef not_special
-        #undef is_parenths
+    }
+    else if(!inFindSubstrMode && chr == CTL_LEFT){
+        int x = code_data->cursor->x;
+        char *line = code_data->code_buffer[code_data->cursor->y];
+
+        if(x == 0){
+            if(code_data->cursor->y > 0){
+                code_data->cursor->y--;
+                int prev_line_size = arrlen(code_data->code_buffer[code_data->cursor->y]);
+                code_data->cursor->x = prev_line_size-2 > 0 ? prev_line_size-2 : 0;
+            }
+            goto carried_to_previous_line;
+        }
+
+        while(x > 0 && isspace(line[x-1]))
+            x--;
+        
+        while(x > 0 && ispunct(line[x-1]) && !isspace(line[x-1]))
+            x--;
+        
+        while(x > 0 && isalnum(line[x-1]))
+            x--;
+        
+        code_data->cursor->x = x;
+
+
+        LABEL(carried_to_previous_line)
     }
 
     /* For debug CTRL + G*/
@@ -1051,55 +1202,5 @@ void draw_ui(CCode* ccode) {
 
     arrfree(layers);
 }
-
-
-char* layertype_to_str(LayerType lt){
-    if(lt == LAYER_CODE){
-        return "LAYER_CODE";
-    }else if(lt == LAYER_CONSOLE){
-        return "LAYER_CONSOLE";
-    }
-    return "(null)";
-}
-
-
-void print_layer(Layer* l){
-    if(l->type == LAYER_CODE){
-        printf("  Layer: %p type: %s filename: %s\n", l, layertype_to_str(l->type), ((LayerCodeData*)l->layer_data)->filename);
-    }else{
-        printf("  Layer: %p type: %s\n", l, layertype_to_str(l->type));
-    }
-}
-
-
-void free_layer(Layer* layer){
-    if(!layer) return;
-
-    if(layer->type == LAYER_CODE){
-        LayerCodeData* lcd = (LayerCodeData*) layer->layer_data;
-        if(lcd){
-            if(lcd->code_buffer){
-                for(size_t i = 0; i < arrlenu(lcd->code_buffer); i++){
-                    arrfree(lcd->code_buffer[i]);
-                }
-                arrfree(lcd->code_buffer);
-            }
-            if(lcd->filename){
-                arrfree(lcd->filename);
-            }
-            free(lcd);
-        }
-    } else if(layer->type == LAYER_CONSOLE){
-        LayerConsoleData* lcd = (LayerConsoleData*) layer->layer_data;
-        if(lcd){
-            if(lcd->console_buffer){
-                arrfree(lcd->console_buffer);
-            }
-            free(lcd);
-        }
-    }
-    free(layer);
-}
-
 
 #endif

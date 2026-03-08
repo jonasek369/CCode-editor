@@ -44,6 +44,12 @@ void parse_command(TokenizerState* ts, Token* out){
 	}else if(command_length == 2 && strncmp(start, ":f", 2) == 0){
 		out->command_type = COMMAND_FIND;
 		return;
+	}else if(command_length == 2 && strncmp(start, ":c", 2) == 0){
+		out->command_type = COMMAND_CLOSE;
+		return;
+	}else if(command_length == 3 && strncmp(start, ":c!", 3) == 0){
+		out->command_type = COMMAND_FORCE_CLOSE;
+		return;
 	}
 
 	out->command_type = COMMAND_INVALID;
