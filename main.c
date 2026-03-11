@@ -4,7 +4,6 @@
 #define STB_DS_IMPLEMENTATION
 #include "stb_ds.h"
 
-
 #include "layers.h"
 
 /*
@@ -50,7 +49,6 @@ int main(int argc, char** argv) {
         arrpush(ccode.layers, new_layer_code());
     }
 
-
     int ch;
 
     initscr();
@@ -65,6 +63,11 @@ int main(int argc, char** argv) {
 
     while(RUNNING) {
         ch = getch();
+        /*
+        if(ch != -1){
+            printf("%d\n", ch);
+        }
+        */
         // Code switch
         if(ch == CTL_TAB && arrlen(ccode.layers) >= 2 && top_layer(&ccode)->type != LAYER_CONSOLE){
             Layer* top = top_type_layer(&ccode, LAYER_CODE);
@@ -107,6 +110,13 @@ int main(int argc, char** argv) {
                 break;
             }
         }
+        int stop_drawing = arrlen(ccode.layers);
+        for(size_t i = 0; i < arrlenu(ccode.layers); i++){
+            if(ccode.layers[i]->draws_fullscreen){
+                stop_drawing = i;
+                break;
+            }
+        }
         int propagated_ch = ch;
         clear();
         /*if(ch != -1){
@@ -118,13 +128,18 @@ int main(int argc, char** argv) {
             if(stop_input_propagation < i){
                 propagated_ch = -1;
             }
+            bool should_draw = (i <= stop_drawing);
             switch(layer->type){
+                case LAYER_DIR_WALK: {
+                    layer_dir_walk_handle_keypress(&ccode, layer, propagated_ch, should_draw);
+                    break;
+                }
                 case LAYER_CODE: {
-                    layer_code_handle_keypress(&ccode, layer, propagated_ch);
+                    layer_code_handle_keypress(&ccode, layer, propagated_ch, should_draw);
                     break;
                 }
                 case LAYER_CONSOLE: {
-                    layer_console_handle_keypress(&ccode, layer, propagated_ch);
+                    layer_console_handle_keypress(&ccode, layer, propagated_ch, should_draw);
                     break;
                 }
                 default: {

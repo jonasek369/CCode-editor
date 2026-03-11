@@ -50,6 +50,9 @@ void parse_command(TokenizerState* ts, Token* out){
 	}else if(command_length == 3 && strncmp(start, ":c!", 3) == 0){
 		out->command_type = COMMAND_FORCE_CLOSE;
 		return;
+	}else if(command_length == 5 && strncmp(start, ":tree", 5) == 0){
+		out->command_type = COMMAND_TREE;
+		return;
 	}
 
 	out->command_type = COMMAND_INVALID;

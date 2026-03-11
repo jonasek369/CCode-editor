@@ -27,6 +27,7 @@ Layer* new_layer_code(){
     }
     code->type = LAYER_CODE;
     code->consume_input = true;
+    code->draws_fullscreen = true;
 
     LayerCodeData* lcd = malloc(sizeof(LayerCodeData));
     if(!lcd){
@@ -66,6 +67,7 @@ Layer* new_layer_console(){
     }
     console->type = LAYER_CONSOLE;
     console->consume_input = true;
+    console->draws_fullscreen = false;
 
     LayerConsoleData* lcd = malloc(sizeof(LayerConsoleData));
     if(!lcd){
@@ -79,6 +81,30 @@ Layer* new_layer_console(){
     return console;
 }
 
+
+Layer* new_layer_dir_walk(const char* dir){
+    Layer* tree = malloc(sizeof(Layer));
+    if(!tree){
+        return NULL;
+    }
+    tree->type = LAYER_DIR_WALK;
+    tree->consume_input = true;
+    tree->draws_fullscreen = true;
+
+    LayerDirWalkData* ldwd = malloc(sizeof(LayerDirWalkData));
+    if(!ldwd){
+        free(tree);
+        return NULL;
+    }
+    ldwd->current_dir_path = dir;
+    ldwd->current_dir_files = NULL;
+    ldwd->selected = 0;
+    ldwd->offset = 0;
+
+    tree->layer_data = ldwd;
+    return tree;
+}
+
 /*
 
     Layers managment helpers
@@ -88,16 +114,16 @@ Layer* new_layer_console(){
 
 
 void push_layer_to_top(CCode* ccode, Layer* to_top){
-    if (!to_top)
+    if(!to_top)
         return;
 
     size_t len = arrlenu(ccode->layers);
 
-    if (len > 0 && ccode->layers[0] == to_top)
+    if(len > 0 && ccode->layers[0] == to_top)
         return;
 
-    for (size_t i = 0; i < len; i++){
-        if (ccode->layers[i] == to_top){
+    for(size_t i = 0; i < len; i++){
+        if(ccode->layers[i] == to_top){
             arrdel(ccode->layers, i);
             break;
         }
@@ -320,6 +346,20 @@ void free_layer(Layer* layer){
             }
             free(lcd);
         }
+    }else if(layer->type == LAYER_DIR_WALK){
+        LayerDirWalkData* ldwd = (LayerDirWalkData*) layer->layer_data;
+        if(ldwd){
+            if(ldwd->current_dir_path){
+                arrfree(ldwd->current_dir_path);
+            }
+            if(ldwd->current_dir_files){
+                for(size_t i = 0; i < arrlenu(ldwd->current_dir_files); i++){
+                    arrfree(ldwd->current_dir_files[i]);
+                }
+                arrfree(ldwd->current_dir_files);
+            }
+            free(ldwd);
+        }
     }
     free(layer);
 }
@@ -452,8 +492,7 @@ void find_jump(CCode* ccode, char *finding, int32_t size, int32_t nth_occurence)
 }
 
 
-char* run_command_buffer(const char* cmd)
-{
+char* run_command_buffer(const char* cmd){
     FILE* fp = popen(cmd, "r");
     if (!fp) return NULL;
 
@@ -474,6 +513,17 @@ char* run_command_buffer(const char* cmd)
     arrput(buf, '\0');
     return buf;
 }
+
+
+char* str_to_arr(const char* str){
+    char* arr = NULL;
+    for(int i = 0; i < strlen(str); i++){
+        arrput(arr, str[i]);
+    }
+    arrput(arr, '\0');
+    return arr;
+}
+
 
 void console_execute_command(CCode* ccode, const char* buffer){
     TokenizationOutput to = {0};
@@ -598,6 +648,22 @@ void console_execute_command(CCode* ccode, const char* buffer){
 
         case COMMAND_FORCE_CLOSE: {
             close_code_layer(ccode, true);
+            break;
+        }
+        case COMMAND_TREE: {
+            Layer* top_tree_layer = top_type_layer(ccode, LAYER_DIR_WALK);
+            if(top_tree_layer == NULL){
+                const char* cwd = nob_get_current_dir_temp();
+                if(cwd == NULL){
+                    printf("Could not get cwd!\n");
+                    break;
+                }
+                char* arr = str_to_arr(cwd);
+                Layer* tree = new_layer_dir_walk((const char*)arr);
+                push_layer_to_top(ccode, tree);
+            }else{
+                push_layer_to_top(ccode, top_tree_layer);
+            }
             break;
         }
 
@@ -953,6 +1019,49 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
         LABEL(carried_to_previous_line)
     }
 
+    else if(!inFindSubstrMode && chr == CUSTOM_CTL_BACKSPACE){
+        int x = code_data->cursor->x;
+        char *line = code_data->code_buffer[code_data->cursor->y];
+
+        if(x == 0){
+            if (code_data->cursor->y > 0) {
+                int prev_len = arrlen(code_data->code_buffer[code_data->cursor->y - 1]);
+                int curr_len = arrlen(code_data->code_buffer[code_data->cursor->y]);
+
+                arrsetlen(code_data->code_buffer[code_data->cursor->y - 1], prev_len-2);
+
+                for(size_t i = 0; i < curr_len; i++){
+                    arrput(code_data->code_buffer[code_data->cursor->y - 1], code_data->code_buffer[code_data->cursor->y][i]);
+                }
+                arrdel(code_data->code_buffer, code_data->cursor->y);
+                code_data->cursor->y--;
+                code_data->cursor->x = prev_len-2;              
+            }
+        
+            goto carried_to_previous_line;
+        }
+
+        int new_x = x;
+
+        while (new_x > 0 && isspace(line[new_x - 1]))
+            new_x--;
+        
+        while (new_x > 0 && ispunct(line[new_x - 1]) && !isspace(line[new_x - 1]))
+            new_x--;
+        
+        while (new_x > 0 && isalnum(line[new_x - 1]))
+            new_x--;
+
+        arrsetlen(code_data->code_buffer[code_data->cursor->y], new_x);
+        if(x-new_x >= 2){
+            arrput(code_data->code_buffer[code_data->cursor->y], '\n');
+            arrput(code_data->code_buffer[code_data->cursor->y], '\0');
+        }else if(x-new_x == 1){
+            arrput(code_data->code_buffer[code_data->cursor->y], '\n');
+        }
+        code_data->cursor->x = new_x;
+    }
+
     /* For debug CTRL + G*/
     else if (!inFindSubstrMode && chr == 7){
         for(size_t i = 0; i < arrlenu(code_data->code_buffer[code_data->cursor->y]); i++){
@@ -998,24 +1107,24 @@ void layer_code_render(CCode* ccode, Layer* layer) {
     // allocate visible buffer
     char **visible_buffer = malloc(sizeof(char*) * content_height);
 
-    for (int screen_line = 0; screen_line < content_height; screen_line++) {
+    for(int screen_line = 0; screen_line < content_height; screen_line++) {
         int buffer_line = screen_line + code_data->cursor->yoff;
 
-        if (buffer_line >= buffer_size) {
+        if(buffer_line >= buffer_size) {
             visible_buffer[screen_line] = strdup(""); // empty line
             continue;
         }
 
         char* line = code_data->code_buffer[buffer_line];
-        if (!line) {
+        if(!line) {
             visible_buffer[screen_line] = strdup("");
             continue;
         }
 
         int line_len = strlen(line);
-        if (code_data->cursor->xoff >= line_len) {
+        if(code_data->cursor->xoff >= line_len) {
             visible_buffer[screen_line] = strdup(""); // scrolled past end of line
-        } else {
+        }else {
             int chars_to_display = line_len - code_data->cursor->xoff;
             if (chars_to_display > content_width) {
                 chars_to_display = content_width;
@@ -1092,7 +1201,6 @@ void layer_console_update(CCode* ccode, Layer* layer, int chr){
     }
 }
 
-
 void layer_console_render(CCode* ccode, Layer* layer){
     if(!ccode || !layer || layer->type != LAYER_CONSOLE || layer->layer_data == NULL){
         return;
@@ -1116,14 +1224,183 @@ void layer_console_render(CCode* ccode, Layer* layer){
 }
 
 
-void layer_console_handle_keypress(CCode* ccode, Layer* layer, int chr){
-    layer_console_update(ccode, layer, chr);
-    layer_console_render(ccode, layer);
+char *resolve_path(const char *path, char *out)
+{
+    #ifdef _WIN32
+        _fullpath(out, path, MAX_PATH);
+    #else
+        realpath(path, out);
+    #endif
+    return out;
 }
 
-void layer_code_handle_keypress(CCode* ccode, Layer* layer, int chr){
+
+int load_dir(LayerDirWalkData* ldwd){
+    if(ldwd->current_dir_path == NULL){
+        return -1;
+    }
+    Nob_File_Paths paths = {0};
+    ldwd->selected = 0;
+    ldwd->offset = 0;
+    bool status = nob_read_entire_dir(ldwd->current_dir_path, &paths);
+    if(!status){
+        return -1;
+    }
+    for(size_t i = 0; i < paths.count; i++){
+        char* arr = str_to_arr(paths.items[i]); // convert from c string to arr of chars ending with null
+        arrput(ldwd->current_dir_files, arr);
+    }
+    free(paths.items);
+    return 0;
+}
+
+
+bool layer_dir_walk_update(CCode* ccode, Layer* layer, int chr){
+    if(!ccode || !layer || layer->type != LAYER_DIR_WALK || layer->layer_data == NULL){
+        return false;
+    }
+
+    LayerDirWalkData* ldwd = (LayerDirWalkData*) layer->layer_data;
+
+    if(ldwd->current_dir_files == NULL){
+        if(load_dir(ldwd) == -1){
+            printf("There was error reading the directory %s", ldwd->current_dir_path);
+            return false;
+        }
+    }
+
+    int screen_y, screen_x;
+    getmaxyx(stdscr, screen_y, screen_x);
+
+    int list_height = screen_y - 3; // because drawing starts at y=2
+
+    if(chr == KEY_DOWN){
+        if((ldwd->selected + 1) < arrlen(ldwd->current_dir_files)){
+            ldwd->selected++;
+        }
+    }
+
+    if(chr == KEY_UP){
+        if(ldwd->selected > 0){
+            ldwd->selected--;
+        }
+    }
+
+    // adjust offset
+    if(ldwd->selected < ldwd->offset){
+        ldwd->offset = ldwd->selected;
+    }
+
+    if(ldwd->selected >= ldwd->offset + list_height){
+        ldwd->offset = ldwd->selected - list_height + 1;
+    }
+
+
+    if(chr == CUSTOM_KEY_ENTER){
+        char* dir = nob_temp_sprintf("%s/%s",
+            ldwd->current_dir_path,
+            ldwd->current_dir_files[ldwd->selected]);
+    
+        char resolved_path[MAX_PATH];
+    
+        if(resolve_path(dir, resolved_path) == NULL){
+            return false;
+        }
+    
+        switch(nob_get_file_type(resolved_path)){
+            case NOB_FILE_DIRECTORY: {
+                char* arr = str_to_arr(resolved_path);
+    
+                arrfree(ldwd->current_dir_path);
+    
+                for(size_t i = 0; i < arrlenu(ldwd->current_dir_files); i++){
+                    arrfree(ldwd->current_dir_files[i]);
+                }
+    
+                arrfree(ldwd->current_dir_files);
+    
+                ldwd->current_dir_path = arr;
+    
+                load_dir(ldwd);
+    
+                nob_temp_reset();
+                break;
+            }
+    
+            default: {
+                char* arr = str_to_arr(resolved_path);
+                read_file_to_code_layer(ccode, arr, arrlen(arr)-1);
+                arrfree(arr);
+                remove_layer(ccode, layer);
+                free_layer(layer);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+
+void layer_dir_walk_render(CCode* ccode, Layer* layer){
+    if(!ccode || !layer || layer->type != LAYER_DIR_WALK || layer->layer_data == NULL){
+        return;
+    }
+
+    LayerDirWalkData* ldwd = (LayerDirWalkData*) layer->layer_data;
+
+    //TODO: render tree
+    mvprintw(1, 0, "Current dir: %s", ldwd->current_dir_path);
+    int y, x;
+    getmaxyx(stdscr, y, x);
+
+    int draw_y = 3;
+    for(size_t i = ldwd->offset; i < arrlenu(ldwd->current_dir_files); i++){
+        if(draw_y >= y) break;
+    
+        if(i == ldwd->selected){
+            attron(A_REVERSE);
+            mvprintw(draw_y, 0, "%s", ldwd->current_dir_files[i]);
+            attroff(A_REVERSE);
+        } else {
+            mvprintw(draw_y, 0, "%s", ldwd->current_dir_files[i]);
+        }
+
+        if(nob_get_file_type(nob_temp_sprintf("%s/%s", ldwd->current_dir_path, ldwd->current_dir_files[i])) == NOB_FILE_DIRECTORY){
+            if(i == ldwd->selected){
+                attron(A_REVERSE);
+                mvprintw(draw_y, arrlen(ldwd->current_dir_files[i])-1,"/");
+                attroff(A_REVERSE);
+            }else{
+                mvprintw(draw_y, arrlen(ldwd->current_dir_files[i])-1,"/");
+            }
+        }
+    
+        draw_y++;
+    }
+}
+
+void layer_dir_walk_handle_keypress(CCode* ccode, Layer* layer, int chr, bool should_draw){
+    bool redirected = layer_dir_walk_update(ccode, layer, chr);
+    if(redirected){
+        return;
+    }
+    if(should_draw){
+        layer_dir_walk_render(ccode, layer);
+    }
+}
+
+void layer_console_handle_keypress(CCode* ccode, Layer* layer, int chr, bool should_draw){
+    layer_console_update(ccode, layer, chr);
+    if(should_draw){
+        layer_console_render(ccode, layer);
+    }
+}
+
+void layer_code_handle_keypress(CCode* ccode, Layer* layer, int chr, bool should_draw){
     layer_code_update(ccode, layer, chr);
-    layer_code_render(ccode, layer);
+    if(should_draw){
+        layer_code_render(ccode, layer);
+    }
 }
 
 
@@ -1195,6 +1472,9 @@ void draw_ui(CCode* ccode) {
     }else if(layer_at_top->type == LAYER_CONSOLE){
         LayerConsoleData* lcd = (LayerConsoleData*) layer_at_top->layer_data;
         move(y-1, lcd->console_buffer_x);
+    }else if(layer_at_top->type == LAYER_DIR_WALK){
+        //LayerDirWalkData* ldwd = (LayerDirWalkData*) layer_at_top->layer_data;
+        //move(ldwd->selected+ldwd->offset+2, 0);
     }
     else {
         assert(false && "unknown layer");

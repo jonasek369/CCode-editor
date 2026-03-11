@@ -2,6 +2,7 @@
 #define _H_DEFINE
 // Some keys are not define in curses.h or arent right
 #define CUSTOM_KEY_BACKSPACE 8
+#define CUSTOM_CTL_BACKSPACE 127 // 505 for sdl2
 #define CUSTOM_KEY_ENTER 13
 #define CUSTOM_KEY_ESCAPE 27
 #define CUSTOM_CTL_F 6
@@ -17,7 +18,7 @@
 #include "curses.h"
 #include "curspriv.h"
 
-typedef enum {LAYER_CODE=0, LAYER_CONSOLE} LayerType;
+typedef enum {LAYER_CODE=0, LAYER_CONSOLE, LAYER_DIR_WALK} LayerType;
 typedef enum {TOKEN_INVALID = 0, TOKEN_COMMAND, TOKEN_STRING, TOKEN_INTEGER, TOKEN_UNKNOWN} ConsoleTokenType;
 typedef enum {
 	COMMAND_INVALID = 0,
@@ -30,7 +31,8 @@ typedef enum {
 	COMMAND_SYS,
 	COMMAND_FIND,
 	COMMAND_CLOSE,
-	COMMAND_FORCE_CLOSE
+	COMMAND_FORCE_CLOSE,
+	COMMAND_TREE
 } CommandType;
 
 static const bool is_whitespace[256] = {
@@ -88,10 +90,18 @@ typedef struct {
     int console_buffer_x;
 } LayerConsoleData;
 
+typedef struct {
+	char* current_dir_path;
+	char** current_dir_files;
+	int selected;
+	int offset;
+} LayerDirWalkData;
+
 
 typedef struct {
     LayerType type;
     bool consume_input;
+    bool draws_fullscreen;
     void* layer_data;
 } Layer;
 
