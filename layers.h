@@ -82,7 +82,7 @@ Layer* new_layer_console(){
 }
 
 
-Layer* new_layer_dir_walk(const char* dir){
+Layer* new_layer_dir_walk(char* dir){
     Layer* tree = malloc(sizeof(Layer));
     if(!tree){
         return NULL;
@@ -196,9 +196,10 @@ int contains_layer(CCode* ccode, Layer* layer){
     }
     return -1;
 }
-// alias
-#define at_index_layer contains_layer
 
+Layer* layer_at_index(CCode* ccode, int index){
+    return index < arrlen(ccode->layers) ? ccode->layers[index] : NULL;
+}
 
 /*
 
@@ -642,12 +643,32 @@ void console_execute_command(CCode* ccode, const char* buffer){
         }
         
         case COMMAND_CLOSE: {
-            close_code_layer(ccode, false);
+            Layer* second_layer = layer_at_index(ccode, 1); // first will always be console
+            if(!second_layer){
+                break;
+            }
+
+            if(second_layer->type == LAYER_CODE){
+                close_code_layer(ccode, false);
+            }else if(second_layer->type == LAYER_DIR_WALK){
+                remove_layer(ccode, second_layer);
+                free_layer(second_layer);
+            }
             break;
         }
 
         case COMMAND_FORCE_CLOSE: {
-            close_code_layer(ccode, true);
+            Layer* second_layer = layer_at_index(ccode, 1); // first will always be console
+            if(!second_layer){
+                break;
+            }
+
+            if(second_layer->type == LAYER_CODE){
+                close_code_layer(ccode, true);
+            }else if(second_layer->type == LAYER_DIR_WALK){
+                remove_layer(ccode, second_layer);
+                free_layer(second_layer);
+            }
             break;
         }
         case COMMAND_TREE: {
@@ -659,7 +680,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
                     break;
                 }
                 char* arr = str_to_arr(cwd);
-                Layer* tree = new_layer_dir_walk((const char*)arr);
+                Layer* tree = new_layer_dir_walk(arr);
                 push_layer_to_top(ccode, tree);
             }else{
                 push_layer_to_top(ccode, top_tree_layer);
@@ -1272,6 +1293,8 @@ bool layer_dir_walk_update(CCode* ccode, Layer* layer, int chr){
     int screen_y, screen_x;
     getmaxyx(stdscr, screen_y, screen_x);
 
+    (void)screen_x;
+
     int list_height = screen_y - 3; // because drawing starts at y=2
 
     if(chr == KEY_DOWN){
@@ -1352,6 +1375,7 @@ void layer_dir_walk_render(CCode* ccode, Layer* layer){
     mvprintw(1, 0, "Current dir: %s", ldwd->current_dir_path);
     int y, x;
     getmaxyx(stdscr, y, x);
+    (void)x;
 
     int draw_y = 3;
     for(size_t i = ldwd->offset; i < arrlenu(ldwd->current_dir_files); i++){
@@ -1377,6 +1401,7 @@ void layer_dir_walk_render(CCode* ccode, Layer* layer){
     
         draw_y++;
     }
+    nob_temp_reset();
 }
 
 void layer_dir_walk_handle_keypress(CCode* ccode, Layer* layer, int chr, bool should_draw){
@@ -1406,11 +1431,10 @@ void layer_code_handle_keypress(CCode* ccode, Layer* layer, int chr, bool should
 
 void draw_ui(CCode* ccode) {
     Layer** layers = all_type_layers(ccode, LAYER_CODE);
-    Cursor* top_code_cursor = top_code_layer_cursor(ccode);
-    Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);;
+    Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
     Layer* layer_at_top = top_layer(ccode);
 
-    if (!layers || arrlen(layers) == 0 || top_code_cursor == NULL || layer_at_top == NULL) {
+    if (!layers || arrlen(layers) == 0 || layer_at_top == NULL) {
         return;
     }
 
@@ -1424,11 +1448,14 @@ void draw_ui(CCode* ccode) {
 
     for (size_t i = 0; i < arrlenu(layers); i++) {
         LayerCodeData* lcd = (LayerCodeData*) layers[i]->layer_data;
-
+        const char* file_name = lcd->filename;
+        if(arrlen(lcd->filename) > 16){
+            file_name = nob_path_name(lcd->filename);
+        }
         int written = snprintf(top_line + size,
                                ((int)size < x) ? (x - size + 1) : 0,
                                "%s%s",
-                               lcd->filename,
+                               file_name,
                                lcd->saved ? "" : "*");
 
         if (written < 0) written = 0;
@@ -1452,17 +1479,33 @@ void draw_ui(CCode* ccode) {
 
     char mode = 'I';
 
-    if(((LayerCodeData*) top_code_layer->layer_data)->finding_substr != NULL){
+    if(top_code_layer != NULL && ((LayerCodeData*) top_code_layer->layer_data)->finding_substr != NULL){
         mode = 'J';
     }
 
     if(layer_at_top->type == LAYER_CONSOLE){
         mode = 'C';
+    }else if(layer_at_top->type == LAYER_DIR_WALK){
+        mode = 'T';
     }
 
+    if(layer_at_top->type == LAYER_CONSOLE){
+        LayerConsoleData* lcd = layer_at_top->layer_data;
+        size_t bot_line_size = snprintf(NULL, 0, "%c%d:%d", mode, 0, lcd->console_buffer_x);
+        mvprintw(y - 1, x - bot_line_size, "%c%d:%d", mode, 0, lcd->console_buffer_x);
+    }else if(layer_at_top->type == LAYER_CODE){
+        LayerCodeData* lcd = layer_at_top->layer_data;
+        size_t bot_line_size = snprintf(NULL, 0, "%c%d:%d", mode, lcd->cursor->y, lcd->cursor->x);
+        mvprintw(y - 1, x - bot_line_size, "%c%d:%d", mode, lcd->cursor->y, lcd->cursor->x);
+    }else if(layer_at_top->type == LAYER_DIR_WALK){
+        LayerDirWalkData* ldwd = layer_at_top->layer_data;
+        size_t bot_line_size = snprintf(NULL, 0, "%c%d:%d", mode, ldwd->selected + ldwd->offset, 0);
+        mvprintw(y - 1, x - bot_line_size, "%c%d:%d", mode, ldwd->selected + ldwd->offset, 0);
+    }else{
+        size_t bot_line_size = snprintf(NULL, 0, "%c%d:%d", mode, 0, 0);
+        mvprintw(y - 1, x - bot_line_size, "%c%d:%d", mode, 0, 0);
+    }
 
-    size_t bot_line_size = snprintf(NULL, 0, "%c%d:%d", mode, top_code_cursor->y, top_code_cursor->x);
-    mvprintw(y - 1, x - bot_line_size, "%c%d:%d", mode, top_code_cursor->y, top_code_cursor->x);
 
     if(layer_at_top->type == LAYER_CODE){
         LayerCodeData* lcd = (LayerCodeData*) layer_at_top->layer_data;
