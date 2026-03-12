@@ -334,6 +334,9 @@ void free_layer(Layer* layer){
                 }
                 arrfree(lcd->code_buffer);
             }
+            if(lcd->cursor){
+                free(lcd->cursor);
+            }
             if(lcd->filename){
                 arrfree(lcd->filename);
             }
@@ -994,8 +997,10 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
         int len = arrlen(line)-2;
 
         if(x >= len){
-            code_data->cursor->x = 0;
-            code_data->cursor->y++;
+            if(code_data->cursor->y+1 < arrlen(code_data->code_buffer)){
+                code_data->cursor->x = 0;
+                code_data->cursor->y++;
+            }
             goto carried_to_next_line;
         }
 
@@ -1268,9 +1273,21 @@ int load_dir(LayerDirWalkData* ldwd){
         return -1;
     }
     for(size_t i = 0; i < paths.count; i++){
+        // Noticed that on some implementation .. and . arent on top of the directory
+        // so were skipping them and adding .. later to top
+        if(strncmp(paths.items[i], ".", 1) == 0 || strncmp(paths.items[i], "..", 2) == 0){
+            continue;
+        }
         char* arr = str_to_arr(paths.items[i]); // convert from c string to arr of chars ending with null
         arrput(ldwd->current_dir_files, arr);
     }
+    char* go_back_dir = NULL;
+    arrput(go_back_dir, '.');
+    arrput(go_back_dir, '.');
+    arrput(go_back_dir, '\0');
+
+    arrins(ldwd->current_dir_files, 0, go_back_dir);
+
     free(paths.items);
     return 0;
 }
@@ -1430,52 +1447,54 @@ void layer_code_handle_keypress(CCode* ccode, Layer* layer, int chr, bool should
 
 
 void draw_ui(CCode* ccode) {
-    Layer** layers = all_type_layers(ccode, LAYER_CODE);
+    Layer** code_layers = all_type_layers(ccode, LAYER_CODE);
     Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
     Layer* layer_at_top = top_layer(ccode);
 
-    if (!layers || arrlen(layers) == 0 || layer_at_top == NULL) {
+    if (layer_at_top == NULL) {
         return;
     }
 
     int y, x;
     getmaxyx(stdscr, y, x);
+    if(code_layers != NULL){
+        char top_line[x + 1];
+        size_t size = 0;
 
-    char top_line[x + 1];
-    size_t size = 0;
+        int cells_per_layer = x / arrlen(code_layers);
 
-    int cells_per_layer = x / arrlen(layers);
+        for (size_t i = 0; i < arrlenu(code_layers); i++) {
+            LayerCodeData* lcd = (LayerCodeData*) code_layers[i]->layer_data;
+            const char* file_name = lcd->filename;
+            if(arrlen(lcd->filename) > 16){
+                file_name = nob_path_name(lcd->filename);
+            }
+            int written = snprintf(top_line + size,
+                                   ((int)size < x) ? (x - size + 1) : 0,
+                                   "%s%s",
+                                   file_name,
+                                   lcd->saved ? "" : "*");
 
-    for (size_t i = 0; i < arrlenu(layers); i++) {
-        LayerCodeData* lcd = (LayerCodeData*) layers[i]->layer_data;
-        const char* file_name = lcd->filename;
-        if(arrlen(lcd->filename) > 16){
-            file_name = nob_path_name(lcd->filename);
+            if (written < 0) written = 0;
+
+            if ((size_t)written > (size_t)(x - size)) {
+                written = x - size;
+            }
+            size += written;
+
+            while ((int)(size % cells_per_layer) != 0 && size < (size_t)x) {
+                top_line[size++] = ' ';
+            }
         }
-        int written = snprintf(top_line + size,
-                               ((int)size < x) ? (x - size + 1) : 0,
-                               "%s%s",
-                               file_name,
-                               lcd->saved ? "" : "*");
 
-        if (written < 0) written = 0;
+        if (size > (size_t)x) size = x;
+        top_line[size] = '\0';
 
-        if ((size_t)written > (size_t)(x - size)) {
-            written = x - size;
-        }
-        size += written;
-
-        while ((int)(size % cells_per_layer) != 0 && size < (size_t)x) {
-            top_line[size++] = ' ';
-        }
+        attron(A_REVERSE);
+        mvprintw(0, 0, "%s", top_line);
+        attroff(A_REVERSE);
     }
-
-    if (size > (size_t)x) size = x;
-    top_line[size] = '\0';
-
-    attron(A_REVERSE);
-    mvprintw(0, 0, "%s", top_line);
-    attroff(A_REVERSE);
+ 
 
     char mode = 'I';
 
@@ -1523,7 +1542,7 @@ void draw_ui(CCode* ccode) {
         assert(false && "unknown layer");
     }
 
-    arrfree(layers);
+    arrfree(code_layers);
 }
 
 #endif
