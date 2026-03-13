@@ -1381,6 +1381,12 @@ bool layer_dir_walk_update(CCode* ccode, Layer* layer, int chr){
 }
 
 
+Nob_File_Type dir_walk_get_file_type(char* current_dir, char* filename){
+    Nob_File_Type file_type = nob_get_file_type(nob_temp_sprintf("%s/%s", current_dir, filename));
+    nob_temp_reset();
+    return file_type;
+}
+
 void layer_dir_walk_render(CCode* ccode, Layer* layer){
     if(!ccode || !layer || layer->type != LAYER_DIR_WALK || layer->layer_data == NULL){
         return;
@@ -1397,28 +1403,34 @@ void layer_dir_walk_render(CCode* ccode, Layer* layer){
     int draw_y = 3;
     for(size_t i = ldwd->offset; i < arrlenu(ldwd->current_dir_files); i++){
         if(draw_y >= y) break;
-    
+        Nob_File_Type ft = dir_walk_get_file_type(ldwd->current_dir_path, ldwd->current_dir_files[i]);
+        if(ft == NOB_FILE_DIRECTORY){
+            attron(COLOR_PAIR(COLOR_DIR));
+        }else{
+            attron(COLOR_PAIR(COLOR_FILE));
+        }
         if(i == ldwd->selected){
+            
             attron(A_REVERSE);
             mvprintw(draw_y, 0, "%s", ldwd->current_dir_files[i]);
+            if(ft == NOB_FILE_DIRECTORY){
+                mvprintw(draw_y, arrlen(ldwd->current_dir_files[i])-1,"/");
+            }
             attroff(A_REVERSE);
         } else {
             mvprintw(draw_y, 0, "%s", ldwd->current_dir_files[i]);
-        }
-
-        if(nob_get_file_type(nob_temp_sprintf("%s/%s", ldwd->current_dir_path, ldwd->current_dir_files[i])) == NOB_FILE_DIRECTORY){
-            if(i == ldwd->selected){
-                attron(A_REVERSE);
-                mvprintw(draw_y, arrlen(ldwd->current_dir_files[i])-1,"/");
-                attroff(A_REVERSE);
-            }else{
+            if(ft == NOB_FILE_DIRECTORY){
                 mvprintw(draw_y, arrlen(ldwd->current_dir_files[i])-1,"/");
             }
+        }
+        if(ft == NOB_FILE_DIRECTORY){
+            attroff(COLOR_PAIR(COLOR_DIR));
+        }else{
+            attroff(COLOR_PAIR(COLOR_FILE));
         }
     
         draw_y++;
     }
-    nob_temp_reset();
 }
 
 void layer_dir_walk_handle_keypress(CCode* ccode, Layer* layer, int chr, bool should_draw){
@@ -1451,7 +1463,7 @@ void draw_ui(CCode* ccode) {
     Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
     Layer* layer_at_top = top_layer(ccode);
 
-    if (layer_at_top == NULL) {
+    if(layer_at_top == NULL) {
         return;
     }
 

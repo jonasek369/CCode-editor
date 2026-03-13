@@ -52,6 +52,9 @@ const char* c_types[] = {
 #define COLOR_OPERATOR 7
 #define COLOR_DEFAULT 9
 
+#define COLOR_FILE 10
+#define COLOR_DIR  11
+
 void init_colors() {
     start_color();
     if (can_change_color()) {
@@ -65,6 +68,7 @@ void init_colors() {
         init_color(COLOR_GRAY, 400, 400, 400);                // var(blue6)
         init_color(COLOR_YELLOW, 1000, 650, 300);             // var(orange)
         init_color(COLOR_CYAN, 300, 700, 700);                // var(blue5)
+        
     }
 
     // Syntax color pairs (foreground, background)
@@ -76,6 +80,10 @@ void init_colors() {
     init_pair(COLOR_TYPE, COLOR_CYAN, COLOR_BLACK);            // types/library class
     init_pair(COLOR_OPERATOR, COLOR_WHITE, COLOR_BLACK);       // operators/punctuation
     init_pair(COLOR_DEFAULT, COLOR_WHITE, COLOR_BLACK);        // default text
+    
+
+    init_pair(COLOR_DIR, COLOR_YELLOW, COLOR_BLACK);
+    init_pair(COLOR_FILE, COLOR_CYAN, COLOR_BLACK);
 }
 
 
