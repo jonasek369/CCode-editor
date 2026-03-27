@@ -1,6 +1,3 @@
-#include <ctype.h>
-#include <stdbool.h>
-
 #define STB_DS_IMPLEMENTATION
 #include "stb_ds.h"
 
@@ -60,6 +57,7 @@ int main(int argc, char** argv) {
     move(1, 0);
 
     init_colors();
+    init_commands();
 
     while(RUNNING) {
         ch = getch();
@@ -152,6 +150,8 @@ int main(int argc, char** argv) {
         refresh();
     }
     free_ccode(&ccode);
+
+    destroy_commands();
 
     // Clean up
     endwin();   // End curses mode

@@ -368,6 +368,7 @@ void free_layer(Layer* layer){
     free(layer);
 }
 
+
 void message_to_console(CCode* ccode, const char* message){
     if(CLOSE_CONSOLE){
         CLOSE_CONSOLE = false;
@@ -398,23 +399,6 @@ void close_code_layer(CCode* ccode, bool forced){
         free_layer(to_close);
         remove_layer(ccode, to_close);
     }
-}
-
-
-char* stringview_to_str(const char* view, size_t size) {
-    if (!view || size == 0) {
-        char* str = malloc(1);
-        if (!str) return NULL;
-        str[0] = '\0';
-        return str;
-    }
-
-    char* str = malloc(size + 1);
-    if (!str) return NULL;
-
-    memcpy(str, view, size);
-    str[size] = '\0';
-    return str;
 }
 
 
@@ -519,13 +503,25 @@ char* run_command_buffer(const char* cmd){
 }
 
 
-char* str_to_arr(const char* str){
-    char* arr = NULL;
-    for(int i = 0; i < strlen(str); i++){
-        arrput(arr, str[i]);
+void change_tree_path(Layer* layer, char* new_path){
+    if(layer->type != LAYER_DIR_WALK){
+        return;
     }
-    arrput(arr, '\0');
-    return arr;
+
+    LayerDirWalkData* ldwd = layer->layer_data;
+    if(ldwd->current_dir_path != NULL){
+        arrfree(ldwd->current_dir_path);
+    }
+    if(ldwd->current_dir_files != NULL){
+        for(size_t i = 0; i < arrlenu(ldwd->current_dir_files); i++){
+            arrfree(ldwd->current_dir_files[i]);
+        }
+        arrfree(ldwd->current_dir_files);
+    }
+
+    
+    ldwd->current_dir_path = new_path;
+    ldwd->current_dir_files = NULL;
 }
 
 
@@ -674,22 +670,122 @@ void console_execute_command(CCode* ccode, const char* buffer){
             }
             break;
         }
+
         case COMMAND_TREE: {
             Layer* top_tree_layer = top_type_layer(ccode, LAYER_DIR_WALK);
             if(top_tree_layer == NULL){
-                const char* cwd = nob_get_current_dir_temp();
-                if(cwd == NULL){
-                    printf("Could not get cwd!\n");
-                    break;
+                char* dir_arr = NULL;
+
+                if(arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_STRING){
+                    // change to single function call
+                    char* as_str = stringview_to_str(to.tokens[1].string.start, to.tokens[1].string.size);
+                    dir_arr = str_to_arr(as_str);
+                    free(as_str);
                 }
-                char* arr = str_to_arr(cwd);
-                Layer* tree = new_layer_dir_walk(arr);
+
+                if(dir_arr == NULL){
+                    const char* cwd = nob_get_current_dir_temp();
+                    if(cwd == NULL){
+                        printf("Could not get cwd!\n");
+                        break;
+                    }
+                    dir_arr = str_to_arr(cwd);
+                    nob_temp_reset();
+                }
+
+                Layer* tree = new_layer_dir_walk(dir_arr);
                 push_layer_to_top(ccode, tree);
             }else{
+                LayerDirWalkData* ldwd = top_tree_layer->layer_data;
+
+                char* dir_arr = NULL;
+
+                if(arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_STRING){
+                    // change to single function call
+                    char* as_str = stringview_to_str(to.tokens[1].string.start, to.tokens[1].string.size);
+                    dir_arr = str_to_arr(as_str);
+                    free(as_str);
+                }
+
+                if(dir_arr == NULL && ldwd->current_dir_path == NULL){
+                    const char* cwd = nob_get_current_dir_temp();
+                    if(cwd == NULL){
+                        printf("Could not get cwd!\n");
+                        break;
+                    }
+                    dir_arr = str_to_arr(cwd);
+                    nob_temp_reset();
+                }
+
+                if(dir_arr != NULL){
+                    change_tree_path(top_tree_layer, dir_arr);
+                }
+
                 push_layer_to_top(ccode, top_tree_layer);
             }
             break;
         }
+
+        case COMMAND_SET_TAB_SIZE: {
+            if(arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_INTEGER){
+                TAB_SIZE = to.tokens[1].integer;
+            }
+
+            break;
+        }
+
+        case COMMAND_TREE_CHANGE_DIR: {
+            if(arrlen(to.tokens) <= 1){
+                return;
+            }
+
+            Layer* top_tree_layer = top_type_layer(ccode, LAYER_DIR_WALK);
+            if(top_tree_layer == NULL){
+                message_to_console(ccode, "Cannot change directory outside tree");
+                return;
+            }
+
+            LayerDirWalkData* ldwd = top_tree_layer->layer_data;
+
+            if(to.tokens[1].type == TOKEN_STRING){
+                char* as_str = stringview_to_str(to.tokens[1].string.start, to.tokens[1].string.size);
+                if(strncmp(as_str, "..", 2) == 0){
+                    // TODO: this allows using ../.. (etc) but it is implemented kinda unintuitively
+                    char* new_dir = nob_temp_sprintf("%s/%s", ldwd->current_dir_path, as_str);
+                    char resolved_path[MAX_PATH];
+                    if(resolve_path(new_dir, resolved_path) == NULL){
+                        free(as_str);
+                        nob_temp_reset();
+                        return;
+                    }
+                    change_tree_path(top_tree_layer, str_to_arr(resolved_path));
+                    nob_temp_reset();
+                }else {
+                    // change to absolute path
+                    if(!nob_file_exists(as_str)){
+                        message_to_console(ccode, "invalid path");
+                        return;
+                    }
+                    change_tree_path(top_tree_layer, str_to_arr(as_str));
+                }
+
+                free(as_str);
+            }
+            /*
+
+            char* dir = nob_temp_sprintf("%s/%s",
+            ldwd->current_dir_path,
+            ldwd->current_dir_files[ldwd->selected]);
+    
+        char resolved_path[MAX_PATH];
+    
+        if(resolve_path(dir, resolved_path) == NULL){
+            return false;
+        }
+            */    
+
+            break;
+        } 
 
         default: {
             // Unknown command
@@ -765,7 +861,7 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
     }
     // TODO: Make the tab size user adjustable
     if(chr == 9){
-        for(size_t i = 0; i < 4; i++){
+        for(size_t i = 0; i < TAB_SIZE; i++){
             layer_code_update(ccode, layer, ' ');
         }
     }
@@ -1250,16 +1346,6 @@ void layer_console_render(CCode* ccode, Layer* layer){
 }
 
 
-char *resolve_path(const char *path, char *out)
-{
-    #ifdef _WIN32
-        _fullpath(out, path, MAX_PATH);
-    #else
-        realpath(path, out);
-    #endif
-    return out;
-}
-
 
 int load_dir(LayerDirWalkData* ldwd){
     if(ldwd->current_dir_path == NULL){
@@ -1291,6 +1377,7 @@ int load_dir(LayerDirWalkData* ldwd){
     free(paths.items);
     return 0;
 }
+
 
 
 bool layer_dir_walk_update(CCode* ccode, Layer* layer, int chr){
@@ -1341,7 +1428,7 @@ bool layer_dir_walk_update(CCode* ccode, Layer* layer, int chr){
             ldwd->current_dir_path,
             ldwd->current_dir_files[ldwd->selected]);
     
-        char resolved_path[MAX_PATH];
+        char resolved_path[MAX_PATH] = {0};
     
         if(resolve_path(dir, resolved_path) == NULL){
             return false;
@@ -1351,15 +1438,7 @@ bool layer_dir_walk_update(CCode* ccode, Layer* layer, int chr){
             case NOB_FILE_DIRECTORY: {
                 char* arr = str_to_arr(resolved_path);
     
-                arrfree(ldwd->current_dir_path);
-    
-                for(size_t i = 0; i < arrlenu(ldwd->current_dir_files); i++){
-                    arrfree(ldwd->current_dir_files[i]);
-                }
-    
-                arrfree(ldwd->current_dir_files);
-    
-                ldwd->current_dir_path = arr;
+                change_tree_path(layer, arr);
     
                 load_dir(ldwd);
     
@@ -1410,17 +1489,18 @@ void layer_dir_walk_render(CCode* ccode, Layer* layer){
             attron(COLOR_PAIR(COLOR_FILE));
         }
         if(i == ldwd->selected){
-            
             attron(A_REVERSE);
-            mvprintw(draw_y, 0, "%s", ldwd->current_dir_files[i]);
             if(ft == NOB_FILE_DIRECTORY){
-                mvprintw(draw_y, arrlen(ldwd->current_dir_files[i])-1,"/");
+                mvprintw(draw_y, 0,"/%s", ldwd->current_dir_files[i]);
+            }else{
+                mvprintw(draw_y, 0,"%s", ldwd->current_dir_files[i]);
             }
             attroff(A_REVERSE);
         } else {
-            mvprintw(draw_y, 0, "%s", ldwd->current_dir_files[i]);
             if(ft == NOB_FILE_DIRECTORY){
-                mvprintw(draw_y, arrlen(ldwd->current_dir_files[i])-1,"/");
+                mvprintw(draw_y, 0,"/%s", ldwd->current_dir_files[i]);
+            }else{
+                mvprintw(draw_y, 0,"%s", ldwd->current_dir_files[i]);
             }
         }
         if(ft == NOB_FILE_DIRECTORY){
