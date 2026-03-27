@@ -1,6 +1,7 @@
 /PDCurses
 *.old
 *.exe
+nob
+main
 stb_ds.h
-nob.c
 nob.h
