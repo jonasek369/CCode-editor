@@ -27,13 +27,13 @@ void free_ccode(CCode* ccode){
 }
 
 
-
 void handle_args(CCode* ccode, int argc, char** argv){
     if(argc <= 1){
         return;
     }
     read_file_to_code_layer(ccode, argv[1], strlen(argv[1]));
 }
+
 
 
 int main(int argc, char** argv) {
@@ -56,7 +56,8 @@ int main(int argc, char** argv) {
 
     move(1, 0);
 
-    init_colors();
+    init_syntax_colors();
+
     init_commands();
 
     while(RUNNING) {

@@ -4,7 +4,6 @@
 #include "defines.h"
 
 #include "tokenizer.h"
-#include "syntax_highlighting.h"
 
 #define NOB_IMPLEMENTATION
 #include "nob.h"
@@ -55,6 +54,10 @@ Layer* new_layer_code(){
     lcd->code_buffer = NULL;
     lcd->saved = false;
     code->layer_data = lcd;
+
+    lcd->parser = NULL;
+    lcd->tree = NULL;
+    lcd->lang = LANG_UNKNOWN;
 
     return code;
 }
@@ -183,6 +186,7 @@ Layer* top_type_layer(CCode* ccode, LayerType type){
     return NULL;
 }
 
+
 Cursor* top_code_layer_cursor(CCode* ccode){
     for(int i = 0; i < arrlen(ccode->layers); i++){
         if(ccode->layers[i]->type == LAYER_CODE) return ((LayerCodeData*) ccode->layers[i]->layer_data)->cursor;
@@ -190,12 +194,14 @@ Cursor* top_code_layer_cursor(CCode* ccode){
     return NULL;
 }
 
+
 int contains_layer(CCode* ccode, Layer* layer){
     for(int i = 0; i < arrlen(ccode->layers); i++){
         if(ccode->layers[i] == layer) return i;
     }
     return -1;
 }
+
 
 Layer* layer_at_index(CCode* ccode, int index){
     return index < arrlen(ccode->layers) ? ccode->layers[index] : NULL;
@@ -206,6 +212,110 @@ Layer* layer_at_index(CCode* ccode, int index){
     File manipulation
 
 */
+
+
+size_t buffer_byte_offset(LayerCodeData *code, int row, int col){
+    size_t offset = 0;
+
+    for(int i = 0; i < row; i++) {
+        offset += strlen(code->code_buffer[i]);
+    }
+
+    offset += col;
+    return offset;
+}
+
+
+char *flatten_buffer(LayerCodeData *code){
+    size_t total = 0;
+
+    for(int i = 0; i < arrlen(code->code_buffer); i++) {
+        total += strlen(code->code_buffer[i]);
+    }
+
+    char *result = malloc(total + 1);
+    size_t pos = 0;
+
+    for (int i = 0; i < arrlen(code->code_buffer); i++) {
+        size_t len = strlen(code->code_buffer[i]);
+        memcpy(result + pos, code->code_buffer[i], len);
+        pos += len;
+    }
+
+    result[pos] = '\0';
+    return result;
+}
+
+
+// Supported parsers
+extern const TSLanguage *tree_sitter_c();
+extern const TSLanguage *tree_sitter_json();
+extern const TSLanguage *tree_sitter_python();
+
+const TSLanguage* get_filetype_language_parser(char* filename){
+    size_t size = strlen(filename);
+    size_t i = size;
+    while(i > 0 && filename[i] != '.'){
+        i--;
+    }
+    i++; // remove ".""
+    char* suffix = stringview_to_str(filename+i, size-i);
+    if(strlen(suffix) == 1 && (strncmp(suffix, "c", 1) == 0 || strncmp(suffix, "h", 1) == 0)){
+        free(suffix);
+        return tree_sitter_c();
+    }else if(strlen(suffix) == 4 && strncmp(suffix, "json", 4) == 0){
+        free(suffix);
+        return tree_sitter_json();
+    }else if(strlen(suffix) == 2 && strncmp(suffix, "py", 2) == 0){
+        free(suffix);
+        return tree_sitter_python();
+    }
+
+    free(suffix);
+    return NULL;
+}
+
+
+void make_parser(CCode* ccode, char* filename){
+    Layer* layer = top_type_layer(ccode, LAYER_CODE);
+    if(!layer){
+        return;
+    }
+    LayerCodeData* lcd = layer->layer_data;
+    const TSLanguage* lang = get_filetype_language_parser(filename);
+    if(!lang){
+        lcd->lang = LANG_UNKNOWN;
+        return;
+    }
+    lcd->parser = ts_parser_new();
+    if(!ts_parser_set_language(lcd->parser, lang)){
+        ts_parser_delete(lcd->parser);
+        lcd->parser = NULL;
+        fprintf(stderr, "Language version mismatch\n");
+        return;
+    }
+    
+    if(lang == tree_sitter_c()) {
+        lcd->lang = LANG_C;
+    }else if(lang == tree_sitter_json()){
+        lcd->lang = LANG_JSON;
+    }else if(lang == tree_sitter_python()){
+        lcd->lang = LANG_PYTHON;
+    }else {
+        lcd->lang = LANG_UNKNOWN;
+    }
+    
+
+    char* flatten = flatten_buffer(lcd);
+    lcd->tree = ts_parser_parse_string(
+        lcd->parser,
+        NULL,
+        flatten,
+        strlen(flatten)
+    );
+
+    free(flatten);
+}
 
 
 void read_file_to_code_layer(CCode* ccode, const char* filename_start, size_t size){
@@ -251,6 +361,8 @@ void read_file_to_code_layer(CCode* ccode, const char* filename_start, size_t si
     }
     lcd->saved = true;
     push_layer_to_top(ccode, file_layer);
+    make_parser(ccode, filename.items);
+
     nob_sb_free(sb);
     nob_sb_free(filename);
 }
@@ -271,6 +383,7 @@ void change_filename(CCode* ccode, const char* new_filename, size_t size){
         arrput(lcd->filename, new_filename[i]);
     }
     arrput(lcd->filename, '\0');
+    make_parser(ccode, lcd->filename);
 }
 
 
@@ -308,6 +421,8 @@ char* layertype_to_str(LayerType lt){
         return "LAYER_CODE";
     }else if(lt == LAYER_CONSOLE){
         return "LAYER_CONSOLE";
+    }else if(lt == LAYER_DIR_WALK){
+        return "TREE";
     }
     return "(null)";
 }
@@ -339,6 +454,12 @@ void free_layer(Layer* layer){
             }
             if(lcd->filename){
                 arrfree(lcd->filename);
+            }
+            if(lcd->parser){
+                ts_parser_delete(lcd->parser);
+            }
+            if(lcd->tree){
+                ts_tree_delete(lcd->tree);
             }
             free(lcd);
         }
@@ -771,18 +892,6 @@ void console_execute_command(CCode* ccode, const char* buffer){
 
                 free(as_str);
             }
-            /*
-
-            char* dir = nob_temp_sprintf("%s/%s",
-            ldwd->current_dir_path,
-            ldwd->current_dir_files[ldwd->selected]);
-    
-        char resolved_path[MAX_PATH];
-    
-        if(resolve_path(dir, resolved_path) == NULL){
-            return false;
-        }
-            */    
 
             break;
         } 
@@ -814,6 +923,18 @@ void console_execute_command(CCode* ccode, const char* buffer){
 
 */
 
+#define TS_REPARSE(code_data)                                                        \
+    do {                                                                             \
+        if((code_data)->parser && (code_data)->tree){                                \
+            char *src = flatten_buffer(code_data);                                   \
+            TSTree *new_tree = ts_parser_parse_string(                               \
+                (code_data)->parser, (code_data)->tree, src, strlen(src));           \
+            free(src);                                                               \
+            ts_tree_delete((code_data)->tree);                                       \
+            (code_data)->tree = new_tree;                                            \
+        }                                                                            \
+    } while(0)
+
 
 void layer_code_update(CCode* ccode, Layer* layer, int chr){
     if(!ccode || !layer || layer->type != LAYER_CODE || layer->layer_data == NULL){
@@ -829,7 +950,6 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
         arrput(code_data->code_buffer, line);
     }
     
-    // Ensure we have enough lines in the buffer
     if(arrlen(code_data->code_buffer) <= code_data->cursor->y){
         int add_n = code_data->cursor->y - arrlen(code_data->code_buffer) + 1;
         for(int i = 0; i < add_n; i++){
@@ -843,7 +963,6 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
     if(code_data->cursor->y >= arrlen(code_data->code_buffer)){
         return;
     }
-
 
     if(chr == CUSTOM_CTL_F){
         Layer* console_in_layers = top_type_layer(ccode, LAYER_CONSOLE);
@@ -859,7 +978,7 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
             console_data->console_buffer_x = 3;
         }
     }
-    // TODO: Make the tab size user adjustable
+
     if(chr == 9){
         for(size_t i = 0; i < TAB_SIZE; i++){
             layer_code_update(ccode, layer, ' ');
@@ -871,7 +990,6 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
 
     if(inFindSubstrMode){
         FindingSubstr* fss = code_data->finding_substr;
-
         bool change = false;
         if(chr == KEY_RIGHT){
             fss->at_nth_occurence++;
@@ -895,7 +1013,8 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
         }
     }
 
-    // add character to buffer that we have our curses on
+
+
     if((chr >= 0 && chr <= 255) && isprint(chr)){
         char* line = code_data->code_buffer[code_data->cursor->y];
         int line_len = arrlen(line);
@@ -915,70 +1034,131 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
         }
         code_data->saved = false;
         arrput(line, '\0');
-        
-        code_data->cursor->x++;
         code_data->code_buffer[code_data->cursor->y] = line;
+
+        int row = code_data->cursor->y;
+        int col = code_data->cursor->x;
+
+        if(code_data->parser && code_data->tree){
+            TSInputEdit edit = {
+                .start_byte    = buffer_byte_offset(code_data, row, col),
+                .old_end_byte  = buffer_byte_offset(code_data, row, col),
+                .new_end_byte  = buffer_byte_offset(code_data, row, col + 1),
+                .start_point   = {row, col},
+                .old_end_point = {row, col},
+                .new_end_point = {row, col + 1},
+            };
+            ts_tree_edit(code_data->tree, &edit);
+        }
+        TS_REPARSE(code_data);
+
+        code_data->cursor->x++;
     }
-    // delete char
+
+
     else if(chr == CUSTOM_KEY_BACKSPACE){
         char* line = code_data->code_buffer[code_data->cursor->y];
         int line_len = arrlen(line);
+
+        bool do_parse = false;
     
         if(code_data->cursor->x > 0 && line_len > 1){
-            (void)arrpop(line);                 // remove '\0'
+            int row = code_data->cursor->y;
+            int col = code_data->cursor->x;
+
+            if(code_data->parser && code_data->tree){
+                TSInputEdit edit = {
+                    .start_byte    = buffer_byte_offset(code_data, row, col - 1),
+                    .old_end_byte  = buffer_byte_offset(code_data, row, col),
+                    .new_end_byte  = buffer_byte_offset(code_data, row, col - 1),
+                    .start_point   = {row, col - 1},
+                    .old_end_point = {row, col},
+                    .new_end_point = {row, col - 1},
+                };
+                ts_tree_edit(code_data->tree, &edit);
+            }
+            do_parse = true;
+
+            (void)arrpop(line);
             arrdel(line, code_data->cursor->x - 1);
             arrput(line, '\0');
-    
             code_data->cursor->x--;
-    
             code_data->code_buffer[code_data->cursor->y] = line;
         }
         else if(code_data->cursor->x == 0 && code_data->cursor->y > 0){
-            char* current_line = code_data->code_buffer[code_data->cursor->y];
             char* prev_line = code_data->code_buffer[code_data->cursor->y - 1];
-    
             int prev_line_len = arrlen(prev_line);
-    
-            code_data->cursor->x = (prev_line_len >= 2) ? prev_line_len - 2 : 0;
-    
-            if(prev_line_len >= 2){
-                (void) arrpop(prev_line);
-                (void) arrpop(prev_line);
-            }
-    
-            int current_line_len = arrlen(current_line);
+            int cur_row = code_data->cursor->y;
 
+            int del_row = cur_row - 1;
+            int del_col = (prev_line_len >= 2) ? prev_line_len - 2 : 0;
+
+            if(code_data->parser && code_data->tree){
+                TSInputEdit edit = {
+                    .start_byte    = buffer_byte_offset(code_data, del_row, del_col),
+                    .old_end_byte  = buffer_byte_offset(code_data, cur_row, 0),
+                    .new_end_byte  = buffer_byte_offset(code_data, del_row, del_col),
+                    .start_point   = {del_row, del_col},
+                    .old_end_point = {cur_row, 0},
+                    .new_end_point = {del_row, del_col},
+                };
+                ts_tree_edit(code_data->tree, &edit);
+            }
+            do_parse = true;
+
+            int prev_len = arrlen(prev_line);
+            code_data->cursor->x = (prev_len >= 2) ? prev_len - 2 : 0;
+
+            if(prev_len >= 2){
+                (void) arrpop(prev_line); // '\0'
+                (void) arrpop(prev_line); // '\n'
+            }
+
+            char* current_line = code_data->code_buffer[code_data->cursor->y];
+            int current_line_len = arrlen(current_line);
             for(int i = 0; i < current_line_len - 2; i++){
                 arrput(prev_line, current_line[i]);
             }
-    
             arrput(prev_line, '\n');
             arrput(prev_line, '\0');
-    
+
             code_data->code_buffer[code_data->cursor->y - 1] = prev_line;
-    
             arrfree(current_line);
             arrdel(code_data->code_buffer, code_data->cursor->y);
-    
             code_data->cursor->y--;
         }
-    
+
+        if(do_parse){
+            TS_REPARSE(code_data);
+        }
+
         code_data->saved = false;
     }
-    // new line
+
+
     else if(chr == CUSTOM_KEY_ENTER){
         char* current_line = code_data->code_buffer[code_data->cursor->y];
         int line_len = arrlen(current_line);
         
-        if(code_data->cursor->x < 0){
-            code_data->cursor->x = 0;
+        if(code_data->cursor->x < 0) code_data->cursor->x = 0;
+        if(code_data->cursor->x > line_len) code_data->cursor->x = line_len;
+
+        int row = code_data->cursor->y;
+        int col = code_data->cursor->x;
+
+        if(code_data->parser && code_data->tree){
+            TSInputEdit edit = {
+                .start_byte    = buffer_byte_offset(code_data, row, col),
+                .old_end_byte  = buffer_byte_offset(code_data, row, col),
+                .new_end_byte  = buffer_byte_offset(code_data, row, col) + 1,
+                .start_point   = {row, col},
+                .old_end_point = {row, col},
+                .new_end_point = {row + 1, 0},
+            };
+            ts_tree_edit(code_data->tree, &edit);
         }
-        if(code_data->cursor->x > line_len){
-            code_data->cursor->x = line_len;
-        }
-        
+
         char* new_line = NULL;
-        
         if(line_len > 0 && code_data->cursor->x < line_len - 2){
             for(int i = code_data->cursor->x; i < line_len - 2; i++){
                 arrput(new_line, current_line[i]);
@@ -986,7 +1166,7 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
         }
         arrput(new_line, '\n');
         arrput(new_line, '\0');
-        
+
         if(line_len > 0){
             (void) arrpop(current_line);
             while(arrlen(current_line) > code_data->cursor->x){
@@ -995,16 +1175,18 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
         }
         arrput(current_line, '\n');
         arrput(current_line, '\0');
-        
+
         code_data->code_buffer[code_data->cursor->y] = current_line;
-        
         arrins(code_data->code_buffer, code_data->cursor->y + 1, new_line);
 
         code_data->cursor->y++;
         code_data->cursor->x = 0;
         code_data->saved = false;
+
+        TS_REPARSE(code_data);
     }
-    // moving cursor with keys
+
+
     else if(!inFindSubstrMode && chr >= KEY_DOWN && chr <= KEY_RIGHT){
         switch(chr){
             case KEY_DOWN: {
@@ -1061,7 +1243,6 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
         }
     }
     else if(!inFindSubstrMode && chr == CTL_PGUP){
-        // -2 makes it so last line = first line
         code_data->cursor->y -= (y-2)*2;
         if(code_data->cursor->y < 0){
             code_data->cursor->y = 0;
@@ -1070,7 +1251,6 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
     else if(!inFindSubstrMode && chr == CTL_PGDN){
         code_data->cursor->y += (y-2)*2;
     }
-
     else if (!inFindSubstrMode && chr == CTL_UP) {
         if (code_data->cursor->yoff > 0) {
             code_data->cursor->yoff--;
@@ -1079,10 +1259,8 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
     else if (!inFindSubstrMode && chr == CTL_DOWN) {
         int screen_rows = y-1;
         int buffer_size = arrlen(code_data->code_buffer);
-    
         int max_scroll = buffer_size - screen_rows;
         if (max_scroll < 0) max_scroll = 0;
-    
         if (code_data->cursor->yoff < max_scroll) {
             code_data->cursor->yoff++;
         }
@@ -1102,13 +1280,11 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
 
         while(x < len && isspace(line[x]))
             x++;
-        
         while(x < len && ispunct(line[x]) && !isspace(line[x]))
             x++;
-        
         while(x < len && isalnum(line[x]))
             x++;
-        
+
         code_data->cursor->x = x;
 
         LABEL(carried_to_next_line)
@@ -1128,19 +1304,15 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
 
         while(x > 0 && isspace(line[x-1]))
             x--;
-        
         while(x > 0 && ispunct(line[x-1]) && !isspace(line[x-1]))
             x--;
-        
         while(x > 0 && isalnum(line[x-1]))
             x--;
-        
-        code_data->cursor->x = x;
 
+        code_data->cursor->x = x;
 
         LABEL(carried_to_previous_line)
     }
-
     else if(!inFindSubstrMode && chr == CUSTOM_CTL_BACKSPACE){
         int x = code_data->cursor->x;
         char *line = code_data->code_buffer[code_data->cursor->y];
@@ -1150,47 +1322,74 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
                 int prev_len = arrlen(code_data->code_buffer[code_data->cursor->y - 1]);
                 int curr_len = arrlen(code_data->code_buffer[code_data->cursor->y]);
 
-                arrsetlen(code_data->code_buffer[code_data->cursor->y - 1], prev_len-2);
+                if(code_data->parser && code_data->tree){
+                    int del_row = code_data->cursor->y - 1;
+                    int del_col = prev_len >= 2 ? prev_len - 2 : 0;
+                    TSInputEdit edit = {
+                        .start_byte    = buffer_byte_offset(code_data, del_row, del_col),
+                        .old_end_byte  = buffer_byte_offset(code_data, code_data->cursor->y, 0),
+                        .new_end_byte  = buffer_byte_offset(code_data, del_row, del_col),
+                        .start_point   = {del_row, del_col},
+                        .old_end_point = {code_data->cursor->y, 0},
+                        .new_end_point = {del_row, del_col},
+                    };
+                    ts_tree_edit(code_data->tree, &edit);
+                }
 
+                arrsetlen(code_data->code_buffer[code_data->cursor->y - 1], prev_len-2);
                 for(size_t i = 0; i < curr_len; i++){
                     arrput(code_data->code_buffer[code_data->cursor->y - 1], code_data->code_buffer[code_data->cursor->y][i]);
                 }
                 arrdel(code_data->code_buffer, code_data->cursor->y);
                 code_data->cursor->y--;
-                code_data->cursor->x = prev_len-2;              
+                code_data->cursor->x = prev_len-2;
+
+                TS_REPARSE(code_data);
             }
-        
             goto carried_to_previous_line;
         }
 
         int new_x = x;
-
         while (new_x > 0 && isspace(line[new_x - 1]))
             new_x--;
-        
         while (new_x > 0 && ispunct(line[new_x - 1]) && !isspace(line[new_x - 1]))
             new_x--;
-        
         while (new_x > 0 && isalnum(line[new_x - 1]))
             new_x--;
 
+        if(code_data->parser && code_data->tree){
+            int row = code_data->cursor->y;
+            TSInputEdit edit = {
+                .start_byte    = buffer_byte_offset(code_data, row, new_x),
+                .old_end_byte  = buffer_byte_offset(code_data, row, x),
+                .new_end_byte  = buffer_byte_offset(code_data, row, new_x),
+                .start_point   = {row, new_x},
+                .old_end_point = {row, x},
+                .new_end_point = {row, new_x},
+            };
+            ts_tree_edit(code_data->tree, &edit);
+        }
+
         arrsetlen(code_data->code_buffer[code_data->cursor->y], new_x);
-        if(x-new_x >= 2){
-            arrput(code_data->code_buffer[code_data->cursor->y], '\n');
-            arrput(code_data->code_buffer[code_data->cursor->y], '\0');
-        }else if(x-new_x == 1){
+
+        if(new_x == 0 || code_data->code_buffer[code_data->cursor->y][new_x - 1] != '\n'){
             arrput(code_data->code_buffer[code_data->cursor->y], '\n');
         }
+        arrput(code_data->code_buffer[code_data->cursor->y], '\0');
+
         code_data->cursor->x = new_x;
+
+        TS_REPARSE(code_data);
     }
 
-    /* For debug CTRL + G*/
+    /* For debug CTRL + G */
     else if (!inFindSubstrMode && chr == 7){
         for(size_t i = 0; i < arrlenu(code_data->code_buffer[code_data->cursor->y]); i++){
             printf("%d ", code_data->code_buffer[code_data->cursor->y][i]);
         }
         printf("\n");
     }
+
     int content_height = y - 1;
     int content_width = x;
     
@@ -1209,7 +1408,6 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
     }
 }
 
-
 void layer_code_render(CCode* ccode, Layer* layer) {
     if (!ccode || !layer || layer->type != LAYER_CODE || layer->layer_data == NULL) {
         return;
@@ -1222,53 +1420,7 @@ void layer_code_render(CCode* ccode, Layer* layer) {
     int content_height = y - 1;
     int content_width = x;
 
-    //clear();
-
-    int buffer_size = arrlen(code_data->code_buffer);
-
-    // allocate visible buffer
-    char **visible_buffer = malloc(sizeof(char*) * content_height);
-
-    for(int screen_line = 0; screen_line < content_height; screen_line++) {
-        int buffer_line = screen_line + code_data->cursor->yoff;
-
-        if(buffer_line >= buffer_size) {
-            visible_buffer[screen_line] = strdup(""); // empty line
-            continue;
-        }
-
-        char* line = code_data->code_buffer[buffer_line];
-        if(!line) {
-            visible_buffer[screen_line] = strdup("");
-            continue;
-        }
-
-        int line_len = strlen(line);
-        if(code_data->cursor->xoff >= line_len) {
-            visible_buffer[screen_line] = strdup(""); // scrolled past end of line
-        }else {
-            int chars_to_display = line_len - code_data->cursor->xoff;
-            if (chars_to_display > content_width) {
-                chars_to_display = content_width;
-            }
-
-            visible_buffer[screen_line] = malloc(chars_to_display + 1);
-            strncpy(visible_buffer[screen_line],
-                    line + code_data->cursor->xoff,
-                    chars_to_display);
-            visible_buffer[screen_line][chars_to_display] = '\0';
-        }
-
-        // now print from visible buffer instead of slicing inline
-        //mvprintw(screen_line + 1, 0, "%s", visible_buffer[screen_line]);
-    }
-    apply_c_syntax_highlighting(visible_buffer, content_height, code_data->cursor, code_data->finding_substr);
-
-    // cleanup
-    for (int i = 0; i < content_height; i++) {
-        free(visible_buffer[i]);
-    }
-    free(visible_buffer);
+    apply_tree_sitter_syntax_highlighting(code_data, code_data->lang);
 }
 
 
@@ -1323,6 +1475,7 @@ void layer_console_update(CCode* ccode, Layer* layer, int chr){
     }
 }
 
+
 void layer_console_render(CCode* ccode, Layer* layer){
     if(!ccode || !layer || layer->type != LAYER_CONSOLE || layer->layer_data == NULL){
         return;
@@ -1344,7 +1497,6 @@ void layer_console_render(CCode* ccode, Layer* layer){
     // move(y-1, console_data->console_buffer_x);
     // refresh();
 }
-
 
 
 int load_dir(LayerDirWalkData* ldwd){
@@ -1377,7 +1529,6 @@ int load_dir(LayerDirWalkData* ldwd){
     free(paths.items);
     return 0;
 }
-
 
 
 bool layer_dir_walk_update(CCode* ccode, Layer* layer, int chr){
@@ -1536,7 +1687,6 @@ void layer_code_handle_keypress(CCode* ccode, Layer* layer, int chr, bool should
         layer_code_render(ccode, layer);
     }
 }
-
 
 void draw_ui(CCode* ccode) {
     Layer** code_layers = all_type_layers(ccode, LAYER_CODE);

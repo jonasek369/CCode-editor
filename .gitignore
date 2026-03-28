@@ -1,4 +1,6 @@
 /PDCurses
+/tree-sitter
+/tree-sitter-grammar
 *.old
 *.exe
 nob

@@ -19,6 +19,7 @@
 #include <ctype.h>
 #include <stdbool.h>
 #include <limits.h>
+#include <tree_sitter/api.h>
 
 #include "curses.h"
 #include "curspriv.h"
@@ -54,6 +55,13 @@ typedef enum {
     COMMAND_SET_TAB_SIZE,
     COMMAND_TREE_CHANGE_DIR
 } CommandType;
+
+typedef enum {
+    LANG_UNKNOWN,
+    LANG_C,
+    LANG_JSON,
+    LANG_PYTHON,
+} SyntaxLanguage;
 
 static const bool is_whitespace[256] = {
   [' '] = 1, ['\t'] = 1, ['\n'] = 1, ['\r'] = 1
@@ -102,6 +110,11 @@ typedef struct {
     char** code_buffer;
     Cursor* cursor;
     FindingSubstr* finding_substr;
+
+    // tree sitter
+    SyntaxLanguage lang;
+    TSParser *parser;
+    TSTree *tree;
 } LayerCodeData;
 
 
@@ -137,5 +150,9 @@ bool CLOSE_CONSOLE = false;
 
 int TAB_SIZE = 4;
 #define LABEL(x) x:
+
+// syntax_highlighting.h must have defined LayerCodeData
+#include "syntax_highlighting.h"
+
 
 #endif
