@@ -252,7 +252,7 @@ extern const TSLanguage *tree_sitter_c();
 extern const TSLanguage *tree_sitter_json();
 extern const TSLanguage *tree_sitter_python();
 
-const TSLanguage* get_filetype_language_parser(char* filename){
+const TSLanguage* get_filetype_language_parser(char* filename, SyntaxLanguage* lang){
     size_t size = strlen(filename);
     size_t i = size;
     while(i > 0 && filename[i] != '.'){
@@ -262,15 +262,18 @@ const TSLanguage* get_filetype_language_parser(char* filename){
     char* suffix = stringview_to_str(filename+i, size-i);
     if(strlen(suffix) == 1 && (strncmp(suffix, "c", 1) == 0 || strncmp(suffix, "h", 1) == 0)){
         free(suffix);
+        *lang = LANG_C;
         return tree_sitter_c();
     }else if(strlen(suffix) == 4 && strncmp(suffix, "json", 4) == 0){
+        *lang = LANG_JSON;
         free(suffix);
         return tree_sitter_json();
     }else if(strlen(suffix) == 2 && strncmp(suffix, "py", 2) == 0){
+        *lang = LANG_PYTHON;
         free(suffix);
         return tree_sitter_python();
     }
-
+    *lang = LANG_UNKNOWN;
     free(suffix);
     return NULL;
 }
@@ -282,7 +285,7 @@ void make_parser(CCode* ccode, char* filename){
         return;
     }
     LayerCodeData* lcd = layer->layer_data;
-    const TSLanguage* lang = get_filetype_language_parser(filename);
+    const TSLanguage* lang = get_filetype_language_parser(filename, &(lcd->lang));
     if(!lang){
         lcd->lang = LANG_UNKNOWN;
         return;
@@ -293,16 +296,6 @@ void make_parser(CCode* ccode, char* filename){
         lcd->parser = NULL;
         fprintf(stderr, "Language version mismatch\n");
         return;
-    }
-    
-    if(lang == tree_sitter_c()) {
-        lcd->lang = LANG_C;
-    }else if(lang == tree_sitter_json()){
-        lcd->lang = LANG_JSON;
-    }else if(lang == tree_sitter_python()){
-        lcd->lang = LANG_PYTHON;
-    }else {
-        lcd->lang = LANG_UNKNOWN;
     }
     
 
@@ -1413,14 +1406,14 @@ void layer_code_render(CCode* ccode, Layer* layer) {
         return;
     }
     LayerCodeData* code_data = (LayerCodeData*) layer->layer_data;
+    // clock_t begin = clock();
 
-    int y, x;
-    getmaxyx(stdscr, y, x);
-
-    int content_height = y - 1;
-    int content_width = x;
-
+    // Renders syntax highlighting or plain text if no parser is present
     apply_tree_sitter_syntax_highlighting(code_data, code_data->lang);
+    
+    //clock_t end = clock();
+    //double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
+    // printf("Render time: %f\n", time_spent);
 }
 
 

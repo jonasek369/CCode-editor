@@ -90,76 +90,117 @@ static bool node_text_eq(TSNode node, const char* text,
 
 // ── C highlighter ────────────────────────────────────────────────────────────
 
+typedef struct {
+    char *key;
+    int value;
+} map_entry;
+
+static map_entry* c_type_map = NULL;
+
+static void init_c_type_map(){
+    if(c_type_map){
+        return;
+    }
+    shput(c_type_map, "if", COLOR_PAIR_KEYWORD);
+    shput(c_type_map, "while", COLOR_PAIR_KEYWORD);
+    shput(c_type_map, "do", COLOR_PAIR_KEYWORD);
+    shput(c_type_map, "switch", COLOR_PAIR_KEYWORD);
+    shput(c_type_map, "break", COLOR_PAIR_KEYWORD);
+    shput(c_type_map, "goto", COLOR_PAIR_KEYWORD);
+    shput(c_type_map, "typedef", COLOR_PAIR_KEYWORD);
+    shput(c_type_map, "enum", COLOR_PAIR_KEYWORD);
+    shput(c_type_map, "static", COLOR_PAIR_KEYWORD);
+    shput(c_type_map, "const", COLOR_PAIR_KEYWORD);
+    shput(c_type_map, "inline", COLOR_PAIR_KEYWORD);
+    shput(c_type_map, "else", COLOR_PAIR_KEYWORD);
+    shput(c_type_map, "for", COLOR_PAIR_KEYWORD);
+    shput(c_type_map, "return", COLOR_PAIR_KEYWORD);
+    shput(c_type_map, "case", COLOR_PAIR_KEYWORD);
+    shput(c_type_map, "continue", COLOR_PAIR_KEYWORD);
+    shput(c_type_map, "sizeof", COLOR_PAIR_KEYWORD);
+    shput(c_type_map, "struct", COLOR_PAIR_KEYWORD);
+    shput(c_type_map, "union", COLOR_PAIR_KEYWORD);
+    shput(c_type_map, "extern", COLOR_PAIR_KEYWORD);
+    shput(c_type_map, "volatile", COLOR_PAIR_KEYWORD);
+    shput(c_type_map, "default", COLOR_PAIR_KEYWORD);
+
+    shput(c_type_map, "primitive_type", COLOR_PAIR_TYPE);
+    shput(c_type_map, "type_qualifier", COLOR_PAIR_TYPE);
+    shput(c_type_map, "type_identifier", COLOR_PAIR_TYPE);
+
+    shput(c_type_map, "string_literal", COLOR_PAIR_STRING);
+    shput(c_type_map, "char_literal", COLOR_PAIR_STRING);
+    shput(c_type_map, "string_content", COLOR_PAIR_STRING);
+    shput(c_type_map, "escape_sequence", COLOR_PAIR_STRING);
+
+    shput(c_type_map, "number_literal", COLOR_PAIR_NUMBER);
+    shput(c_type_map, "integer_literal", COLOR_PAIR_NUMBER);
+    shput(c_type_map, "float_literal", COLOR_PAIR_NUMBER);
+
+    shput(c_type_map, "comment", COLOR_PAIR_COMMENT);
+    shput(c_type_map, "line_comment", COLOR_PAIR_COMMENT);
+    shput(c_type_map, "block_comment", COLOR_PAIR_COMMENT);
+
+    shput(c_type_map, "preproc_include", COLOR_PAIR_PREPROC);
+    shput(c_type_map, "preproc_def", COLOR_PAIR_PREPROC);
+    shput(c_type_map, "preproc_directive", COLOR_PAIR_PREPROC);
+    shput(c_type_map, "#ifndef", COLOR_PAIR_PREPROC);
+    shput(c_type_map, "#if", COLOR_PAIR_PREPROC);
+    shput(c_type_map, "#elif", COLOR_PAIR_PREPROC);
+    shput(c_type_map, "#define", COLOR_PAIR_PREPROC);
+    shput(c_type_map, "#include", COLOR_PAIR_PREPROC);
+    shput(c_type_map, "#error", COLOR_PAIR_PREPROC);
+    shput(c_type_map, "#ifdef", COLOR_PAIR_PREPROC);
+    shput(c_type_map, "#else", COLOR_PAIR_PREPROC);
+    shput(c_type_map, "#endif", COLOR_PAIR_PREPROC);
+    shput(c_type_map, "#undef", COLOR_PAIR_PREPROC);
+    shput(c_type_map, "#pragma", COLOR_PAIR_PREPROC);
+
+    shput(c_type_map, "+", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "*", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "%", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "==", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "<", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "<=", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "&&", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "!", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "|", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "~", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, ">>", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "-=", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "/=", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "--", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, ".", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, ";", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "{", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "(", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "[", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "-", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "/", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "=", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "!=", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, ">", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, ">=", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "||", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "&", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "^", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "<<", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "+=", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "*=", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "++", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "->", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, ",", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, ":", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "}", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, ")", COLOR_PAIR_OPERATOR);
+    shput(c_type_map, "]", COLOR_PAIR_OPERATOR);
+}
+
 static int c_node_to_pair(const char* type) {
     if (!type) return COLOR_PAIR_DEFAULT;
 
-    if (strcmp(type, "if")       == 0 || strcmp(type, "else")     == 0 ||
-        strcmp(type, "while")    == 0 || strcmp(type, "for")      == 0 ||
-        strcmp(type, "do")       == 0 || strcmp(type, "return")   == 0 ||
-        strcmp(type, "switch")   == 0 || strcmp(type, "case")     == 0 ||
-        strcmp(type, "break")    == 0 || strcmp(type, "continue") == 0 ||
-        strcmp(type, "goto")     == 0 || strcmp(type, "sizeof")   == 0 ||
-        strcmp(type, "typedef")  == 0 || strcmp(type, "struct")   == 0 ||
-        strcmp(type, "enum")     == 0 || strcmp(type, "union")    == 0 ||
-        strcmp(type, "static")   == 0 || strcmp(type, "extern")   == 0 ||
-        strcmp(type, "const")    == 0 || strcmp(type, "volatile") == 0 ||
-        strcmp(type, "inline")   == 0 || strcmp(type, "default")  == 0)
-        return COLOR_PAIR_KEYWORD;
-
-    if (strcmp(type, "primitive_type") == 0 ||
-        strcmp(type, "type_qualifier") == 0 ||
-        strcmp(type, "type_identifier")== 0)
-        return COLOR_PAIR_TYPE;
-
-    if (strcmp(type, "string_literal")  == 0 ||
-        strcmp(type, "char_literal")    == 0 ||
-        strcmp(type, "string_content")  == 0 ||
-        strcmp(type, "escape_sequence") == 0)
-        return COLOR_PAIR_STRING;
-
-    if (strcmp(type, "number_literal")  == 0 ||
-        strcmp(type, "integer_literal") == 0 ||
-        strcmp(type, "float_literal")   == 0)
-        return COLOR_PAIR_NUMBER;
-
-    if (strcmp(type, "comment")      == 0 ||
-        strcmp(type, "line_comment") == 0 ||
-        strcmp(type, "block_comment")== 0)
-        return COLOR_PAIR_COMMENT;
-
-    if (strcmp(type, "preproc_include")   == 0 ||
-        strcmp(type, "preproc_def")       == 0 ||
-        strcmp(type, "preproc_directive") == 0 ||
-        strcmp(type, "#ifndef")  == 0 || strcmp(type, "#ifdef")  == 0 ||
-        strcmp(type, "#if")      == 0 || strcmp(type, "#else")   == 0 ||
-        strcmp(type, "#elif")    == 0 || strcmp(type, "#endif")  == 0 ||
-        strcmp(type, "#define")  == 0 || strcmp(type, "#undef")  == 0 ||
-        strcmp(type, "#include") == 0 || strcmp(type, "#pragma") == 0 ||
-        strcmp(type, "#error")   == 0)
-        return COLOR_PAIR_PREPROC;
-
-    if (strcmp(type, "+")  == 0 || strcmp(type, "-")  == 0 ||
-        strcmp(type, "*")  == 0 || strcmp(type, "/")  == 0 ||
-        strcmp(type, "%")  == 0 || strcmp(type, "=")  == 0 ||
-        strcmp(type, "==") == 0 || strcmp(type, "!=") == 0 ||
-        strcmp(type, "<")  == 0 || strcmp(type, ">")  == 0 ||
-        strcmp(type, "<=") == 0 || strcmp(type, ">=") == 0 ||
-        strcmp(type, "&&") == 0 || strcmp(type, "||") == 0 ||
-        strcmp(type, "!")  == 0 || strcmp(type, "&")  == 0 ||
-        strcmp(type, "|")  == 0 || strcmp(type, "^")  == 0 ||
-        strcmp(type, "~")  == 0 || strcmp(type, "<<") == 0 ||
-        strcmp(type, ">>") == 0 || strcmp(type, "+=") == 0 ||
-        strcmp(type, "-=") == 0 || strcmp(type, "*=") == 0 ||
-        strcmp(type, "/=") == 0 || strcmp(type, "++") == 0 ||
-        strcmp(type, "--") == 0 || strcmp(type, "->") == 0 ||
-        strcmp(type, ".")  == 0 || strcmp(type, ",")  == 0 ||
-        strcmp(type, ";")  == 0 || strcmp(type, ":")  == 0 ||
-        strcmp(type, "{")  == 0 || strcmp(type, "}")  == 0 ||
-        strcmp(type, "(")  == 0 || strcmp(type, ")")  == 0 ||
-        strcmp(type, "[")  == 0 || strcmp(type, "]")  == 0)
-        return COLOR_PAIR_OPERATOR;
-
-    return COLOR_PAIR_DEFAULT;
+    int val = shget(c_type_map, type);
+    return val ? val : COLOR_PAIR_DEFAULT;
 }
 
 static bool c_is_span_container(const char* type) {
@@ -204,18 +245,16 @@ static void collect_highlights_c(TSNode node, HSpan** spans,char** buf, int buf_
             collect_highlights_c(ts_node_child(node, i), spans, buf, buf_size);
         return;
     }
-
     // identifier: check for NULL / true / false constants
-    if (strcmp(type, "identifier") == 0) {
-        if (node_text_eq(node, "NULL",    buf, buf_size) ||
-            node_text_eq(node, "nullptr", buf, buf_size))
-            push_span(spans, node, COLOR_PAIR_NUMBER);
-        else if (node_text_eq(node, "TRUE",  buf, buf_size) ||
-                 node_text_eq(node, "FALSE", buf, buf_size) ||
-                 node_text_eq(node, "true",  buf, buf_size) ||
-                 node_text_eq(node, "false", buf, buf_size))
-            push_span(spans, node, COLOR_PAIR_KEYWORD);
-        // identifiers are leaves — nothing to descend into
+    if (strcmp(type, "NULL") == 0 ||
+        strcmp(type, "nullptr") == 0){
+        push_span(spans, node, COLOR_PAIR_NUMBER);
+        return;
+    }else if (strcmp(type, "TRUE")  == 0 ||
+              strcmp(type, "FALSE") == 0 ||
+              strcmp(type, "true")  == 0 ||
+              strcmp(type, "false") == 0){
+        push_span(spans, node, COLOR_PAIR_KEYWORD);
         return;
     }
 
@@ -293,6 +332,12 @@ static void collect_highlights_json(TSNode node, HSpan** spans) {
 }
 
 // ── main render ──────────────────────────────────────────────────────────────
+
+
+void init_syntax_highlighting(){
+    init_c_type_map();
+    init_syntax_colors();
+}
 
 void apply_tree_sitter_syntax_highlighting(LayerCodeData* lcd, SyntaxLanguage lang) {
     if (!lcd) return;  // only guard against null lcd itself

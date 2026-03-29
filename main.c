@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
 
     move(1, 0);
 
-    init_syntax_colors();
+    init_syntax_highlighting();
 
     init_commands();
 
