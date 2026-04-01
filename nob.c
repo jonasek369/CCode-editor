@@ -1,5 +1,5 @@
 #define NOB_IMPLEMENTATION
-#include "nob.h"
+#include "../thirdparty/nob.h"
 
 #define OPTIMISATION 0
 
@@ -24,6 +24,8 @@ nob_cmd_append(&cmd,
     "./tree-sitter-grammar/tree-sitter-json/src/parser.c",
     "./tree-sitter-grammar/tree-sitter-python/src/parser.c",
     "./tree-sitter-grammar/tree-sitter-python/src/scanner.c",
+    "./tree-sitter-grammar/tree-sitter-c-sharp/src/parser.c",
+    "./tree-sitter-grammar/tree-sitter-c-sharp/src/scanner.c",
 #if(OPTIMISATION == 1)
     "-O3", "-march=native",
 #endif

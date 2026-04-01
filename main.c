@@ -1,5 +1,5 @@
 #define STB_DS_IMPLEMENTATION
-#include "stb_ds.h"
+#include "../thirdparty/stb_ds.h"
 
 #include "layers.h"
 
@@ -62,7 +62,7 @@ int main(int argc, char** argv) {
 
     while(RUNNING) {
         ch = getch();
-        /*
+        /* 
         if(ch != -1){
             printf("%d\n", ch);
         }
@@ -153,6 +153,7 @@ int main(int argc, char** argv) {
     free_ccode(&ccode);
 
     destroy_commands();
+    destroy_syntax_highlihting();
 
     // Clean up
     endwin();   // End curses mode

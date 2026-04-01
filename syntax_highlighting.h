@@ -74,8 +74,7 @@ static void push_span(HSpan** spans, TSNode node, int pair) {
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-// read the actual source text of a node (single-line nodes only)
-static bool node_text_eq(TSNode node, const char* text,
+/* static bool node_text_eq(TSNode node, const char* text,
                          char** buf, int buf_size) {
     TSPoint s = ts_node_start_point(node);
     TSPoint e = ts_node_end_point(node);
@@ -86,7 +85,7 @@ static bool node_text_eq(TSNode node, const char* text,
     int len = (int)(e.column - s.column);
     return (int)strlen(text) == len &&
            strncmp(line + s.column, text, len) == 0;
-}
+}*/
 
 // ── C highlighter ────────────────────────────────────────────────────────────
 
@@ -213,7 +212,7 @@ static bool c_is_span_container(const char* type) {
            strcmp(type, "preproc_def")     == 0;
 }
 
-static void collect_highlights_c(TSNode node, HSpan** spans,char** buf, int buf_size) {
+static void collect_highlights_c(TSNode node, HSpan** spans, char** buf, int buf_size) {
     const char* type = ts_node_type(node);
 
     // function call — color only the name, descend into arguments normally
@@ -330,6 +329,374 @@ static void collect_highlights_json(TSNode node, HSpan** spans) {
     for (uint32_t i = 0; i < cc; i++)
         collect_highlights_json(ts_node_child(node, i), spans);
 }
+// ── Python highlighter ────────────────────────────────────────────────────────
+
+static int py_node_to_pair(const char* type) {
+    if (!type) return COLOR_PAIR_DEFAULT;
+
+    if (strcmp(type, "string")          == 0 ||
+        strcmp(type, "string_content")  == 0 ||
+        strcmp(type, "string_start")    == 0 ||
+        strcmp(type, "string_end")      == 0 ||
+        strcmp(type, "escape_sequence") == 0 ||
+        strcmp(type, "interpolation")   == 0)
+        return COLOR_PAIR_STRING;
+
+    if (strcmp(type, "integer")         == 0 ||
+        strcmp(type, "float")           == 0 ||
+        strcmp(type, "complex")         == 0)
+        return COLOR_PAIR_NUMBER;
+
+    if (strcmp(type, "comment") == 0)
+        return COLOR_PAIR_COMMENT;
+
+    if (strcmp(type, "def")       == 0 ||
+        strcmp(type, "class")     == 0 ||
+        strcmp(type, "return")    == 0 ||
+        strcmp(type, "if")        == 0 ||
+        strcmp(type, "elif")      == 0 ||
+        strcmp(type, "else")      == 0 ||
+        strcmp(type, "for")       == 0 ||
+        strcmp(type, "while")     == 0 ||
+        strcmp(type, "in")        == 0 ||
+        strcmp(type, "not")       == 0 ||
+        strcmp(type, "and")       == 0 ||
+        strcmp(type, "or")        == 0 ||
+        strcmp(type, "is")        == 0 ||
+        strcmp(type, "import")    == 0 ||
+        strcmp(type, "from")      == 0 ||
+        strcmp(type, "as")        == 0 ||
+        strcmp(type, "with")      == 0 ||
+        strcmp(type, "lambda")    == 0 ||
+        strcmp(type, "yield")     == 0 ||
+        strcmp(type, "pass")      == 0 ||
+        strcmp(type, "break")     == 0 ||
+        strcmp(type, "continue")  == 0 ||
+        strcmp(type, "raise")     == 0 ||
+        strcmp(type, "try")       == 0 ||
+        strcmp(type, "except")    == 0 ||
+        strcmp(type, "finally")   == 0 ||
+        strcmp(type, "global")    == 0 ||
+        strcmp(type, "nonlocal")  == 0 ||
+        strcmp(type, "del")       == 0 ||
+        strcmp(type, "assert")    == 0 ||
+        strcmp(type, "async")     == 0 ||
+        strcmp(type, "await")     == 0)
+        return COLOR_PAIR_KEYWORD;
+
+    return COLOR_PAIR_DEFAULT;
+}
+
+static bool py_is_span_container(const char* type) {
+    return strcmp(type, "string")        == 0 ||
+           strcmp(type, "comment")       == 0 ||
+           strcmp(type, "concatenated_string") == 0;
+}
+
+static void collect_highlights_python(TSNode node, HSpan** spans, char** buf, int buf_size) {
+    const char* type = ts_node_type(node);
+
+    // function/method call — color only the name, descend normally
+    if (strcmp(type, "call") == 0) {
+        TSNode func = ts_node_child(node, 0);
+        if (!ts_node_is_null(func)) {
+            const char* ft = ts_node_type(func);
+            TSNode ident = func;
+            // obj.method(...) — highlight only the attribute (method name)
+            if (strcmp(ft, "attribute") == 0) {
+                uint32_t fc = ts_node_child_count(func);
+                if (fc > 0) ident = ts_node_child(func, fc - 1);
+            }
+            if (!ts_node_is_null(ident))
+                push_span(spans, ident, COLOR_PAIR_FUNCTION);
+        }
+        uint32_t cc = ts_node_child_count(node);
+        for (uint32_t i = 0; i < cc; i++)
+            collect_highlights_python(ts_node_child(node, i), spans, buf, buf_size);
+        return;
+    }
+
+    // function/class definition — color only the declared name
+    if (strcmp(type, "function_definition") == 0 ||
+        strcmp(type, "class_definition")    == 0) {
+        // child 0 = "def"/"class" keyword, child 1 = name identifier
+        if (ts_node_child_count(node) > 1) {
+            TSNode name = ts_node_child(node, 1);
+            if (!ts_node_is_null(name))
+                push_span(spans, name, COLOR_PAIR_FUNCTION);
+        }
+        uint32_t cc = ts_node_child_count(node);
+        for (uint32_t i = 0; i < cc; i++)
+            collect_highlights_python(ts_node_child(node, i), spans, buf, buf_size);
+        return;
+    }
+
+    // boolean / None constants
+    if (strcmp(type, "true")      == 0 ||
+        strcmp(type, "false")     == 0 ||
+        strcmp(type, "True")      == 0 ||
+        strcmp(type, "False")     == 0)  {
+        push_span(spans, node, COLOR_PAIR_KEYWORD);
+        return;
+    }
+    if (strcmp(type, "none")      == 0 ||
+        strcmp(type, "None")      == 0)  {
+        push_span(spans, node, COLOR_PAIR_NUMBER);
+        return;
+    }
+
+    // decorator — color the '@' plus the name as a unit
+    if (strcmp(type, "decorator") == 0) {
+        push_span(spans, node, COLOR_PAIR_FUNCTION);
+        return;
+    }
+
+    int pair          = py_node_to_pair(type);
+    bool is_leaf      = ts_node_child_count(node) == 0;
+    bool is_container = py_is_span_container(type);
+
+    if (pair != COLOR_PAIR_DEFAULT && (is_leaf || is_container)) {
+        push_span(spans, node, pair);
+        if (is_container) return;
+    }
+
+    uint32_t cc = ts_node_child_count(node);
+    for (uint32_t i = 0; i < cc; i++)
+        collect_highlights_python(ts_node_child(node, i), spans, buf, buf_size);
+}
+
+// ── C# highlighter ───────────────────────────────────────────────────────────
+
+static int cs_node_to_pair(const char* type) {
+    if (!type) return COLOR_PAIR_DEFAULT;
+
+    // Strings
+    if (strcmp(type, "string_literal")          == 0 ||
+        strcmp(type, "verbatim_string_literal")  == 0 ||
+        strcmp(type, "interpolated_string_text") == 0 ||
+        strcmp(type, "string_literal_fragment")  == 0 ||
+        strcmp(type, "character_literal")        == 0 ||
+        strcmp(type, "escape_sequence")          == 0 ||
+        strcmp(type, "raw_string_literal")       == 0)
+        return COLOR_PAIR_STRING;
+
+    // Numbers
+    if (strcmp(type, "integer_literal")          == 0 ||
+        strcmp(type, "real_literal")             == 0 ||
+        strcmp(type, "hex_integer_literal")      == 0 ||
+        strcmp(type, "binary_integer_literal")   == 0)
+        return COLOR_PAIR_NUMBER;
+
+    // Comments
+    if (strcmp(type, "comment")                  == 0 ||
+        strcmp(type, "single_line_comment")      == 0 ||
+        strcmp(type, "multiline_comment")        == 0)
+        return COLOR_PAIR_COMMENT;
+
+    // Operators and punctuation
+    if (strcmp(type, "{")  == 0 || strcmp(type, "}")  == 0 ||
+        strcmp(type, "(")  == 0 || strcmp(type, ")")  == 0 ||
+        strcmp(type, "[")  == 0 || strcmp(type, "]")  == 0 ||
+        strcmp(type, ";")  == 0 || strcmp(type, ",")  == 0 ||
+        strcmp(type, ".")  == 0 || strcmp(type, "=>") == 0 ||
+        strcmp(type, "=")  == 0 || strcmp(type, "+=") == 0 ||
+        strcmp(type, "-=") == 0 || strcmp(type, "*=") == 0 ||
+        strcmp(type, "/=") == 0 || strcmp(type, "??") == 0 ||
+        strcmp(type, "?.") == 0 || strcmp(type, "::") == 0)
+        return COLOR_PAIR_OPERATOR;
+
+    // Keywords
+    if (strcmp(type, "abstract")   == 0 ||
+        strcmp(type, "as")         == 0 ||
+        strcmp(type, "async")      == 0 ||
+        strcmp(type, "await")      == 0 ||
+        strcmp(type, "base")       == 0 ||
+        strcmp(type, "break")      == 0 ||
+        strcmp(type, "case")       == 0 ||
+        strcmp(type, "catch")      == 0 ||
+        strcmp(type, "checked")    == 0 ||
+        strcmp(type, "class")      == 0 ||
+        strcmp(type, "const")      == 0 ||
+        strcmp(type, "continue")   == 0 ||
+        strcmp(type, "default")    == 0 ||
+        strcmp(type, "delegate")   == 0 ||
+        strcmp(type, "do")         == 0 ||
+        strcmp(type, "else")       == 0 ||
+        strcmp(type, "enum")       == 0 ||
+        strcmp(type, "event")      == 0 ||
+        strcmp(type, "explicit")   == 0 ||
+        strcmp(type, "extern")     == 0 ||
+        strcmp(type, "finally")    == 0 ||
+        strcmp(type, "fixed")      == 0 ||
+        strcmp(type, "for")        == 0 ||
+        strcmp(type, "foreach")    == 0 ||
+        strcmp(type, "goto")       == 0 ||
+        strcmp(type, "if")         == 0 ||
+        strcmp(type, "implicit")   == 0 ||
+        strcmp(type, "in")         == 0 ||
+        strcmp(type, "interface")  == 0 ||
+        strcmp(type, "internal")   == 0 ||
+        strcmp(type, "is")         == 0 ||
+        strcmp(type, "lock")       == 0 ||
+        strcmp(type, "namespace")  == 0 ||
+        strcmp(type, "new")        == 0 ||
+        strcmp(type, "operator")   == 0 ||
+        strcmp(type, "out")        == 0 ||
+        strcmp(type, "override")   == 0 ||
+        strcmp(type, "params")     == 0 ||
+        strcmp(type, "private")    == 0 ||
+        strcmp(type, "protected")  == 0 ||
+        strcmp(type, "public")     == 0 ||
+        strcmp(type, "readonly")   == 0 ||
+        strcmp(type, "record")     == 0 ||
+        strcmp(type, "ref")        == 0 ||
+        strcmp(type, "return")     == 0 ||
+        strcmp(type, "sealed")     == 0 ||
+        strcmp(type, "sizeof")     == 0 ||
+        strcmp(type, "stackalloc") == 0 ||
+        strcmp(type, "static")     == 0 ||
+        strcmp(type, "struct")     == 0 ||
+        strcmp(type, "switch")     == 0 ||
+        strcmp(type, "this")       == 0 ||
+        strcmp(type, "throw")      == 0 ||
+        strcmp(type, "try")        == 0 ||
+        strcmp(type, "typeof")     == 0 ||
+        strcmp(type, "unchecked")  == 0 ||
+        strcmp(type, "unsafe")     == 0 ||
+        strcmp(type, "using")      == 0 ||
+        strcmp(type, "virtual")    == 0 ||
+        strcmp(type, "void")       == 0 ||
+        strcmp(type, "volatile")   == 0 ||
+        strcmp(type, "where")      == 0 ||
+        strcmp(type, "while")      == 0 ||
+        strcmp(type, "with")       == 0 ||
+        strcmp(type, "yield")      == 0 || 
+        strcmp(type, "var")        == 0
+        )
+        return COLOR_PAIR_KEYWORD;
+
+    return COLOR_PAIR_DEFAULT;
+}
+
+static bool cs_is_span_container(const char* type) {
+    return strcmp(type, "string_literal")              == 0 ||
+           strcmp(type, "verbatim_string_literal")     == 0 ||
+           strcmp(type, "raw_string_literal")          == 0 ||
+           strcmp(type, "interpolated_string_expression") == 0 ||
+           strcmp(type, "comment")                     == 0 ||
+           strcmp(type, "multiline_comment")           == 0;
+}
+
+static void collect_highlights_csharp(TSNode node, HSpan** spans) {
+    const char* type = ts_node_type(node);
+
+    // Method / constructor / local-function invocation — highlight name only
+    if (strcmp(type, "invocation_expression") == 0) {
+        TSNode func = ts_node_child(node, 0);
+        if (!ts_node_is_null(func)) {
+            const char* ft = ts_node_type(func);
+            TSNode ident = func;
+            // obj.Method(...) — highlight only the right-hand name
+            if (strcmp(ft, "member_access_expression") == 0) {
+                uint32_t fc = ts_node_child_count(func);
+                if (fc > 0) ident = ts_node_child(func, fc - 1);
+            }
+            if (!ts_node_is_null(ident))
+                push_span(spans, ident, COLOR_PAIR_FUNCTION);
+        }
+        uint32_t cc = ts_node_child_count(node);
+        for (uint32_t i = 0; i < cc; i++)
+            collect_highlights_csharp(ts_node_child(node, i), spans);
+        return;
+    }
+
+    // Method / constructor / local-function definition — highlight declared name
+    if (strcmp(type, "method_declaration")            == 0 ||
+        strcmp(type, "constructor_declaration")       == 0 ||
+        strcmp(type, "local_function_statement")      == 0 ||
+        strcmp(type, "operator_declaration")          == 0 ||
+        strcmp(type, "conversion_operator_declaration") == 0) {
+        uint32_t cc = ts_node_child_count(node);
+        for (uint32_t i = 0; i < cc; i++) {
+            TSNode child = ts_node_child(node, i);
+            const char* ct = ts_node_type(child);
+            if (strcmp(ct, "identifier") == 0) {
+                push_span(spans, child, COLOR_PAIR_FUNCTION);
+                break;
+            }
+        }
+        for (uint32_t i = 0; i < cc; i++)
+            collect_highlights_csharp(ts_node_child(node, i), spans);
+        return;
+    }
+
+    // Class / struct / interface / enum / record declaration — highlight name
+    if (strcmp(type, "class_declaration")     == 0 ||
+        strcmp(type, "struct_declaration")    == 0 ||
+        strcmp(type, "interface_declaration") == 0 ||
+        strcmp(type, "enum_declaration")      == 0 ||
+        strcmp(type, "record_declaration")    == 0 ||
+        strcmp(type, "record_struct_declaration") == 0) {
+        uint32_t cc = ts_node_child_count(node);
+        for (uint32_t i = 0; i < cc; i++) {
+            TSNode child = ts_node_child(node, i);
+            if (strcmp(ts_node_type(child), "identifier") == 0) {
+                push_span(spans, child, COLOR_PAIR_FUNCTION);
+                break;
+            }
+        }
+        for (uint32_t i = 0; i < cc; i++)
+            collect_highlights_csharp(ts_node_child(node, i), spans);
+        return;
+    }
+
+    // Attributes (e.g. [Serializable], [HttpGet]) — highlight as function/orange
+    if (strcmp(type, "attribute") == 0) {
+        push_span(spans, node, COLOR_PAIR_FUNCTION);
+        return;
+    }
+
+    // Boolean / null literals
+    if (strcmp(type, "true")  == 0 ||
+        strcmp(type, "false") == 0) {
+        push_span(spans, node, COLOR_PAIR_KEYWORD);
+        return;
+    }
+    if (strcmp(type, "null")    == 0 ||
+        strcmp(type, "default") == 0) {
+        push_span(spans, node, COLOR_PAIR_NUMBER);
+        return;
+    }
+
+    // Preprocessor directives — treat as comments for visual grouping
+    if (strcmp(type, "preprocessor_directive") == 0 ||
+        strcmp(type, "if_directive")           == 0 ||
+        strcmp(type, "elif_directive")         == 0 ||
+        strcmp(type, "else_directive")         == 0 ||
+        strcmp(type, "endif_directive")        == 0 ||
+        strcmp(type, "define_directive")       == 0 ||
+        strcmp(type, "undef_directive")        == 0 ||
+        strcmp(type, "region_directive")       == 0 ||
+        strcmp(type, "endregion_directive")    == 0 ||
+        strcmp(type, "pragma_directive")       == 0 ||
+        strcmp(type, "nullable_directive")     == 0) {
+        push_span(spans, node, COLOR_PAIR_COMMENT);
+        return;
+    }
+
+    int pair          = cs_node_to_pair(type);
+    bool is_leaf      = ts_node_child_count(node) == 0;
+    bool is_container = cs_is_span_container(type);
+
+    if (pair != COLOR_PAIR_DEFAULT && (is_leaf || is_container)) {
+        push_span(spans, node, pair);
+        if (is_container) return;
+    }
+
+    uint32_t cc = ts_node_child_count(node);
+    for (uint32_t i = 0; i < cc; i++)
+        collect_highlights_csharp(ts_node_child(node, i), spans);
+}
 
 // ── main render ──────────────────────────────────────────────────────────────
 
@@ -339,8 +706,12 @@ void init_syntax_highlighting(){
     init_syntax_colors();
 }
 
+void destroy_syntax_highlihting(){
+    shfree(c_type_map);
+}
+
 void apply_tree_sitter_syntax_highlighting(LayerCodeData* lcd, SyntaxLanguage lang) {
-    if (!lcd) return;  // only guard against null lcd itself
+    if (!lcd) return;
 
     int screen_rows, screen_cols;
     getmaxyx(stdscr, screen_rows, screen_cols);
@@ -364,7 +735,10 @@ void apply_tree_sitter_syntax_highlighting(LayerCodeData* lcd, SyntaxLanguage la
                 collect_highlights_json(root, &spans);
                 break;
             case LANG_PYTHON:
-                // TODO: Make more
+                collect_highlights_python(root, &spans, lcd->code_buffer, buffer_size);
+                break;
+            case LANG_C_SHARP:
+                collect_highlights_csharp(root, &spans);
             default:
                 break;
         }

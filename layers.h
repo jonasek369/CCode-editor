@@ -6,7 +6,7 @@
 #include "tokenizer.h"
 
 #define NOB_IMPLEMENTATION
-#include "nob.h"
+#include "../thirdparty/nob.h"
 
 
 #define default_filename_length 8
@@ -251,6 +251,7 @@ char *flatten_buffer(LayerCodeData *code){
 extern const TSLanguage *tree_sitter_c();
 extern const TSLanguage *tree_sitter_json();
 extern const TSLanguage *tree_sitter_python();
+extern const TSLanguage *tree_sitter_c_sharp();
 
 const TSLanguage* get_filetype_language_parser(char* filename, SyntaxLanguage* lang){
     size_t size = strlen(filename);
@@ -272,6 +273,10 @@ const TSLanguage* get_filetype_language_parser(char* filename, SyntaxLanguage* l
         *lang = LANG_PYTHON;
         free(suffix);
         return tree_sitter_python();
+    }else if(strlen(suffix) == 2 && strncmp(suffix, "cs", 2) == 0){
+        *lang = LANG_C_SHARP;
+        free(suffix);
+        return tree_sitter_c_sharp(); 
     }
     *lang = LANG_UNKNOWN;
     free(suffix);
@@ -310,12 +315,31 @@ void make_parser(CCode* ccode, char* filename){
     free(flatten);
 }
 
+bool can_read_file(const char* filepath) {
+#if _WIN32
+    return _access(filepath, R_OK) == 0;
+#else
+    return access(filepath, R_OK) == 0;
+#endif
+}
 
 void read_file_to_code_layer(CCode* ccode, const char* filename_start, size_t size){
     Nob_String_Builder sb = {0};
     Nob_String_Builder filename = {0};
     nob_da_append_many(&filename, filename_start, size);
     nob_da_append(&filename, '\0');
+
+    if(!can_read_file(filename.items)){
+        Layer* new_layer = new_layer_console();
+        push_layer_to_top(ccode, new_layer);
+        
+        char message[1024];
+        snprintf(message, 1024, "cannot read '%s'", filename.items);
+
+        message_to_console(ccode, message);
+        nob_sb_free(sb);
+        return;
+    }
 
     if(!nob_read_entire_file(filename.items, &sb)){
         fprintf(stderr, "Error reading file\n");
@@ -970,6 +994,10 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
             arrput(console_data->console_buffer, '\0');
             console_data->console_buffer_x = 3;
         }
+    }
+
+    if(chr == CUSTOM_CTL_S){
+        write_code_layer_to_file(ccode);
     }
 
     if(chr == 9){
@@ -1770,8 +1798,8 @@ void draw_ui(CCode* ccode) {
         LayerConsoleData* lcd = (LayerConsoleData*) layer_at_top->layer_data;
         move(y-1, lcd->console_buffer_x);
     }else if(layer_at_top->type == LAYER_DIR_WALK){
-        //LayerDirWalkData* ldwd = (LayerDirWalkData*) layer_at_top->layer_data;
-        //move(ldwd->selected+ldwd->offset+2, 0);
+        // LayerDirWalkData* ldwd = (LayerDirWalkData*) layer_at_top->layer_data;
+        // move(ldwd->selected+ldwd->offset+3, 0);
     }
     else {
         assert(false && "unknown layer");

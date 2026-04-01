@@ -7,6 +7,7 @@
 #define CUSTOM_KEY_ENTER 13
 #define CUSTOM_KEY_ESCAPE 27
 #define CUSTOM_CTL_F 6
+#define CUSTOM_CTL_S 19
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -25,6 +26,7 @@
 #include "curspriv.h"
 
 #include "utils.h"
+// #include "lspc.h"
 
 #ifdef __linux__
     #ifndef MAX_PATH
@@ -61,6 +63,7 @@ typedef enum {
     LANG_C,
     LANG_JSON,
     LANG_PYTHON,
+    LANG_C_SHARP
 } SyntaxLanguage;
 
 static const bool is_whitespace[256] = {
