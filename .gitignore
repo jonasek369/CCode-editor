@@ -1,9 +1,11 @@
 /PDCurses
 /tree-sitter
 /tree-sitter-grammar
+/build
 *.old
 *.exe
 nob
 main
+build_grammer
 stb_ds.h
 nob.h

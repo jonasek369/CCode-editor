@@ -1,12 +1,15 @@
 #ifndef _H_LAYERS
 #define _H_LAYERS
 
+
+#define NOB_IMPLEMENTATION
+#define NOB_NO_
+#include "../thirdparty/nob.h"
+
 #include "defines.h"
 
 #include "tokenizer.h"
 
-#define NOB_IMPLEMENTATION
-#include "../thirdparty/nob.h"
 
 
 #define default_filename_length 8
@@ -315,13 +318,25 @@ void make_parser(CCode* ccode, char* filename){
     free(flatten);
 }
 
-bool can_read_file(const char* filepath) {
-#if _WIN32
-    return _access(filepath, R_OK) == 0;
-#else
-    return access(filepath, R_OK) == 0;
-#endif
+
+
+void message_to_console(CCode* ccode, const char* message){
+    if(CLOSE_CONSOLE){
+        CLOSE_CONSOLE = false;
+    }
+    Layer* console = top_type_layer(ccode, LAYER_CONSOLE);
+    LayerConsoleData* layer_console_data = (LayerConsoleData*) console->layer_data;
+    size_t zero = 0;
+    arrsetlen(layer_console_data->console_buffer, zero);
+
+    for(size_t i = 0; i < strlen(message); i++){
+        arrput(layer_console_data->console_buffer, message[i]);
+    }
+
+    arrput(layer_console_data->console_buffer, '\0');
+    layer_console_data->console_buffer_x = arrlen(layer_console_data->console_buffer)-1;
 }
+
 
 void read_file_to_code_layer(CCode* ccode, const char* filename_start, size_t size){
     Nob_String_Builder sb = {0};
@@ -383,6 +398,7 @@ void read_file_to_code_layer(CCode* ccode, const char* filename_start, size_t si
     nob_sb_free(sb);
     nob_sb_free(filename);
 }
+
 
 
 void change_filename(CCode* ccode, const char* new_filename, size_t size){
@@ -506,22 +522,6 @@ void free_layer(Layer* layer){
     free(layer);
 }
 
-
-void message_to_console(CCode* ccode, const char* message){
-    if(CLOSE_CONSOLE){
-        CLOSE_CONSOLE = false;
-    }
-    Layer* console = top_type_layer(ccode, LAYER_CONSOLE);
-    LayerConsoleData* layer_console_data = (LayerConsoleData*) console->layer_data;
-    arrsetlen(layer_console_data->console_buffer, 0);
-
-    for(size_t i = 0; i < strlen(message); i++){
-        arrput(layer_console_data->console_buffer, message[i]);
-    }
-
-    arrput(layer_console_data->console_buffer, '\0');
-    layer_console_data->console_buffer_x = arrlen(layer_console_data->console_buffer)-1;
-}
 
 
 void close_code_layer(CCode* ccode, bool forced){
@@ -987,7 +987,8 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
             Layer* new_console = new_layer_console();
             push_layer_to_top(ccode, new_console);
             LayerConsoleData* console_data = new_console->layer_data;
-            arrsetlen(console_data->console_buffer, 0);
+            size_t zero = 0;
+            arrsetlen(console_data->console_buffer, zero);
             arrput(console_data->console_buffer, ':');
             arrput(console_data->console_buffer, 'f');
             arrput(console_data->console_buffer, ' ');
@@ -1391,12 +1392,17 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
             ts_tree_edit(code_data->tree, &edit);
         }
 
-        arrsetlen(code_data->code_buffer[code_data->cursor->y], new_x);
+        for(size_t i = 0; i < (x-new_x); i++){
+            arrdel(line, new_x);
+        }
 
-        if(new_x == 0 || code_data->code_buffer[code_data->cursor->y][new_x - 1] != '\n'){
+        size_t new_len = arrlenu(code_data->code_buffer[code_data->cursor->y]);
+        if(code_data->code_buffer[code_data->cursor->y][new_len - 2] != '\n'){
             arrput(code_data->code_buffer[code_data->cursor->y], '\n');
         }
-        arrput(code_data->code_buffer[code_data->cursor->y], '\0');
+        if(code_data->code_buffer[code_data->cursor->y][new_len - 1] != '\0'){
+            arrput(code_data->code_buffer[code_data->cursor->y], '\0');
+        }
 
         code_data->cursor->x = new_x;
 

@@ -26,6 +26,14 @@ char* str_to_arr(const char* str){
     return arr;
 }
 
+bool can_read_file(const char* filepath) {
+#if _WIN32
+    return _access(filepath, R_OK) == 0;
+#else
+    return access(filepath, R_OK) == 0;
+#endif
+}
+
 char* resolve_path(const char *path, char *out){
     #ifdef _WIN32
         _fullpath(out, path, MAX_PATH);

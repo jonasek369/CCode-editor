@@ -59,10 +59,9 @@ int main(int argc, char** argv) {
     init_syntax_highlighting();
 
     init_commands();
-
     while(RUNNING) {
         ch = getch();
-        /* 
+        /*
         if(ch != -1){
             printf("%d\n", ch);
         }
