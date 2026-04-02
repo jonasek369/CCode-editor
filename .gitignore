@@ -6,6 +6,6 @@
 *.exe
 nob
 main
-build_grammer
+build_grammar
 stb_ds.h
 nob.h
