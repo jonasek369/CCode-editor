@@ -25,8 +25,23 @@
 #include "curses.h"
 #include "curspriv.h"
 
+
+#define STB_DS_IMPLEMENTATION
+#include "../thirdparty/stb_ds.h"
+#define CJSON_NO_STB_DS
+#include "../C-JSON/parser.h"
+#include "../tiny_queue/tiny_queue.h"
+
+#define LSP_NO_STB_DS
+#define LSP_NO_CJSON
+#define LSP_NO_TINY_QUEUE
+#include "../C-LSP-Client/LSP.h"
+    
+#define NOB_IMPLEMENTATION
+#include "../thirdparty/nob.h"
+
 #include "utils.h"
-// #include "lspc.h"
+
 
 #ifdef __linux__
     #ifndef MAX_PATH
@@ -37,6 +52,10 @@
             #define MAX_PATH 4096
         #endif
     #endif
+#endif
+
+#ifndef MAX_PATH
+    #define MAX_PATH 4096
 #endif
 
 typedef enum {LAYER_CODE=0, LAYER_CONSOLE, LAYER_DIR_WALK} LayerType;
@@ -118,6 +137,9 @@ typedef struct {
     SyntaxLanguage lang;
     TSParser *parser;
     TSTree *tree;
+
+    // LSP
+    LSPContext* lsp_ctx;
 } LayerCodeData;
 
 

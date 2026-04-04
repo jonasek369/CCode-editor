@@ -27,18 +27,18 @@ char* str_to_arr(const char* str){
 }
 
 bool can_read_file(const char* filepath) {
-#if _WIN32
+    #if _WIN32
     return _access(filepath, R_OK) == 0;
-#else
+    #else
     return access(filepath, R_OK) == 0;
-#endif
+    #endif
 }
 
 char* resolve_path(const char *path, char *out){
     #ifdef _WIN32
-        _fullpath(out, path, MAX_PATH);
+    _fullpath(out, path, MAX_PATH);
     #else
-        realpath(path, out);
+    realpath(path, out);
     #endif
     return out;
 }

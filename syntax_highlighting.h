@@ -18,6 +18,7 @@
 
 #define COLOR_FILE 10
 #define COLOR_DIR  11
+#define COLOR_SYMLINK  12
 
 void init_syntax_colors() {
     start_color();
@@ -46,6 +47,7 @@ void init_syntax_colors() {
 
     init_pair(COLOR_DIR,  COLOR_YELLOW, COLOR_BLACK);
     init_pair(COLOR_FILE, COLOR_CYAN,   COLOR_BLACK);
+    init_pair(COLOR_SYMLINK, COLOR_RED,   COLOR_BLACK);
 }
 
 // ── attrs ────────────────────────────────────────────────────────────────────

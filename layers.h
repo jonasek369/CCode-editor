@@ -1,11 +1,6 @@
 #ifndef _H_LAYERS
 #define _H_LAYERS
 
-
-#define NOB_IMPLEMENTATION
-#define NOB_NO_
-#include "../thirdparty/nob.h"
-
 #include "defines.h"
 
 #include "tokenizer.h"
@@ -394,7 +389,23 @@ void read_file_to_code_layer(CCode* ccode, const char* filename_start, size_t si
     lcd->saved = true;
     push_layer_to_top(ccode, file_layer);
     make_parser(ccode, filename.items);
+    // TODO: Allow more languages
+    if(lcd->lang == LANG_C){
+        lcd->lsp_ctx = start_lsp();
+        char path[MAX_PATH] = {0};
+        resolve_path(lcd->filename, path);
 
+        char* uri = get_file_uri(path);
+        arrput(uri, '\0');
+        char* flatten = flatten_buffer(lcd);
+        char* escaped = json_escape(flatten);
+        JsonValue* params = make_didOpen_params(uri, "c", 1, escaped);
+        JsonValue* message = make_didOpen_notification(params);
+        tiny_queue_push(lcd->lsp_ctx->sender_queue, message);
+        arrfree(uri);
+        free(flatten);
+        free(escaped);
+    }
     nob_sb_free(sb);
     nob_sb_free(filename);
 }
@@ -493,6 +504,9 @@ void free_layer(Layer* layer){
             }
             if(lcd->tree){
                 ts_tree_delete(lcd->tree);
+            }
+            if(lcd->lsp_ctx){
+                destroy_lsp(lcd->lsp_ctx);
             }
             free(lcd);
         }
@@ -1525,6 +1539,12 @@ void layer_console_render(CCode* ccode, Layer* layer){
     // refresh();
 }
 
+Nob_File_Type dir_walk_get_file_type(char* current_dir, char* filename){
+    Nob_File_Type file_type = nob_get_file_type(nob_temp_sprintf("%s/%s", current_dir, filename));
+    nob_temp_reset();
+    return file_type;
+}
+
 
 int load_dir(LayerDirWalkData* ldwd){
     if(ldwd->current_dir_path == NULL){
@@ -1537,6 +1557,7 @@ int load_dir(LayerDirWalkData* ldwd){
     if(!status){
         return -1;
     }
+    char** add_to_top = NULL;
     for(size_t i = 0; i < paths.count; i++){
         // Noticed that on some implementation .. and . arent on top of the directory
         // so were skipping them and adding .. later to top
@@ -1544,7 +1565,16 @@ int load_dir(LayerDirWalkData* ldwd){
             continue;
         }
         char* arr = str_to_arr(paths.items[i]); // convert from c string to arr of chars ending with null
-        arrput(ldwd->current_dir_files, arr);
+        if(nob_get_file_type(nob_temp_sprintf("%s/%s", ldwd->current_dir_path, arr)) == NOB_FILE_DIRECTORY){
+            arrput(add_to_top, arr);
+        }else{
+            arrput(ldwd->current_dir_files, arr);
+        }
+    }
+    if(add_to_top){
+        for(size_t i = 0; i < arrlenu(add_to_top); i++){
+            arrins(ldwd->current_dir_files, 0, add_to_top[i]);
+        }
     }
     char* go_back_dir = NULL;
     arrput(go_back_dir, '.');
@@ -1552,7 +1582,7 @@ int load_dir(LayerDirWalkData* ldwd){
     arrput(go_back_dir, '\0');
 
     arrins(ldwd->current_dir_files, 0, go_back_dir);
-
+    arrfree(add_to_top);
     free(paths.items);
     return 0;
 }
@@ -1605,13 +1635,12 @@ bool layer_dir_walk_update(CCode* ccode, Layer* layer, int chr){
         char* dir = nob_temp_sprintf("%s/%s",
             ldwd->current_dir_path,
             ldwd->current_dir_files[ldwd->selected]);
-    
         char resolved_path[MAX_PATH] = {0};
-    
+
         if(resolve_path(dir, resolved_path) == NULL){
             return false;
         }
-    
+        
         switch(nob_get_file_type(resolved_path)){
             case NOB_FILE_DIRECTORY: {
                 char* arr = str_to_arr(resolved_path);
@@ -1638,12 +1667,6 @@ bool layer_dir_walk_update(CCode* ccode, Layer* layer, int chr){
 }
 
 
-Nob_File_Type dir_walk_get_file_type(char* current_dir, char* filename){
-    Nob_File_Type file_type = nob_get_file_type(nob_temp_sprintf("%s/%s", current_dir, filename));
-    nob_temp_reset();
-    return file_type;
-}
-
 void layer_dir_walk_render(CCode* ccode, Layer* layer){
     if(!ccode || !layer || layer->type != LAYER_DIR_WALK || layer->layer_data == NULL){
         return;
@@ -1651,7 +1674,6 @@ void layer_dir_walk_render(CCode* ccode, Layer* layer){
 
     LayerDirWalkData* ldwd = (LayerDirWalkData*) layer->layer_data;
 
-    //TODO: render tree
     mvprintw(1, 0, "Current dir: %s", ldwd->current_dir_path);
     int y, x;
     getmaxyx(stdscr, y, x);
@@ -1663,9 +1685,12 @@ void layer_dir_walk_render(CCode* ccode, Layer* layer){
         Nob_File_Type ft = dir_walk_get_file_type(ldwd->current_dir_path, ldwd->current_dir_files[i]);
         if(ft == NOB_FILE_DIRECTORY){
             attron(COLOR_PAIR(COLOR_DIR));
+        }else if (ft == NOB_FILE_SYMLINK){
+            attron(COLOR_PAIR(COLOR_SYMLINK));
         }else{
             attron(COLOR_PAIR(COLOR_FILE));
         }
+
         if(i == ldwd->selected){
             attron(A_REVERSE);
             if(ft == NOB_FILE_DIRECTORY){
@@ -1683,6 +1708,8 @@ void layer_dir_walk_render(CCode* ccode, Layer* layer){
         }
         if(ft == NOB_FILE_DIRECTORY){
             attroff(COLOR_PAIR(COLOR_DIR));
+        }else if (ft == NOB_FILE_SYMLINK){
+            attroff(COLOR_PAIR(COLOR_SYMLINK));
         }else{
             attroff(COLOR_PAIR(COLOR_FILE));
         }

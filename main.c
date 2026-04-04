@@ -1,7 +1,6 @@
-#define STB_DS_IMPLEMENTATION
-#include "../thirdparty/stb_ds.h"
-
 #include "layers.h"
+
+
 
 /*
 
@@ -31,9 +30,15 @@ void handle_args(CCode* ccode, int argc, char** argv){
     if(argc <= 1){
         return;
     }
-    read_file_to_code_layer(ccode, argv[1], strlen(argv[1]));
+    if(strncmp(argv[1], "-t", 2) == 0){
+        char* cwd = str_to_arr(nob_get_current_dir_temp());
+        nob_temp_reset();
+        Layer* tree = new_layer_dir_walk(cwd);
+        push_layer_to_top(ccode, tree);
+    }else{
+        read_file_to_code_layer(ccode, argv[1], strlen(argv[1]));
+    }
 }
-
 
 
 int main(int argc, char** argv) {
@@ -156,6 +161,7 @@ int main(int argc, char** argv) {
 
     // Clean up
     endwin();   // End curses mode
+    wait(NULL);
     return 0;
 }
 

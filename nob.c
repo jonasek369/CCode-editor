@@ -22,24 +22,24 @@ int main(int argc, char **argv)
     if (!nob_cmd_run_sync_and_reset(&cmd)) return 1;
 
     // Build Ccode-editor
-nob_cmd_append(&cmd,
-    "gcc", "-D_POSIX_C_SOURCE=200809L", "-m64", "-std=c11", "-g",
-    "-I", incl,
-    "-L", lib,
-    "-I", "./tree-sitter/lib/include",
-    "-L", "./tree-sitter",
-    "-Wl,-rpath=./PDCurses/x11",
-    "-Wl,-rpath=./tree-sitter",
-    "-o", "main", "main.c",
-#if(OPTIMISATION == 1)
-    "-O3", "-march=native",
-#endif
-    "./tree-sitter/libtree-sitter.a",
-    "./build/libtslangs.a",
-    "-lXCurses",
-    "-lX11", "-lXext",
-    "-Wall", "-Wextra", "-Wno-sign-compare"
-);
+    nob_cmd_append(&cmd,
+        "gcc", "-D_POSIX_C_SOURCE=200809L", "-m64", "-std=c11", "-g",
+        "-I", incl,
+        "-L", lib,
+        "-I", "./tree-sitter/lib/include",
+        "-L", "./tree-sitter",
+        "-Wl,-rpath=./PDCurses/x11",
+        "-Wl,-rpath=./tree-sitter",
+        "-o", "main", "main.c", "../tiny_queue/tiny_queue.c",
+    #if(OPTIMISATION == 1)
+        "-O3", "-march=native",
+    #endif
+        "./tree-sitter/libtree-sitter.a",
+        "./build/libtslangs.a",
+        "-lXCurses",
+        "-lX11", "-lXext",
+        "-Wall", "-Wextra", "-Wno-sign-compare"
+    );
     #if (OPTIMISATION == 1)
         nob_cmd_append(&cmd, "-O3", "-march=native");
     #endif
