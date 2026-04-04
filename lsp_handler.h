@@ -1,0 +1,78 @@
+
+typedef void (*LSPResponseHandler)(CCode* ccode, JsonValue* message);
+
+typedef struct {
+    char* key;
+    LSPResponseHandler value;
+} LSPResponseHandlerMap;
+
+static LSPResponseHandlerMap* lsp_handler = NULL;
+
+
+// Quite disgusting but I like it
+#define TYPE_CHECK_FIELD(obj, key, expected_type) \
+    JsonValue* key = shget((obj)->object, #key); \
+    if (!(key) || (key)->type != (expected_type)) { \
+        fprintf(stderr, "Invalid or missing field: %s\n", #key); \
+        goto defer; \
+    }
+
+
+//method: textDocument/publishDiagnostics
+void handle_publishDiagnostics(CCode* ccode, JsonValue* message){
+	Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
+	if(!top_code_layer){
+		printf("CCode layers do not have any code layers!\n");
+		goto defer;
+	}
+	LayerCodeData* lcd = top_code_layer->layer_data;
+
+	// this create JsonValue* seconds_param = ...
+	TYPE_CHECK_FIELD(message, params, JSON_OBJECT)
+	TYPE_CHECK_FIELD(params, uri, JSON_STRING);
+	TYPE_CHECK_FIELD(params, version, JSON_NUMBER);
+
+	int version_int = (int)version->number;
+
+	if(strcmp(lcd->uri, uri->string) == 0 && lcd->version == version_int){
+		printf("got diags!\n");
+	}
+
+defer:
+	json_free(message);
+	return;
+}
+
+void init_lsp_handlers(){
+	shput(lsp_handler, "textDocument/publishDiagnostics", handle_publishDiagnostics);
+}
+
+void destory_lsp_handlers(){
+	shfree(lsp_handler);
+}
+
+void handle_lsp(CCode* ccode){
+	LSPContext* ctx = ccode->lsp_ctx;
+
+	while(1){
+		JsonValue* message = tiny_queue_pop_nowait(ctx->receiver_queue);
+		if(!message){
+			break;
+		}
+		JsonValue* method = shget(message->object, "method");
+		if(!method || method->type != JSON_STRING){
+			printf("Error: server returned message without method or method isnt string!\n");
+			json_print(message, 4, 0);
+			json_free(message);
+			continue;
+		}
+		LSPResponseHandler handler = shget(lsp_handler, method->string);
+		if(!handler){
+			printf("Got message that dose not have handler %s\n", method->string);
+			json_free(message);
+		}else{
+			handler(ccode, message);
+		}
+	}
+	return;
+}

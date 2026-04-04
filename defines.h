@@ -40,6 +40,7 @@
 #define NOB_IMPLEMENTATION
 #include "../thirdparty/nob.h"
 
+
 #include "utils.h"
 
 
@@ -124,8 +125,6 @@ typedef struct {
     size_t at_nth_occurence;
 } FindingSubstr;
 
-
-
 typedef struct {
     bool saved;
     char* filename;
@@ -139,7 +138,9 @@ typedef struct {
     TSTree *tree;
 
     // LSP
-    LSPContext* lsp_ctx;
+    char* uri;
+    int version;
+    int id;
 } LayerCodeData;
 
 
@@ -166,6 +167,7 @@ typedef struct {
 
 typedef struct {
     Layer** layers;
+    LSPContext* lsp_ctx;
 } CCode;
 
 
@@ -176,7 +178,6 @@ bool CLOSE_CONSOLE = false;
 int TAB_SIZE = 4;
 #define LABEL(x) x:
 
-// syntax_highlighting.h must have defined LayerCodeData
 #include "syntax_highlighting.h"
 
 

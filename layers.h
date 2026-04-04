@@ -53,9 +53,15 @@ Layer* new_layer_code(){
     lcd->saved = false;
     code->layer_data = lcd;
 
+    // Tree-sitter
     lcd->parser = NULL;
     lcd->tree = NULL;
     lcd->lang = LANG_UNKNOWN;
+
+    // LSP
+    lcd->uri = NULL;
+    lcd->version = 1;
+    lcd->id = random_id();
 
     return code;
 }
@@ -362,6 +368,12 @@ void read_file_to_code_layer(CCode* ccode, const char* filename_start, size_t si
     nob_da_foreach(char, c, &filename){
         arrput(lcd->filename, *c);
     }
+    if(!lcd->uri){
+        char path[MAX_PATH] = {0};
+        resolve_path(lcd->filename, path);
+        lcd->uri = get_file_uri(path);
+    }
+
 
     char* line = NULL;
     nob_da_foreach(char, c, &sb){
@@ -390,19 +402,15 @@ void read_file_to_code_layer(CCode* ccode, const char* filename_start, size_t si
     push_layer_to_top(ccode, file_layer);
     make_parser(ccode, filename.items);
     // TODO: Allow more languages
-    if(lcd->lang == LANG_C){
-        lcd->lsp_ctx = start_lsp();
-        char path[MAX_PATH] = {0};
-        resolve_path(lcd->filename, path);
-
-        char* uri = get_file_uri(path);
-        arrput(uri, '\0');
+    if(ccode->lsp_ctx == NULL && lcd->lang == LANG_C){
+        ccode->lsp_ctx = start_lsp();
+    }
+    if(ccode->lsp_ctx && lcd->lang == LANG_C){
         char* flatten = flatten_buffer(lcd);
         char* escaped = json_escape(flatten);
-        JsonValue* params = make_didOpen_params(uri, "c", 1, escaped);
+        JsonValue* params = make_didOpen_params(lcd->uri, "c", 1, escaped);
         JsonValue* message = make_didOpen_notification(params);
-        tiny_queue_push(lcd->lsp_ctx->sender_queue, message);
-        arrfree(uri);
+        tiny_queue_push(ccode->lsp_ctx->sender_queue, message);
         free(flatten);
         free(escaped);
     }
@@ -448,6 +456,18 @@ void write_code_layer_to_file(CCode* ccode){
 
     if(nob_write_entire_file(lcd->filename, sb.items, sb.count)){
         lcd->saved = true;
+    }
+
+    // LSP: send textDocument/didChange
+    if(ccode->lsp_ctx){
+        char* flatten = flatten_buffer(lcd);
+        char* escaped = json_escape(flatten);
+
+        JsonValue* params = make_didChange_params(lcd->uri, ++(lcd->version), escaped);
+        JsonValue* message = make_didChange_notification(params);
+        tiny_queue_push(ccode->lsp_ctx->sender_queue, message);
+        free(flatten);
+        free(escaped);
     }
 
     nob_sb_free(sb);
@@ -505,8 +525,8 @@ void free_layer(Layer* layer){
             if(lcd->tree){
                 ts_tree_delete(lcd->tree);
             }
-            if(lcd->lsp_ctx){
-                destroy_lsp(lcd->lsp_ctx);
+            if(lcd->uri){
+                arrfree(lcd->uri);
             }
             free(lcd);
         }

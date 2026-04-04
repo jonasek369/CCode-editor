@@ -101,4 +101,9 @@ int32_t atoin(const char *str, int n) {
     return result * sign;
 }
 
+
+int random_id(){
+    return (int)((rand()/RAND_MAX)*INT_MAX);
+}
+
 #endif

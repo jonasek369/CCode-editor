@@ -1,12 +1,12 @@
 #include "layers.h"
-
-
+#include "lsp_handler.h"
 
 /*
 
     CCode main
 
 */
+
 
 
 void print_layers(CCode* ccode){
@@ -17,12 +17,14 @@ void print_layers(CCode* ccode){
     }
 }
 
-
 void free_ccode(CCode* ccode){
     for(size_t i = 0; i < arrlenu(ccode->layers); i++){
         free_layer(ccode->layers[i]);
     }
     arrfree(ccode->layers);
+    if(ccode->lsp_ctx){
+        destroy_lsp(ccode->lsp_ctx);
+    }
 }
 
 
@@ -42,6 +44,8 @@ void handle_args(CCode* ccode, int argc, char** argv){
 
 
 int main(int argc, char** argv) {
+    // For random file ids for LSP
+    srand(time(NULL));
     CCode ccode   = {0};
     ccode.layers  = NULL;
 
@@ -62,6 +66,7 @@ int main(int argc, char** argv) {
     move(1, 0);
 
     init_syntax_highlighting();
+    init_lsp_handlers();
 
     init_commands();
     while(RUNNING) {
@@ -71,6 +76,11 @@ int main(int argc, char** argv) {
             printf("%d\n", ch);
         }
         */
+        // handle LSP if it is active
+        if(ccode.lsp_ctx){
+            handle_lsp(&ccode);
+        }
+
         // Code switch
         if(ch == CTL_TAB && arrlen(ccode.layers) >= 2 && top_layer(&ccode)->type != LAYER_CONSOLE){
             Layer* top = top_type_layer(&ccode, LAYER_CODE);
@@ -158,6 +168,7 @@ int main(int argc, char** argv) {
 
     destroy_commands();
     destroy_syntax_highlihting();
+    destory_lsp_handlers();
 
     // Clean up
     endwin();   // End curses mode
