@@ -20,6 +20,10 @@
 #define COLOR_DIR  11
 #define COLOR_SYMLINK  12
 
+#define COLOR_INFORMATION 14
+#define COLOR_WARNING     15
+#define COLOR_ERROR       16
+
 void init_syntax_colors() {
     start_color();
     if (can_change_color()) {
@@ -48,6 +52,10 @@ void init_syntax_colors() {
     init_pair(COLOR_DIR,  COLOR_YELLOW, COLOR_BLACK);
     init_pair(COLOR_FILE, COLOR_CYAN,   COLOR_BLACK);
     init_pair(COLOR_SYMLINK, COLOR_RED,   COLOR_BLACK);
+
+    init_pair(COLOR_INFORMATION, COLOR_BLUE, COLOR_BLACK);
+    init_pair(COLOR_WARNING, COLOR_YELLOW, COLOR_BLACK);
+    init_pair(COLOR_ERROR, COLOR_RED, COLOR_BLACK);
 }
 
 // ── attrs ────────────────────────────────────────────────────────────────────
@@ -712,6 +720,66 @@ void destroy_syntax_highlihting(){
     shfree(c_type_map);
 }
 
+typedef struct {
+    int start_character;
+    int start_line;
+
+    int end_character;
+    int end_line
+} LSPRange;
+
+LSPRange get_range(JsonValue* diagnostic){
+    LSPRange range = {0};
+    range.start_character = -1;
+    range.start_line = -1;
+
+    range.end_character = -1;
+    range.end_line = -1;
+
+    JsonValue* range_json = shget(diagnostic->object, "range");
+    if(!range_json){
+        printf("Diagnostic does not have range!\n");
+        return range;
+    }
+    JsonValue* start = shget(range_json->object, "start");
+    JsonValue* end = shget(range_json->object, "end");
+    if(!start || !end){
+        printf("Diagnostic does not have start or end!\n");
+        return range;
+    }
+    range.start_character = (int)(shget(start->object, "character")->number);
+    range.start_line = (int)(shget(start->object, "line")->number);
+    // seems like its offseted ?
+    range.end_character = ((int)(shget(end->object, "character")->number)) - 1;
+    range.end_line = (int)(shget(end->object, "line")->number);
+
+    return range;
+}
+
+int get_diagnostic_color(JsonValue* diagnostic){
+    JsonValue* severity = shget(diagnostic->object, "severity");
+    if(!severity){
+        printf("Diagnostic does not have severity!\n");
+        return -1;
+    }
+    int severity_int = (int)severity->number;
+    switch(severity_int){
+        case(1): {
+            return COLOR_ERROR;
+        }
+        case(2): {
+            return COLOR_WARNING;
+        }
+        case(3): {
+            return COLOR_INFORMATION;
+        }
+        case(4): {
+            return -1;
+        }
+    }
+    return -1;
+}
+
 void apply_tree_sitter_syntax_highlighting(LayerCodeData* lcd, SyntaxLanguage lang) {
     if (!lcd) return;
 
@@ -783,31 +851,60 @@ void apply_tree_sitter_syntax_highlighting(LayerCodeData* lcd, SyntaxLanguage la
     for (int sr = 0; sr < content_height; sr++) {
         int br = sr + yoff;
         move(sr + 1, 0);
-
         if (br >= buffer_size || !lcd->code_buffer[br]) {
             clrtoeol();
             continue;
         }
-
-        const char* line     = lcd->code_buffer[br];
-        int         line_len = (int)strlen(line);
-        int         sc       = 0;
-
+        const char* line = lcd->code_buffer[br];
+        int line_len = (int)strlen(line);
+        int sc = 0;
+    
         while (sc < content_width) {
             int pair = colour_map[sr][sc];
             if (pair == 0) pair = COLOR_PAIR_DEFAULT;
-
-            attr_t attrs   = ts_color_pair_to_attrs(pair);
-            int    run_end = sc + 1;
+            attr_t attrs = ts_color_pair_to_attrs(pair);
+    
+            int run_end = sc + 1;
             while (run_end < content_width && colour_map[sr][run_end] == pair)
                 run_end++;
+    
+            int diag_color = -1;
+            if (lcd->diagnostics) {
+                JsonValue* params = shget(lcd->diagnostics->object, "params");
+                JsonValue* diags  = shget(params->object, "diagnostics");
+                for (size_t i = 0; i < arrlenu(diags->array); i++) {
+                    LSPRange range = get_range(diags->array[i]);
 
-            attron(COLOR_PAIR(pair) | attrs);
+                    if (br < range.start_line || br > range.end_line)
+                        continue;
+
+                    int run_bc_start = sc  + xoff;
+                    int run_bc_end   = run_end - 1 + xoff;
+                    int col_start = (br == range.start_line) ? range.start_character : 0;
+                    int col_end   = (br == range.end_line)   ? range.end_character   : INT_MAX;
+                    if (run_bc_end >= col_start && run_bc_start <= col_end) {
+                        diag_color = get_diagnostic_color(diags->array[i]);
+                        break;
+                    }
+                }
+            }
+    
+            attr_t active_attrs;
+            int    active_pair;
+            if (diag_color >= 0) {
+                active_pair  = diag_color;
+                active_attrs = A_UNDERLINE;
+            } else {
+                active_pair  = pair;
+                active_attrs = attrs;
+            }
+    
+            attron(COLOR_PAIR(active_pair) | active_attrs);
             for (int c = sc; c < run_end; c++) {
                 int bc = c + xoff;
                 addch(bc < line_len ? (unsigned char)line[bc] : ' ');
             }
-            attroff(COLOR_PAIR(pair) | attrs);
+            attroff(COLOR_PAIR(active_pair) | active_attrs);
             sc = run_end;
         }
     }

@@ -62,6 +62,7 @@ Layer* new_layer_code(){
     lcd->uri = NULL;
     lcd->version = 1;
     lcd->id = random_id();
+    lcd->diagnostics = NULL;
 
     return code;
 }
@@ -527,6 +528,9 @@ void free_layer(Layer* layer){
             }
             if(lcd->uri){
                 arrfree(lcd->uri);
+            }
+            if(lcd->diagnostics){
+                json_free(lcd->diagnostics);
             }
             free(lcd);
         }

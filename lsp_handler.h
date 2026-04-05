@@ -10,12 +10,14 @@ static LSPResponseHandlerMap* lsp_handler = NULL;
 
 
 // Quite disgusting but I like it
-#define TYPE_CHECK_FIELD(obj, key, expected_type) \
-    JsonValue* key = shget((obj)->object, #key); \
-    if (!(key) || (key)->type != (expected_type)) { \
+#define TYPE_CHECK_FIELD(obj, key, expected_type) 				 \
+do { 			 												 \
+    key = shget((obj)->object, #key); 							 \
+    if (!(key) || (key)->type != (expected_type)) { 		     \
         fprintf(stderr, "Invalid or missing field: %s\n", #key); \
-        goto defer; \
-    }
+        goto defer; 											 \
+    }               											 \
+} while(0) 													     \
 
 
 //method: textDocument/publishDiagnostics
@@ -26,16 +28,24 @@ void handle_publishDiagnostics(CCode* ccode, JsonValue* message){
 		goto defer;
 	}
 	LayerCodeData* lcd = top_code_layer->layer_data;
+	JsonValue* params = NULL;
+	JsonValue* uri = NULL;
+	JsonValue* version = NULL;
 
 	// this create JsonValue* seconds_param = ...
-	TYPE_CHECK_FIELD(message, params, JSON_OBJECT)
+	TYPE_CHECK_FIELD(message, params, JSON_OBJECT);
 	TYPE_CHECK_FIELD(params, uri, JSON_STRING);
 	TYPE_CHECK_FIELD(params, version, JSON_NUMBER);
 
 	int version_int = (int)version->number;
 
 	if(strcmp(lcd->uri, uri->string) == 0 && lcd->version == version_int){
-		printf("got diags!\n");
+		if(lcd->diagnostics != NULL){
+			json_free(lcd->diagnostics);
+		}
+		json_print(message, 4, 0);
+		lcd->diagnostics = message;
+		return;
 	}
 
 defer:

@@ -1,6 +1,7 @@
 #include "layers.h"
 #include "lsp_handler.h"
 
+
 /*
 
     CCode main
@@ -48,7 +49,7 @@ int main(int argc, char** argv) {
     srand(time(NULL));
     CCode ccode   = {0};
     ccode.layers  = NULL;
-
+    
     handle_args(&ccode, argc, argv);
 
     if(ccode.layers == NULL){
