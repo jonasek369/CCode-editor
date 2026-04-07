@@ -5,6 +5,7 @@
 #define COLOR_ORANGE     9
 #define COLOR_PURPLE     10
 #define COLOR_BROWN_GRAY 11
+#define COLOR_FULL_BLACK 12
 
 #define COLOR_PAIR_DEFAULT  1
 #define COLOR_PAIR_KEYWORD  2
@@ -20,9 +21,11 @@
 #define COLOR_DIR  11
 #define COLOR_SYMLINK  12
 
-#define COLOR_INFORMATION 14
-#define COLOR_WARNING     15
-#define COLOR_ERROR       16
+#define COLOR_PAIR_INFORMATION 14
+#define COLOR_PAIR_WARNING     15
+#define COLOR_PAIR_ERROR       16
+
+#define COLOR_PAIR_COMPLETION 20
 
 void init_syntax_colors() {
     start_color();
@@ -37,6 +40,7 @@ void init_syntax_colors() {
         init_color(COLOR_PURPLE,  500, 400, 700);
         init_color(COLOR_GRAY,    400, 400, 400);
         init_color(COLOR_ORANGE,  850, 500, 150);
+        init_color(COLOR_FULL_BLACK, 0, 0, 0);
     }
 
     init_pair(COLOR_PAIR_DEFAULT,  COLOR_WHITE,   COLOR_BLACK);
@@ -53,9 +57,11 @@ void init_syntax_colors() {
     init_pair(COLOR_FILE, COLOR_CYAN,   COLOR_BLACK);
     init_pair(COLOR_SYMLINK, COLOR_RED,   COLOR_BLACK);
 
-    init_pair(COLOR_INFORMATION, COLOR_BLUE, COLOR_BLACK);
-    init_pair(COLOR_WARNING, COLOR_YELLOW, COLOR_BLACK);
-    init_pair(COLOR_ERROR, COLOR_RED, COLOR_BLACK);
+    init_pair(COLOR_PAIR_INFORMATION, COLOR_BLUE, COLOR_BLACK);
+    init_pair(COLOR_PAIR_WARNING, COLOR_YELLOW, COLOR_BLACK);
+    init_pair(COLOR_PAIR_ERROR, COLOR_RED, COLOR_BLACK);
+
+    init_pair(COLOR_PAIR_COMPLETION, COLOR_WHITE, COLOR_FULL_BLACK);
 }
 
 // ── attrs ────────────────────────────────────────────────────────────────────
@@ -765,13 +771,13 @@ int get_diagnostic_color(JsonValue* diagnostic){
     int severity_int = (int)severity->number;
     switch(severity_int){
         case(1): {
-            return COLOR_ERROR;
+            return COLOR_PAIR_ERROR;
         }
         case(2): {
-            return COLOR_WARNING;
+            return COLOR_PAIR_WARNING;
         }
         case(3): {
-            return COLOR_INFORMATION;
+            return COLOR_PAIR_INFORMATION;;
         }
         case(4): {
             return -1;

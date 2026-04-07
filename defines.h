@@ -141,7 +141,8 @@ typedef struct {
     char* uri;
     int version;
     int id;
-    JsonValue* diagnostics;
+    JsonValue* diagnostics; // object
+    JsonValue* completion; // array
 } LayerCodeData;
 
 

@@ -63,6 +63,7 @@ Layer* new_layer_code(){
     lcd->version = 1;
     lcd->id = random_id();
     lcd->diagnostics = NULL;
+    lcd->completion = NULL;
 
     return code;
 }
@@ -420,6 +421,42 @@ void read_file_to_code_layer(CCode* ccode, const char* filename_start, size_t si
 }
 
 
+void send_to_lsp(CCode* ccode){
+    Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
+    // No code layer to save
+    if(top_code_layer == NULL){
+        return;
+    }
+    LayerCodeData* lcd = (LayerCodeData*) top_code_layer->layer_data; 
+
+    char* flatten = flatten_buffer(lcd);
+    char* escaped = json_escape(flatten);
+
+    JsonValue* params = make_didChange_params(lcd->uri, ++(lcd->version), escaped);
+    JsonValue* message = make_didChange_notification(params);
+    tiny_queue_push(ccode->lsp_ctx->sender_queue, message);
+    free(flatten);
+    free(escaped);
+}
+
+
+void get_completion(CCode* ccode){
+    Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
+    // No code layer to save
+    if(top_code_layer == NULL){
+        return;
+    }
+    LayerCodeData* lcd = (LayerCodeData*) top_code_layer->layer_data;
+    Cursor* cursor = lcd->cursor;
+
+    unsigned int line = cursor->y;
+    unsigned int character = cursor->x;
+
+    JsonValue* params = make_completion_params(lcd->uri, line, character);
+    JsonValue* message = make_completion_request(json_new_string("completion"), params);
+    tiny_queue_push(ccode->lsp_ctx->sender_queue, message);
+}
+
 
 void change_filename(CCode* ccode, const char* new_filename, size_t size){
     Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
@@ -461,14 +498,7 @@ void write_code_layer_to_file(CCode* ccode){
 
     // LSP: send textDocument/didChange
     if(ccode->lsp_ctx){
-        char* flatten = flatten_buffer(lcd);
-        char* escaped = json_escape(flatten);
-
-        JsonValue* params = make_didChange_params(lcd->uri, ++(lcd->version), escaped);
-        JsonValue* message = make_didChange_notification(params);
-        tiny_queue_push(ccode->lsp_ctx->sender_queue, message);
-        free(flatten);
-        free(escaped);
+        send_to_lsp(ccode);
     }
 
     nob_sb_free(sb);
@@ -1246,7 +1276,6 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
         TS_REPARSE(code_data);
     }
 
-
     else if(!inFindSubstrMode && chr >= KEY_DOWN && chr <= KEY_RIGHT){
         switch(chr){
             case KEY_DOWN: {
@@ -1455,6 +1484,24 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
         printf("\n");
     }
 
+    bool is_file_edit = (chr >= 0 && chr <= 255) && isprint(chr) ||
+                                     chr == CUSTOM_KEY_BACKSPACE ||
+                                     chr ==     CUSTOM_KEY_ENTER ||
+                                     chr == CUSTOM_CTL_BACKSPACE;
+
+    // LSP: Currently sending whole file. Make incremental
+    if(ccode->lsp_ctx && is_file_edit){
+        send_to_lsp(ccode);
+        get_completion(ccode);
+    }
+
+    if(!is_file_edit && chr != -1 && code_data->completion){
+        printf("clean!\n");
+        json_free(code_data->completion);
+        code_data->completion = NULL;
+    }
+
+
     int content_height = y - 1;
     int content_width = x;
     
@@ -1482,6 +1529,42 @@ void layer_code_render(CCode* ccode, Layer* layer) {
 
     // Renders syntax highlighting or plain text if no parser is present
     apply_tree_sitter_syntax_highlighting(code_data, code_data->lang);
+
+    if(!code_data->completion){
+        return;
+    }
+
+    int y, x;
+    (void)y;
+    getmaxyx(stdscr, y, x); 
+
+    int cursor_screen_y = code_data->cursor->y - code_data->cursor->yoff + 1;
+    int cursor_screen_x = code_data->cursor->x - code_data->cursor->xoff;
+
+    JsonValue* result = shget(code_data->completion->object, "result");
+    JsonValue* items = shget(result->object, "items");
+
+    size_t max_len = 0;
+
+    for(size_t i = 0; i < arrlenu(items->array); i++){
+        if(i >= 6 || cursor_screen_y+(i+1) > y) break;
+        JsonValue* comp = items->array[i];
+        JsonValue* text = shget(comp->object, "insertText");
+        size_t len = strlen(text->string);
+        if(len > max_len) 
+            max_len = len;
+    }
+    const char *padding="                                                                       ";
+
+    attron(COLOR_PAIR(COLOR_PAIR_COMPLETION));
+    for(size_t i = 0; i < arrlenu(items->array); i++){
+        if(i >= 6 || cursor_screen_y+(i+1) > y) break;
+        JsonValue* comp = items->array[i];
+        JsonValue* text = shget(comp->object, "insertText");
+        size_t padLen = max_len - strlen(text->string);
+        mvprintw(cursor_screen_y+(i+1), cursor_screen_x, "%s%*.*s", text->string, padLen, padLen, padding);
+    }
+    attroff(COLOR_PAIR(COLOR_PAIR_COMPLETION));
     
     //clock_t end = clock();
     //double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;

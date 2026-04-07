@@ -86,4 +86,4 @@ done
 
 echo "==> building nob"
 gcc nob.c -o nob
-echo "==> run ./nob for to compile and start Ccode-editor"
+echo "==> run ./nob to compile and start Ccode-editor"

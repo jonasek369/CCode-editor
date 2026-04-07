@@ -9,7 +9,6 @@
 */
 
 
-
 void print_layers(CCode* ccode){
     printf("Layers:\n");
     for(size_t i = 0; i < arrlenu(ccode->layers); i++){
