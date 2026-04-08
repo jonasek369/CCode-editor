@@ -21,6 +21,6 @@ currently working on making LSP Client and implementing it.
 
 latest development:
 type hints and errors are showing (only A_UNDERLINE and color for now)
-![Type hints](https://imgur.com/a/6wyDwRu)
+![Type hints](https://i.imgur.com/a/6wyDwRu.png)
 tree for browsing files
-![Tree](https://imgur.com/a/Y70xDME)
+![Tree](https://i.imgur.com/70LL4ER.png)
