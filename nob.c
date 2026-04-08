@@ -1,5 +1,5 @@
 #define NOB_IMPLEMENTATION
-#include "../thirdparty/nob.h"
+#include "nob.h"
 
 #define OPTIMISATION 0
 

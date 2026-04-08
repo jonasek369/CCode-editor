@@ -1,7 +1,8 @@
+/build
 /PDCurses
+/tiny_queue
 /tree-sitter
 /tree-sitter-grammar
-/build
 *.old
 *.exe
 nob
@@ -10,3 +11,5 @@ build_grammar
 compile_flags.txt
 stb_ds.h
 nob.h
+LSP.h
+parser.h

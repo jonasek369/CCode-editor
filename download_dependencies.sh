@@ -1,17 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+clone_repo_if_needed() {
+    local repo_url="$1"
+    local repo_dir="$2"
+
+    if [ ! -d "$repo_dir" ]; then
+        git clone "$repo_url" "$repo_dir"
+    else
+        echo "Repo '$repo_dir' already exists, skipping clone."
+    fi
+}
+
 build_pdcurses() {
     local repo_url="https://github.com/wmcbrine/PDCurses"
     local repo_dir="PDCurses"
 
     echo "==> Building PDCurses..."
 
-    if [ ! -d "$repo_dir" ]; then
-        git clone "$repo_url"
-    else
-        echo "Repo already exists, skipping clone."
-    fi
+    clone_repo_if_needed "$repo_url" "$repo_dir"
 
     pushd "$repo_dir/x11" > /dev/null
 
@@ -27,16 +34,12 @@ build_pdcurses() {
 }
 
 build_tree_sitter() {
-	local repo_url="https://github.com/tree-sitter/tree-sitter"
-	local repo_dir="tree-sitter"
+    local repo_url="https://github.com/tree-sitter/tree-sitter"
+    local repo_dir="tree-sitter"
 
-	echo "==> Building Tree-sitter..."
+    echo "==> Building Tree-sitter..."
 
-	if [ ! -d "$repo_dir" ]; then
-        git clone "$repo_url"
-    else
-        echo "Repo already exists, skipping clone."
-    fi
+    clone_repo_if_needed "$repo_url" "$repo_dir"
 
     pushd "$repo_dir" > /dev/null
 
@@ -45,7 +48,6 @@ build_tree_sitter() {
     popd > /dev/null
 
     echo "==> Tree-sitter build complete."
-
 }
 
 download_tree_sitter_language() {
@@ -56,11 +58,7 @@ download_tree_sitter_language() {
 
     echo "==> Cloning $repo_dir..."
 
-    if [ ! -d "$target_dir" ]; then
-        git clone "$repo_url" "$target_dir"
-    else
-        echo "Repo already exists, skipping clone."
-    fi
+    clone_repo_if_needed "$repo_url" "$target_dir"
 
     echo "==> $repo_dir cloning complete."
 }
@@ -71,6 +69,13 @@ languages=(
     "https://github.com/tree-sitter/tree-sitter-json tree-sitter-json"
     "https://github.com/tree-sitter/tree-sitter-c-sharp tree-sitter-c-sharp"
 )
+
+# nob.h and stb_ds.h are stable wont really need to change
+[ -f stb_ds.h ] || curl -L https://raw.githubusercontent.com/nothings/stb/refs/heads/master/stb_ds.h -o stb_ds.h
+[ -f nob.h ] || curl -L https://raw.githubusercontent.com/tsoding/nob.h/refs/heads/main/nob.h -o nob.h
+curl -L https://raw.githubusercontent.com/jonasek369/C-LSP-Client/refs/heads/main/LSP.h -o LSP.h
+curl -L https://raw.githubusercontent.com/jonasek369/C-JSON/refs/heads/main/parser.h -o parser.h
+clone_repo_if_needed "https://github.com/jonasek369/tiny_queue" "tiny_queue"
 
 build_pdcurses
 build_tree_sitter

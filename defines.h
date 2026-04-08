@@ -27,18 +27,18 @@
 
 
 #define STB_DS_IMPLEMENTATION
-#include "../thirdparty/stb_ds.h"
+#include "stb_ds.h"
 #define CJSON_NO_STB_DS
-#include "../C-JSON/parser.h"
-#include "../tiny_queue/tiny_queue.h"
+#include "parser.h"
+#include "./tiny_queue/tiny_queue.h"
 
 #define LSP_NO_STB_DS
 #define LSP_NO_CJSON
 #define LSP_NO_TINY_QUEUE
-#include "../C-LSP-Client/LSP.h"
+#include "LSP.h"
     
 #define NOB_IMPLEMENTATION
-#include "../thirdparty/nob.h"
+#include "nob.h"
 
 
 #include "utils.h"
