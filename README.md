@@ -1,30 +1,67 @@
+# CCode Editor
 
-# CCode-editor
-Terminal code editor made in C inspired by VI. With tree sitter parsing and LSP.
-Currently supports (Python, Json, C, C#) syntax highlighting.
+A terminal-based code editor written in C, inspired by Vi.  
+It features Tree-sitter parsing and LSP integration.
 
-# Used dependencies
-[stb_ds.h](https://github.com/nothings/stb)  
-[nob.h](https://github.com/tsoding/nob.h)  
-[C-LSP-Client](https://github.com/jonasek369/C-LSP-Client)  
-[C-JSON](https://github.com/jonasek369/C-JSON)  
-[tiny_queue](https://github.com/jonasek369/tiny_queue)  
+---
 
-# Running the project
-Run in terminal  
-`./download_dependencies.sh`
-then  
-`./nob`
+## Current Features
 
+- Syntax highlighting for:
+  - Python
+  - JSON
+  - C
+  - C#
+- Tree-sitter-based parsing
+- Early LSP support (in progress)
 
-# Roadmap
-currently working on making LSP Client and implementing it.
+---
 
-latest development:
-**type hints and errors are showing (only A_UNDERLINE and color for now)  **
+## Dependencies
 
-![Type hints](https://i.imgur.com/70LL4ER.png)  
+This project uses the following libraries:
 
-**tree for browsing files  **
+- [stb_ds.h](https://github.com/nothings/stb)
+- [nob.h](https://github.com/tsoding/nob.h)
+- [C-LSP-Client](https://github.com/jonasek369/C-LSP-Client)
+- [C-JSON](https://github.com/jonasek369/C-JSON)
+- [tiny_queue](https://github.com/jonasek369/tiny_queue)
+
+---
+
+## Running the project
+
+Run the following commands in your terminal:
+
+```bash
+./download_dependencies.sh
+./nob
+```
+
+---
+
+## Roadmap
+
+- make LSP completion better
+- support more LSPs
+- rehaul the color scheme
+- hover errors
+
+---
+
+## Latest Development
+
+### Type Hints & Errors
+
+Type hints and error diagnostics are now displayed  
+(currently using underline + color highlighting):
+
+![Type hints](https://i.imgur.com/70LL4ER.png)
+
+---
+
+### File Tree Browser
+
+A file tree view for file system navigation:
 
 ![Tree](https://i.imgur.com/TkJbatD.png)
