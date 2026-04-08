@@ -1,5 +1,5 @@
 #include "layers.h"
-#include "lsp_handler.h"
+
 
 
 /*
@@ -22,8 +22,10 @@ void free_ccode(CCode* ccode){
         free_layer(ccode->layers[i]);
     }
     arrfree(ccode->layers);
-    if(ccode->lsp_ctx){
-        destroy_lsp(ccode->lsp_ctx);
+    if(ccode->lsp_ctxs){
+        for(size_t i = 0; i < arrlenu(ccode->lsp_ctxs); i++){
+            destroy_lsp(ccode->lsp_ctxs[i]);
+        }
     }
 }
 
@@ -49,11 +51,7 @@ int main(int argc, char** argv) {
     CCode ccode   = {0};
     ccode.layers  = NULL;
     
-    handle_args(&ccode, argc, argv);
 
-    if(ccode.layers == NULL){
-        arrpush(ccode.layers, new_layer_code());
-    }
 
     int ch;
 
@@ -69,6 +67,13 @@ int main(int argc, char** argv) {
     init_lsp_handlers();
 
     init_commands();
+
+    handle_args(&ccode, argc, argv);
+
+    if(ccode.layers == NULL){
+        arrpush(ccode.layers, new_layer_code());
+    }
+
     while(RUNNING) {
         ch = getch();
         /*
@@ -76,9 +81,11 @@ int main(int argc, char** argv) {
             printf("%d\n", ch);
         }
         */
-        // handle LSP if it is active
-        if(ccode.lsp_ctx){
-            handle_lsp(&ccode);
+        // handle LSPs if some are active
+        if(ccode.lsp_ctxs){
+            for(size_t i = 0; i < arrlenu(ccode.lsp_ctxs); i++){
+                handle_lsp(&ccode, ccode.lsp_ctxs[i]);
+            }
         }
 
         // Code switch
@@ -98,6 +105,17 @@ int main(int argc, char** argv) {
         }
         // Console switching
         if(ch == CUSTOM_KEY_ESCAPE || CLOSE_CONSOLE){
+            // if top layer has opened completion window remove it
+            Layer* top = top_type_layer(&ccode, LAYER_CODE);
+            if(top){
+                LayerCodeData* lcd = top->layer_data;
+                if(lcd->completion){
+                    json_free(lcd->completion);
+                    lcd->completion = NULL;
+                    continue;
+                }
+            }
+
             Layer* top_console = top_type_layer(&ccode, LAYER_CONSOLE);
         
             if(!top_console && !CLOSE_CONSOLE){

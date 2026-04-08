@@ -731,7 +731,7 @@ typedef struct {
     int start_line;
 
     int end_character;
-    int end_line
+    int end_line;
 } LSPRange;
 
 LSPRange get_range(JsonValue* diagnostic){

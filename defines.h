@@ -79,7 +79,7 @@ typedef enum {
 } CommandType;
 
 typedef enum {
-    LANG_UNKNOWN,
+    LANG_UNKNOWN=0,
     LANG_C,
     LANG_JSON,
     LANG_PYTHON,
@@ -169,7 +169,7 @@ typedef struct {
 
 typedef struct {
     Layer** layers;
-    LSPContext* lsp_ctx;
+    LSPContext** lsp_ctxs;
 } CCode;
 
 
@@ -181,6 +181,7 @@ int TAB_SIZE = 4;
 #define LABEL(x) x:
 
 #include "syntax_highlighting.h"
+#include "lsp_handler.h"
 
 
 #endif

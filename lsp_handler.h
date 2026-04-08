@@ -1,4 +1,3 @@
-
 typedef void (*LSPResponseHandler)(CCode* ccode, JsonValue* message);
 
 typedef struct {
@@ -6,9 +5,18 @@ typedef struct {
     LSPResponseHandler value;
 } LSPResponseHandlerMap;
 
+typedef struct {
+	SyntaxLanguage key;
+	LSPKind value;
+} LangToLSP;
+
 static LSPResponseHandlerMap* lsp_method_handler = NULL;
 static LSPResponseHandlerMap* lsp_id_handler = NULL;
-
+static LSPKind lang_to_lspkind[64];
+static char* lsp_to_cstr_lang[64] = {
+    [LSPKIND_CLANGD] = "c",
+    [LSPKIND_PYLSP]   = "python"
+};
 
 // Quite disgusting but I like it
 #define TYPE_CHECK_FIELD(obj, key, expected_type) 				 \
@@ -23,7 +31,13 @@ do { 			 												 \
 
 //method: textDocument/publishDiagnostics
 void handle_publishDiagnostics(CCode* ccode, JsonValue* message){
-	Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
+	Layer* top_code_layer = NULL;
+	for(int i = 0; i < arrlen(ccode->layers); i++){
+        if(ccode->layers[i]->type == LAYER_CODE){
+        	top_code_layer = ccode->layers[i];
+        	break;
+        }
+    }
 	if(!top_code_layer){
 		printf("CCode layers do not have any code layers!\n");
 		goto defer;
@@ -33,21 +47,30 @@ void handle_publishDiagnostics(CCode* ccode, JsonValue* message){
 	JsonValue* uri = NULL;
 	JsonValue* version = NULL;
 
-	// this create JsonValue* seconds_param = ...
 	TYPE_CHECK_FIELD(message, params, JSON_OBJECT);
 	TYPE_CHECK_FIELD(params, uri, JSON_STRING);
-	TYPE_CHECK_FIELD(params, version, JSON_NUMBER);
+	version = shget(params->object, "version");
+	// pylsp dose not return version
+	if(version){
+		int version_int = (int)version->number;
 
-	int version_int = (int)version->number;
-
-	if(strcmp(lcd->uri, uri->string) == 0 && lcd->version == version_int){
-		if(lcd->diagnostics != NULL){
-			json_free(lcd->diagnostics);
+		if(strcmp(lcd->uri, uri->string) == 0 && lcd->version == version_int){
+			if(lcd->diagnostics != NULL){
+				json_free(lcd->diagnostics);
+			}
+			lcd->diagnostics = message;
+			return;
 		}
-		// json_print(message, 4, 0);
-		lcd->diagnostics = message;
-		return;
+	}else{
+		if(strcmp(lcd->uri, uri->string) == 0){
+			if(lcd->diagnostics != NULL){
+				json_free(lcd->diagnostics);
+			}
+			lcd->diagnostics = message;
+			return;
+		}
 	}
+
 
 defer:
 	json_free(message);
@@ -55,7 +78,13 @@ defer:
 }
 
 void handle_completion(CCode* ccode, JsonValue* message){
-	Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
+	Layer* top_code_layer = NULL;
+	for(int i = 0; i < arrlen(ccode->layers); i++){
+        if(ccode->layers[i]->type == LAYER_CODE){
+        	top_code_layer = ccode->layers[i];
+        	break;
+        }
+    }
 	if(!top_code_layer){
 		printf("CCode layers do not have any code layers!\n");
 		goto defer;
@@ -82,6 +111,36 @@ void init_lsp_handlers(){
 	shput(lsp_method_handler, "textDocument/publishDiagnostics", handle_publishDiagnostics);
 
 	shput(lsp_id_handler, "completion", handle_completion);
+
+	for (int i = 0; i < 64; i++)
+        lang_to_lspkind[i] = LSPKIND_UNKNOWN;
+
+    lang_to_lspkind[LANG_C] = LSPKIND_CLANGD;
+    lang_to_lspkind[LANG_PYTHON] = LSPKIND_PYLSP;
+}
+
+bool is_lspkind_running(CCode* ccode, LSPKind lsp_kind){
+	if(ccode->lsp_ctxs == NULL){
+		return false;
+	}
+	for(size_t i = 0; i < arrlenu(ccode->lsp_ctxs); i++){
+		if(ccode->lsp_ctxs[i]->kind == lsp_kind){
+			return true;
+		}
+	}
+	return false;
+}
+
+LSPContext* get_running_lsp(CCode* ccode, LSPKind lsp_kind){
+	if(ccode->lsp_ctxs == NULL){
+		return NULL;
+	}
+	for(size_t i = 0; i < arrlenu(ccode->lsp_ctxs); i++){
+		if(ccode->lsp_ctxs[i]->kind == lsp_kind){
+			return ccode->lsp_ctxs[i];
+		}
+	}
+	return NULL;
 }
 
 void destory_lsp_handlers(){
@@ -89,9 +148,7 @@ void destory_lsp_handlers(){
 	shfree(lsp_id_handler);
 }
 
-void handle_lsp(CCode* ccode){
-	LSPContext* ctx = ccode->lsp_ctx;
-
+void handle_lsp(CCode* ccode, LSPContext* ctx){
 	while(1){
 		JsonValue* message = tiny_queue_pop_nowait(ctx->receiver_queue);
 		if(!message){
@@ -115,13 +172,15 @@ void handle_lsp(CCode* ccode){
 			json_free(message);
 			continue;
 		}
-		LSPResponseHandler handler = shget(lsp_method_handler, method->string);
+		char* unescaped_method = json_unescape(method->string);
+		LSPResponseHandler handler = shget(lsp_method_handler, unescaped_method);
 		if(!handler){
 			printf("Got message that dose not have handler %s\n", method->string);
 			json_free(message);
 		}else{
 			handler(ccode, message);
 		}
+		free(unescaped_method);
 	}
 	return;
 }

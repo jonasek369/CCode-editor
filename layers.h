@@ -10,6 +10,7 @@
 #define default_filename_length 8
 static char* default_filename = "untitled";
 
+
 /*
 
     Layer constructors
@@ -259,35 +260,47 @@ extern const TSLanguage *tree_sitter_json();
 extern const TSLanguage *tree_sitter_python();
 extern const TSLanguage *tree_sitter_c_sharp();
 
-const TSLanguage* get_filetype_language_parser(char* filename, SyntaxLanguage* lang){
+SyntaxLanguage get_language_from_suffix(const char* filename) {
     size_t size = strlen(filename);
     size_t i = size;
-    while(i > 0 && filename[i] != '.'){
+
+    while (i > 0 && filename[i] != '.') {
         i--;
     }
-    i++; // remove ".""
-    char* suffix = stringview_to_str(filename+i, size-i);
-    if(strlen(suffix) == 1 && (strncmp(suffix, "c", 1) == 0 || strncmp(suffix, "h", 1) == 0)){
-        free(suffix);
-        *lang = LANG_C;
-        return tree_sitter_c();
-    }else if(strlen(suffix) == 4 && strncmp(suffix, "json", 4) == 0){
-        *lang = LANG_JSON;
-        free(suffix);
-        return tree_sitter_json();
-    }else if(strlen(suffix) == 2 && strncmp(suffix, "py", 2) == 0){
-        *lang = LANG_PYTHON;
-        free(suffix);
-        return tree_sitter_python();
-    }else if(strlen(suffix) == 2 && strncmp(suffix, "cs", 2) == 0){
-        *lang = LANG_C_SHARP;
-        free(suffix);
-        return tree_sitter_c_sharp(); 
+    if (i == 0) return LANG_UNKNOWN; // no suffix
+
+    i++; // skip the dot
+    const char* suffix = filename + i;
+    size_t suffix_len = size - i;
+
+    if (suffix_len == 1 && (strncmp(suffix, "c", 1) == 0 || strncmp(suffix, "h", 1) == 0)) {
+        return LANG_C;
+    } else if (suffix_len == 4 && strncmp(suffix, "json", 4) == 0) {
+        return LANG_JSON;
+    } else if (suffix_len == 2 && strncmp(suffix, "py", 2) == 0) {
+        return LANG_PYTHON;
+    } else if (suffix_len == 2 && strncmp(suffix, "cs", 2) == 0) {
+        return LANG_C_SHARP;
     }
-    *lang = LANG_UNKNOWN;
-    free(suffix);
-    return NULL;
+    return LANG_UNKNOWN;
 }
+
+const TSLanguage* get_filetype_language_parser(const char* filename, SyntaxLanguage* lang) {
+    *lang = get_language_from_suffix(filename);
+
+    switch (*lang) {
+        case LANG_C:
+            return tree_sitter_c();
+        case LANG_JSON:
+            return tree_sitter_json();
+        case LANG_PYTHON:
+            return tree_sitter_python();
+        case LANG_C_SHARP:
+            return tree_sitter_c_sharp();
+        default:
+            return NULL;
+    }
+}   
 
 
 void make_parser(CCode* ccode, char* filename){
@@ -320,7 +333,6 @@ void make_parser(CCode* ccode, char* filename){
 
     free(flatten);
 }
-
 
 
 void message_to_console(CCode* ccode, const char* message){
@@ -403,16 +415,19 @@ void read_file_to_code_layer(CCode* ccode, const char* filename_start, size_t si
     lcd->saved = true;
     push_layer_to_top(ccode, file_layer);
     make_parser(ccode, filename.items);
-    // TODO: Allow more languages
-    if(ccode->lsp_ctx == NULL && lcd->lang == LANG_C){
-        ccode->lsp_ctx = start_lsp();
+    LSPKind lsp_kind = lang_to_lspkind[lcd->lang];
+    printf("kind %d lang %d\n", lsp_kind, lcd->lang);
+    if(lsp_kind != LSPKIND_UNKNOWN && is_lspkind_running(ccode, lsp_kind) == false){
+        LSPContext* ctx = start_lsp(lsp_kind);
+        arrput(ccode->lsp_ctxs, ctx);
     }
-    if(ccode->lsp_ctx && lcd->lang == LANG_C){
+    if(is_lspkind_running(ccode, lsp_kind)){
+        LSPContext* ctx = get_running_lsp(ccode, lsp_kind);
         char* flatten = flatten_buffer(lcd);
         char* escaped = json_escape(flatten);
-        JsonValue* params = make_didOpen_params(lcd->uri, "c", 1, escaped);
+        JsonValue* params = make_didOpen_params(lcd->uri, lsp_to_cstr_lang[lsp_kind], 1, escaped);
         JsonValue* message = make_didOpen_notification(params);
-        tiny_queue_push(ccode->lsp_ctx->sender_queue, message);
+        tiny_queue_push(ctx->sender_queue, message);
         free(flatten);
         free(escaped);
     }
@@ -421,7 +436,7 @@ void read_file_to_code_layer(CCode* ccode, const char* filename_start, size_t si
 }
 
 
-void send_to_lsp(CCode* ccode){
+void send_to_lsp(CCode* ccode, LSPContext* ctx){
     Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
     // No code layer to save
     if(top_code_layer == NULL){
@@ -434,13 +449,13 @@ void send_to_lsp(CCode* ccode){
 
     JsonValue* params = make_didChange_params(lcd->uri, ++(lcd->version), escaped);
     JsonValue* message = make_didChange_notification(params);
-    tiny_queue_push(ccode->lsp_ctx->sender_queue, message);
+    tiny_queue_push(ctx->sender_queue, message);
     free(flatten);
     free(escaped);
 }
 
 
-void get_completion(CCode* ccode){
+void get_completion(CCode* ccode, LSPContext* ctx){
     Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
     // No code layer to save
     if(top_code_layer == NULL){
@@ -454,7 +469,7 @@ void get_completion(CCode* ccode){
 
     JsonValue* params = make_completion_params(lcd->uri, line, character);
     JsonValue* message = make_completion_request(json_new_string("completion"), params);
-    tiny_queue_push(ccode->lsp_ctx->sender_queue, message);
+    tiny_queue_push(ctx->sender_queue, message);
 }
 
 
@@ -497,8 +512,8 @@ void write_code_layer_to_file(CCode* ccode){
     }
 
     // LSP: send textDocument/didChange
-    if(ccode->lsp_ctx){
-        send_to_lsp(ccode);
+    if(is_lspkind_running(ccode, lang_to_lspkind[lcd->lang])){
+        send_to_lsp(ccode, get_running_lsp(ccode, lang_to_lspkind[lcd->lang]));
     }
 
     nob_sb_free(sb);
@@ -1484,15 +1499,17 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
         printf("\n");
     }
 
-    bool is_file_edit = (chr >= 0 && chr <= 255) && isprint(chr) ||
-                                     chr == CUSTOM_KEY_BACKSPACE ||
-                                     chr ==     CUSTOM_KEY_ENTER ||
-                                     chr == CUSTOM_CTL_BACKSPACE;
+    bool is_file_edit = (isprint(chr) ||
+          chr == CUSTOM_KEY_BACKSPACE ||
+          chr ==     CUSTOM_KEY_ENTER ||
+          chr == CUSTOM_CTL_BACKSPACE);
 
     // LSP: Currently sending whole file. Make incremental
-    if(ccode->lsp_ctx && is_file_edit){
-        send_to_lsp(ccode);
-        get_completion(ccode);
+    LSPKind lsp_kind = lang_to_lspkind[code_data->lang];
+    if(is_lspkind_running(ccode, lsp_kind) && is_file_edit){
+        LSPContext* ctx = get_running_lsp(ccode, lsp_kind);
+        send_to_lsp(ccode, ctx);
+        get_completion(ccode, ctx);
     }
 
     if(!is_file_edit && chr != -1 && code_data->completion){
@@ -1535,7 +1552,7 @@ void layer_code_render(CCode* ccode, Layer* layer) {
     }
 
     int y, x;
-    (void)y;
+    (void)x;
     getmaxyx(stdscr, y, x); 
 
     int cursor_screen_y = code_data->cursor->y - code_data->cursor->yoff + 1;
