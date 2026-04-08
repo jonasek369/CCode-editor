@@ -43,13 +43,19 @@ Run the following commands in your terminal:
 ## Roadmap
 
 - make LSP completion better
-- support more LSPs
 - rehaul the color scheme
 - hover errors
 
 ---
 
 ## Latest Development
+
+### Support for more LSP was added
+
+CCode editor now supports more than one lsp running at one  
+(currenlty implemented are CLANGD and PYLSP)
+
+---
 
 ### Type Hints & Errors
 

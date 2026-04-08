@@ -416,7 +416,7 @@ void read_file_to_code_layer(CCode* ccode, const char* filename_start, size_t si
     push_layer_to_top(ccode, file_layer);
     make_parser(ccode, filename.items);
     LSPKind lsp_kind = lang_to_lspkind[lcd->lang];
-    printf("kind %d lang %d\n", lsp_kind, lcd->lang);
+
     if(lsp_kind != LSPKIND_UNKNOWN && is_lspkind_running(ccode, lsp_kind) == false){
         LSPContext* ctx = start_lsp(lsp_kind);
         arrput(ccode->lsp_ctxs, ctx);

@@ -26,6 +26,7 @@ void free_ccode(CCode* ccode){
         for(size_t i = 0; i < arrlenu(ccode->lsp_ctxs); i++){
             destroy_lsp(ccode->lsp_ctxs[i]);
         }
+        arrfree(ccode->lsp_ctxs);
     }
 }
 
