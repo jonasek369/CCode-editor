@@ -617,6 +617,27 @@ void close_code_layer(CCode* ccode, bool forced){
         message_to_console(ccode, "Cannot close unsaved file save it or use ':c!' to force close");
         return;
     }else{
+        LSPKind kind = lang_to_lspkind[lcd->lang];
+        if(is_lspkind_running(ccode, kind)){
+            size_t same_langs = 0;
+            Layer** code_layers = all_type_layers(ccode, LAYER_CODE);
+            for(size_t i = 0; i < arrlenu(code_layers); i++){
+                if(to_close == code_layers[i]) continue;
+                if(lcd->lang == ((LayerCodeData*)code_layers[i]->layer_data)->lang) same_langs++;
+            }
+            if(same_langs == 0){
+                size_t at_index = 0;
+                for(size_t i = 0; i < arrlenu(ccode->lsp_ctxs); i++){
+                    if(ccode->lsp_ctxs[i]->kind == kind){
+                        at_index = i;
+                        break;
+                    }
+                }
+                destroy_lsp(ccode->lsp_ctxs[at_index]);
+                arrdel(ccode->lsp_ctxs, at_index);
+            }
+            arrfree(code_layers);
+        }
         free_layer(to_close);
         remove_layer(ccode, to_close);
     }
@@ -1417,7 +1438,7 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
 
         LABEL(carried_to_previous_line)
     }
-    else if(!inFindSubstrMode && chr == CUSTOM_CTL_BACKSPACE){
+    else if(!inFindSubstrMode && chr == CTL_BKSP){
         int x = code_data->cursor->x;
         char *line = code_data->code_buffer[code_data->cursor->y];
 
@@ -1502,7 +1523,7 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
     bool is_file_edit = (isprint(chr) ||
           chr == CUSTOM_KEY_BACKSPACE ||
           chr ==     CUSTOM_KEY_ENTER ||
-          chr == CUSTOM_CTL_BACKSPACE);
+          chr == CTL_BKSP);
 
     // LSP: Currently sending whole file. Make incremental
     LSPKind lsp_kind = lang_to_lspkind[code_data->lang];
@@ -1877,41 +1898,49 @@ void draw_ui(CCode* ccode) {
 
     int y, x;
     getmaxyx(stdscr, y, x);
-    if(code_layers != NULL){
+    if (code_layers != NULL) {
         char top_line[x + 1];
         size_t size = 0;
-
-        int cells_per_layer = x / arrlen(code_layers);
-
-        for (size_t i = 0; i < arrlenu(code_layers); i++) {
+    
+        size_t num_layers = arrlenu(code_layers);
+        int cells_per_layer = x / num_layers;
+    
+        for (int i = 0; i < num_layers; i++) {
             LayerCodeData* lcd = (LayerCodeData*) code_layers[i]->layer_data;
             const char* file_name = lcd->filename;
-            if(arrlen(lcd->filename) > 16){
+            if (strlen(lcd->filename) > cells_per_layer - 1){
                 file_name = nob_path_name(lcd->filename);
             }
-            int written = snprintf(top_line + size,
-                                   ((int)size < x) ? (x - size + 1) : 0,
-                                   "%s%s",
-                                   file_name,
-                                   lcd->saved ? "" : "*");
-
-            if (written < 0) written = 0;
-
-            if ((size_t)written > (size_t)(x - size)) {
-                written = x - size;
+    
+            char label[32];
+            snprintf(label, sizeof(label), "%s%s", file_name, lcd->saved ? "" : "*");
+    
+            int label_len = strlen(label);
+            if (label_len > cells_per_layer - 1) {
+                label_len = cells_per_layer - 1;
             }
-            size += written;
-
-            while ((int)(size % cells_per_layer) != 0 && size < (size_t)x) {
+    
+            for (int j = 0; j < label_len; j++) {
+                top_line[size++] = label[j];
+            }
+    
+            while (size % cells_per_layer != 0 && size < (size_t)x) {
                 top_line[size++] = ' ';
             }
         }
-
+    
         if (size > (size_t)x) size = x;
         top_line[size] = '\0';
-
-        attron(A_REVERSE);
-        mvprintw(0, 0, "%s", top_line);
+    
+        move(0, 0);
+        for (int i = 0; i < size; i++) {
+            if (i < cells_per_layer) {
+                attron(A_REVERSE);
+            } else {
+                attroff(A_REVERSE);
+            }
+            addch(top_line[i]);
+        }
         attroff(A_REVERSE);
     }
  

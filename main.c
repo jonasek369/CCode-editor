@@ -51,8 +51,6 @@ int main(int argc, char** argv) {
     srand(time(NULL));
     CCode ccode   = {0};
     ccode.layers  = NULL;
-    
-
 
     int ch;
 

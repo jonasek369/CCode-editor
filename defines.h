@@ -2,8 +2,6 @@
 #define _H_DEFINE
 // Some keys are not define in curses.h or arent right
 #define CUSTOM_KEY_BACKSPACE 8
-
-#define CUSTOM_CTL_BACKSPACE 505 // 127 // 505 for sdl2
 #define CUSTOM_KEY_ENTER 13
 #define CUSTOM_KEY_ESCAPE 27
 #define CUSTOM_CTL_F 6
@@ -16,7 +14,6 @@
 #include <ctype.h>
 #include <stdint.h>
 #include <assert.h>
-#include <math.h>
 #include <ctype.h>
 #include <stdbool.h>
 #include <limits.h>
