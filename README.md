@@ -11,15 +11,20 @@ Currently supports (Python, Json, C, C#) syntax highlighting.
 [tiny_queue](https://github.com/jonasek369/tiny_queue)  
 
 # Running the project
-run ./download_dependencies.sh
-then run ./nob
+Run in terminal  
+`./download_dependencies.sh`
+then  
+`./nob`
 
 
 # Roadmap
 currently working on making LSP Client and implementing it.
 
-latest development:  
-type hints and errors are showing (only A_UNDERLINE and color for now)  
+latest development:
+**type hints and errors are showing (only A_UNDERLINE and color for now)  **
+
 ![Type hints](https://i.imgur.com/70LL4ER.png)  
-tree for browsing files  
+
+**tree for browsing files  **
+
 ![Tree](https://i.imgur.com/TkJbatD.png)
