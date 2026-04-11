@@ -1,7 +1,7 @@
 #define NOB_IMPLEMENTATION
 #include "nob.h"
 
-#define OPTIMISATION 0
+#define OPTIMISATION 1
 
 #define incl "./PDCurses"
 #define lib "./PDCurses/x11"
@@ -57,9 +57,6 @@ int main(int argc, char **argv)
         "-lX11", "-lXext",
         "-Wall", "-Wextra", "-Wno-sign-compare"
     );
-    #if (OPTIMISATION == 1)
-        nob_cmd_append(&cmd, "-O3", "-march=native");
-    #endif
     generate_compile_flags(&cmd);
     if (!nob_cmd_run_sync_and_reset(&cmd)) return 1;
 

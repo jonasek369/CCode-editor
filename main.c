@@ -63,7 +63,7 @@ int main(int argc, char** argv) {
     move(1, 0);
 
     init_syntax_highlighting();
-    init_lsp_handlers();
+    init_lsp_handler();
 
     init_commands();
 
@@ -108,9 +108,10 @@ int main(int argc, char** argv) {
             Layer* top = top_type_layer(&ccode, LAYER_CODE);
             if(top){
                 LayerCodeData* lcd = top->layer_data;
-                if(lcd->completion){
-                    json_free(lcd->completion);
-                    lcd->completion = NULL;
+                if(lcd->completion_window){
+                    json_free(lcd->completion_window->completion);
+                    free(lcd->completion_window);
+                    lcd->completion_window = NULL;
                     continue;
                 }
             }
@@ -186,6 +187,8 @@ int main(int argc, char** argv) {
     destroy_commands();
     destroy_syntax_highlihting();
     destory_lsp_handlers();
+
+    arrfree(installed_lsps);
 
     // Clean up
     endwin();   // End curses mode

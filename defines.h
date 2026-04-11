@@ -14,7 +14,6 @@
 #include <ctype.h>
 #include <stdint.h>
 #include <assert.h>
-#include <ctype.h>
 #include <stdbool.h>
 #include <limits.h>
 #include <tree_sitter/api.h>
@@ -80,7 +79,8 @@ typedef enum {
     LANG_C,
     LANG_JSON,
     LANG_PYTHON,
-    LANG_C_SHARP
+    LANG_C_SHARP,
+    LANG_RUST
 } SyntaxLanguage;
 
 static const bool is_whitespace[256] = {
@@ -123,6 +123,12 @@ typedef struct {
 } FindingSubstr;
 
 typedef struct {
+    JsonValue* completion;
+    size_t selected;
+    size_t items_count;
+} CompletionWindow;
+
+typedef struct {
     bool saved;
     char* filename;
     char** code_buffer;
@@ -139,7 +145,7 @@ typedef struct {
     int version;
     int id;
     JsonValue* diagnostics; // object
-    JsonValue* completion; // array
+    CompletionWindow* completion_window; // array
 } LayerCodeData;
 
 

@@ -755,8 +755,8 @@ LSPRange get_range(JsonValue* diagnostic){
     }
     range.start_character = (int)(shget(start->object, "character")->number);
     range.start_line = (int)(shget(start->object, "line")->number);
-    // seems like its offseted ?
-    range.end_character = ((int)(shget(end->object, "character")->number)) - 1;
+
+    range.end_character = ((int)(shget(end->object, "character")->number));
     range.end_line = (int)(shget(end->object, "line")->number);
 
     return range;

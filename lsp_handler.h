@@ -15,7 +15,8 @@ static LSPResponseHandlerMap* lsp_id_handler = NULL;
 static LSPKind lang_to_lspkind[64];
 static char* lsp_to_cstr_lang[64] = {
     [LSPKIND_CLANGD] = "c",
-    [LSPKIND_PYLSP]   = "python"
+    [LSPKIND_PYLSP]   = "python",
+    [LSPKIND_RUST_ANALYZER] = "rust"
 };
 
 // Quite disgusting but I like it
@@ -28,6 +29,54 @@ do { 			 												 \
     }               											 \
 } while(0) 													     \
 
+JsonValue* make_ccode_initialize_params(const char* root_uri) {
+    JsonValue* params = json_new_object();
+
+    // processId (null is fine)
+    json_add_child(params, "processId", json_new_null());
+
+    // rootUri
+    if (root_uri) {
+        json_add_child(params, "rootUri", json_new_string(root_uri));
+    } else {
+        json_add_child(params, "rootUri", json_new_null());
+    }
+
+    JsonValue* capabilities = json_new_object();
+    JsonValue* textDocument = json_new_object();
+
+    JsonValue* sync = json_new_object();
+    json_add_child(sync, "didOpen", json_new_bool(true));
+    json_add_child(sync, "didChange", json_new_bool(true));
+    json_add_child(sync, "willSave", json_new_bool(false));
+    json_add_child(sync, "didSave", json_new_bool(false));
+    json_add_child(textDocument, "synchronization", sync);
+
+    JsonValue* completion = json_new_object();
+    json_add_child(completion, "dynamicRegistration", json_new_bool(false));
+
+    JsonValue* completionItem = json_new_object();
+    json_add_child(completionItem, "snippetSupport", json_new_bool(true));
+
+    JsonValue* docFormats = json_new_array();
+    json_add_child(docFormats, NULL, json_new_string("markdown"));
+    json_add_child(docFormats, NULL, json_new_string("plaintext"));
+
+    json_add_child(completionItem, "documentationFormat", docFormats);
+    json_add_child(completion, "completionItem", completionItem);
+
+    json_add_child(textDocument, "completion", completion);
+
+    json_add_child(capabilities, "textDocument", textDocument);
+    json_add_child(params, "capabilities", capabilities);
+
+    JsonValue* clientInfo = json_new_object();
+    json_add_child(clientInfo, "name", json_new_string("C-LSP-Client"));
+    json_add_child(clientInfo, "version", json_new_string("0.1.0"));
+    json_add_child(params, "clientInfo", clientInfo);
+
+    return params;
+}
 
 //method: textDocument/publishDiagnostics
 void handle_publishDiagnostics(CCode* ccode, JsonValue* message){
@@ -96,10 +145,19 @@ void handle_completion(CCode* ccode, JsonValue* message){
 	TYPE_CHECK_FIELD(message, result, JSON_OBJECT);
 	TYPE_CHECK_FIELD(result, items, JSON_ARRAY);
 	
-	if(lcd->completion){
-		json_free(lcd->completion);
+	if(lcd->completion_window){
+		json_free(lcd->completion_window->completion);
+		free(lcd->completion_window);
 	}
-	lcd->completion = message;
+	CompletionWindow* win = malloc(sizeof(CompletionWindow));
+	win->completion = message;
+	win->selected = 0;
+	win->items_count = 6;
+	if(arrlenu(items->array) < 6){
+		win->items_count = arrlenu(items->array);
+	} 
+
+	lcd->completion_window = win;
 	return;
 
 defer:
@@ -107,7 +165,7 @@ defer:
 	return;
 }
 
-void init_lsp_handlers(){
+void init_lsp_handler(){
 	shput(lsp_method_handler, "textDocument/publishDiagnostics", handle_publishDiagnostics);
 
 	shput(lsp_id_handler, "completion", handle_completion);
@@ -117,6 +175,9 @@ void init_lsp_handlers(){
 
     lang_to_lspkind[LANG_C] = LSPKIND_CLANGD;
     lang_to_lspkind[LANG_PYTHON] = LSPKIND_PYLSP;
+    lang_to_lspkind[LANG_RUST] = LSPKIND_RUST_ANALYZER;
+
+    get_installed_lsps();
 }
 
 bool is_lspkind_running(CCode* ccode, LSPKind lsp_kind){

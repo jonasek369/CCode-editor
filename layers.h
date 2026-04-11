@@ -64,7 +64,7 @@ Layer* new_layer_code(){
     lcd->version = 1;
     lcd->id = random_id();
     lcd->diagnostics = NULL;
-    lcd->completion = NULL;
+    lcd->completion_window = NULL;
 
     return code;
 }
@@ -281,6 +281,8 @@ SyntaxLanguage get_language_from_suffix(const char* filename) {
         return LANG_PYTHON;
     } else if (suffix_len == 2 && strncmp(suffix, "cs", 2) == 0) {
         return LANG_C_SHARP;
+    } else if(suffix_len == 2 && strncmp(suffix, "rs", 2) == 0){
+        return LANG_RUST;
     }
     return LANG_UNKNOWN;
 }
@@ -309,13 +311,12 @@ void make_parser(CCode* ccode, char* filename){
         return;
     }
     LayerCodeData* lcd = layer->layer_data;
-    const TSLanguage* lang = get_filetype_language_parser(filename, &(lcd->lang));
-    if(!lang){
-        lcd->lang = LANG_UNKNOWN;
+    const TSLanguage* parser = get_filetype_language_parser(filename, &(lcd->lang));
+    if(!parser){
         return;
     }
     lcd->parser = ts_parser_new();
-    if(!ts_parser_set_language(lcd->parser, lang)){
+    if(!ts_parser_set_language(lcd->parser, parser)){
         ts_parser_delete(lcd->parser);
         lcd->parser = NULL;
         fprintf(stderr, "Language version mismatch\n");
@@ -416,9 +417,8 @@ void read_file_to_code_layer(CCode* ccode, const char* filename_start, size_t si
     push_layer_to_top(ccode, file_layer);
     make_parser(ccode, filename.items);
     LSPKind lsp_kind = lang_to_lspkind[lcd->lang];
-
-    if(lsp_kind != LSPKIND_UNKNOWN && is_lspkind_running(ccode, lsp_kind) == false){
-        LSPContext* ctx = start_lsp(lsp_kind);
+    if(lsp_kind != LSPKIND_UNKNOWN && is_lspkind_installed(lsp_kind) && is_lspkind_running(ccode, lsp_kind) == false){
+        LSPContext* ctx = start_lsp(lsp_kind, make_ccode_initialize_params(lcd->uri));
         arrput(ccode->lsp_ctxs, ctx);
     }
     if(is_lspkind_running(ccode, lsp_kind)){
@@ -511,7 +511,6 @@ void write_code_layer_to_file(CCode* ccode){
         lcd->saved = true;
     }
 
-    // LSP: send textDocument/didChange
     if(is_lspkind_running(ccode, lang_to_lspkind[lcd->lang])){
         send_to_lsp(ccode, get_running_lsp(ccode, lang_to_lspkind[lcd->lang]));
     }
@@ -525,6 +524,99 @@ void write_code_layer_to_file(CCode* ccode){
     Console Commands
 
 */
+
+#define TS_REPARSE(code_data)                                                        \
+    do {                                                                             \
+        if((code_data)->parser && (code_data)->tree){                                \
+            char *src = flatten_buffer(code_data);                                   \
+            TSTree *new_tree = ts_parser_parse_string(                               \
+                (code_data)->parser, (code_data)->tree, src, strlen(src));           \
+            free(src);                                                               \
+            ts_tree_delete((code_data)->tree);                                       \
+            (code_data)->tree = new_tree;                                            \
+        }                                                                            \
+    } while(0)
+
+
+bool do_completion(CCode* ccode){
+    Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
+    // No code layer to save
+    if(top_code_layer == NULL){
+        return false;
+    }
+    LayerCodeData* lcd = (LayerCodeData*) top_code_layer->layer_data;
+    if(!lcd->completion_window){
+        return false;
+    }
+    JsonValue* result = shget(lcd->completion_window->completion->object, "result");
+    JsonValue* items = shget(result->object, "items");
+    JsonValue* to_add = items->array[lcd->completion_window->selected];
+    JsonValue* text_edit = shget(to_add->object, "textEdit");
+    if(text_edit == NULL){
+        // TODO: For example pylsp does not give textEdit. Support that
+        return false;
+    }
+    LSPRange range = get_range(text_edit);
+    JsonValue* new_text = shget(text_edit->object, "newText");
+
+    char* line = lcd->code_buffer[lcd->cursor->y];
+    int line_len = arrlen(line);
+        
+    if(lcd->cursor->x > line_len - 1){
+        lcd->cursor->x = line_len - 1;
+    }
+    size_t start_char = range.start_character;
+    size_t i = 0;
+
+    (void)arrpop(line);
+    (void)arrpop(line);
+
+    int row = lcd->cursor->y;
+
+    while(new_text->string[i]){
+        if(start_char < range.end_character && line_len-1 > start_char){
+            line[start_char] = new_text->string[i];
+            lcd->cursor->x--;
+        }else{
+            arrins(line, start_char, new_text->string[i]);
+        }
+        i++;
+        start_char++;
+        lcd->cursor->x++;
+    }
+
+    arrput(line, '\n');
+    arrput(line, '\0');
+
+    lcd->code_buffer[lcd->cursor->y] = line;
+
+    if(lcd->parser && lcd->tree){
+        size_t start_col   = range.start_character;
+        size_t old_end_col = range.end_character;
+        size_t new_end_col = range.start_character + strlen(new_text->string);
+    
+        TSInputEdit edit = {
+            .start_byte    = buffer_byte_offset(lcd, row, start_col),
+            .old_end_byte  = buffer_byte_offset(lcd, row, old_end_col),
+            .new_end_byte  = buffer_byte_offset(lcd, row, new_end_col),
+            .start_point   = {row, start_col},
+            .old_end_point = {row, old_end_col},
+            .new_end_point = {row, new_end_col},
+        };
+        ts_tree_edit(lcd->tree, &edit);
+    }
+    TS_REPARSE(lcd);
+
+    // free window
+    json_free(lcd->completion_window->completion);
+    free(lcd->completion_window);
+    lcd->completion_window = NULL;
+
+    if(is_lspkind_running(ccode, lang_to_lspkind[lcd->lang])){
+        send_to_lsp(ccode, get_running_lsp(ccode, lang_to_lspkind[lcd->lang]));
+    }
+    return true;
+}
 
 char* layertype_to_str(LayerType lt){
     if(lt == LAYER_CODE){
@@ -604,7 +696,6 @@ void free_layer(Layer* layer){
     }
     free(layer);
 }
-
 
 
 void close_code_layer(CCode* ccode, bool forced){
@@ -1044,18 +1135,6 @@ void console_execute_command(CCode* ccode, const char* buffer){
 
 */
 
-#define TS_REPARSE(code_data)                                                        \
-    do {                                                                             \
-        if((code_data)->parser && (code_data)->tree){                                \
-            char *src = flatten_buffer(code_data);                                   \
-            TSTree *new_tree = ts_parser_parse_string(                               \
-                (code_data)->parser, (code_data)->tree, src, strlen(src));           \
-            free(src);                                                               \
-            ts_tree_delete((code_data)->tree);                                       \
-            (code_data)->tree = new_tree;                                            \
-        }                                                                            \
-    } while(0)
-
 
 void layer_code_update(CCode* ccode, Layer* layer, int chr){
     if(!ccode || !layer || layer->type != LAYER_CODE || layer->layer_data == NULL){
@@ -1106,8 +1185,14 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
     }
 
     if(chr == 9){
-        for(size_t i = 0; i < TAB_SIZE; i++){
-            layer_code_update(ccode, layer, ' ');
+        if(code_data->completion_window){
+            if(do_completion(ccode)){
+                chr = -1;
+            }
+        }else{
+            for(size_t i = 0; i < TAB_SIZE; i++){
+                layer_code_update(ccode, layer, ' ');
+            }            
         }
     }
 
@@ -1140,7 +1225,6 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
     }
 
 
-
     if((chr >= 0 && chr <= 255) && isprint(chr)){
         char* line = code_data->code_buffer[code_data->cursor->y];
         int line_len = arrlen(line);
@@ -1148,7 +1232,7 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
         if(code_data->cursor->x > line_len - 1){
             code_data->cursor->x = line_len - 1;
         }
-        
+
         if(line_len > 0){
             (void) arrpop(line);
         }
@@ -1261,8 +1345,12 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
         code_data->saved = false;
     }
 
-
-    else if(chr == CUSTOM_KEY_ENTER){
+    else if(chr == CUSTOM_KEY_ENTER && code_data->completion_window){
+        if(do_completion(ccode)){
+            chr = -1;
+        }
+    }
+    else if(chr == CUSTOM_KEY_ENTER && !code_data->completion_window){
         char* current_line = code_data->code_buffer[code_data->cursor->y];
         int line_len = arrlen(current_line);
         
@@ -1312,6 +1400,17 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
         TS_REPARSE(code_data);
     }
 
+
+    else if(!inFindSubstrMode && (chr == KEY_DOWN || chr == KEY_UP) && code_data->completion_window){
+        if(chr == KEY_DOWN && code_data->completion_window->selected < code_data->completion_window->items_count){
+            code_data->completion_window->selected++;
+            chr = -1;
+        }
+        if(chr == KEY_UP && code_data->completion_window->selected > 0){
+            code_data->completion_window->selected--;
+            chr = -1;
+        }
+    }
     else if(!inFindSubstrMode && chr >= KEY_DOWN && chr <= KEY_RIGHT){
         switch(chr){
             case KEY_DOWN: {
@@ -1520,23 +1619,32 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
         printf("\n");
     }
 
-    bool is_file_edit = (isprint(chr) ||
-          chr == CUSTOM_KEY_BACKSPACE ||
-          chr ==     CUSTOM_KEY_ENTER ||
-          chr == CTL_BKSP);
+    bool is_file_edit = isprint(chr) ||
+                        chr == CUSTOM_KEY_BACKSPACE ||
+                        chr == CUSTOM_KEY_ENTER ||
+                        chr == CTL_BKSP;
+    
+    bool is_printable = isprint(chr);
 
-    // LSP: Currently sending whole file. Make incremental
     LSPKind lsp_kind = lang_to_lspkind[code_data->lang];
-    if(is_lspkind_running(ccode, lsp_kind) && is_file_edit){
-        LSPContext* ctx = get_running_lsp(ccode, lsp_kind);
-        send_to_lsp(ccode, ctx);
-        get_completion(ccode, ctx);
+    bool lsp_running = is_lspkind_running(ccode, lsp_kind);
+    
+    if(is_file_edit && lsp_running){
+        send_to_lsp(ccode, get_running_lsp(ccode, lsp_kind));
     }
-
-    if(!is_file_edit && chr != -1 && code_data->completion){
-        printf("clean!\n");
-        json_free(code_data->completion);
-        code_data->completion = NULL;
+    
+    if(code_data->completion_window){
+        bool line_empty = arrlenu(code_data->code_buffer[code_data->cursor->y]) <= 2;
+        if(chr != -1 && (!is_printable || line_empty || chr == CUSTOM_KEY_ENTER)){
+            json_free(code_data->completion_window->completion);
+            free(code_data->completion_window);
+            code_data->completion_window = NULL;
+        }
+    }
+    
+    if(is_printable && lsp_running){
+        LSPContext* ctx = get_running_lsp(ccode, lsp_kind);
+        get_completion(ccode, ctx);
     }
 
 
@@ -1568,39 +1676,62 @@ void layer_code_render(CCode* ccode, Layer* layer) {
     // Renders syntax highlighting or plain text if no parser is present
     apply_tree_sitter_syntax_highlighting(code_data, code_data->lang);
 
-    if(!code_data->completion){
+    if(!code_data->completion_window){
         return;
     }
 
     int y, x;
-    (void)x;
     getmaxyx(stdscr, y, x); 
-
     int cursor_screen_y = code_data->cursor->y - code_data->cursor->yoff + 1;
     int cursor_screen_x = code_data->cursor->x - code_data->cursor->xoff;
-
-    JsonValue* result = shget(code_data->completion->object, "result");
+    JsonValue* result = shget(code_data->completion_window->completion->object, "result");
     JsonValue* items = shget(result->object, "items");
-
+    
     size_t max_len = 0;
-
     for(size_t i = 0; i < arrlenu(items->array); i++){
-        if(i >= 6 || cursor_screen_y+(i+1) > y) break;
+        if(i > code_data->completion_window->items_count || cursor_screen_y+(i+1) > y) break;
         JsonValue* comp = items->array[i];
-        JsonValue* text = shget(comp->object, "insertText");
-        size_t len = strlen(text->string);
-        if(len > max_len) 
-            max_len = len;
+        JsonValue* text = shget(comp->object, "label");
+        
+        char* display_str = text->string;
+        if(strlen(display_str) > 1 && (display_str[0] == ' ' || utf8_char_len(display_str[0]) != 1)){
+            display_str += utf8_char_len(display_str[0]);
+        }
+        size_t len = strlen(display_str);
+        
+        if(len > max_len){
+            int available = x - cursor_screen_x;
+            if(available < 0) available = 0;
+            max_len = (len > (size_t)available) ? (size_t)available : len;
+        }
     }
-    const char *padding="                                                                       ";
-
+    
+    const char *padding = "                                                                                                                                                                                                  ";
     attron(COLOR_PAIR(COLOR_PAIR_COMPLETION));
     for(size_t i = 0; i < arrlenu(items->array); i++){
-        if(i >= 6 || cursor_screen_y+(i+1) > y) break;
+        if(i > code_data->completion_window->items_count || cursor_screen_y+(i+1) > y) break;
+        if(i == code_data->completion_window->selected){
+            attron(A_REVERSE);
+        }
+    
         JsonValue* comp = items->array[i];
-        JsonValue* text = shget(comp->object, "insertText");
-        size_t padLen = max_len - strlen(text->string);
-        mvprintw(cursor_screen_y+(i+1), cursor_screen_x, "%s%*.*s", text->string, padLen, padLen, padding);
+        JsonValue* text = shget(comp->object, "label");
+        char* display_str = text->string;
+        if(strlen(display_str) > 1 && (display_str[0] == ' ' || utf8_char_len(display_str[0]) != 1)){
+            display_str += utf8_char_len(display_str[0]);
+        }
+    
+        size_t display_len = strlen(display_str);
+        size_t print_len = (display_len < max_len) ? display_len : max_len;
+        size_t padLen = max_len - print_len;
+    
+        mvprintw(cursor_screen_y+(i+1), cursor_screen_x,
+                 "%.*s%*.*s", (int)print_len, display_str,
+                 (int)padLen, (int)padLen, padding);
+    
+        if(i == code_data->completion_window->selected){
+            attroff(A_REVERSE);
+        }
     }
     attroff(COLOR_PAIR(COLOR_PAIR_COMPLETION));
     
@@ -1683,6 +1814,7 @@ void layer_console_render(CCode* ccode, Layer* layer){
     // move(y-1, console_data->console_buffer_x);
     // refresh();
 }
+
 
 Nob_File_Type dir_walk_get_file_type(char* current_dir, char* filename){
     Nob_File_Type file_type = nob_get_file_type(nob_temp_sprintf("%s/%s", current_dir, filename));
