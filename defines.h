@@ -116,6 +116,13 @@ typedef struct {
     int yoff;
 } Cursor;
 
+typedef struct {
+    int start_character;
+    int start_line;
+
+    int end_character;
+    int end_line;
+} LSPRange;
 
 typedef struct {
     char* substr;
@@ -145,6 +152,7 @@ typedef struct {
     int version;
     int id;
     JsonValue* diagnostics; // object
+    LSPRange** ranges;
     CompletionWindow* completion_window; // array
 } LayerCodeData;
 

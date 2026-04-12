@@ -27,7 +27,7 @@ int main(int argc, char **argv)
     size_t count = sizeof(files)/sizeof(files[0]);
 
     Nob_Cmd cmd = {0};
-
+    Procs procs = {0};
     for (size_t i = 0; i < count; i++) {
         if (nob_needs_rebuild1(files[i].obj, files[i].src)) {
             nob_cmd_append(&cmd,
@@ -40,9 +40,11 @@ int main(int argc, char **argv)
                 "-o", files[i].obj
             );
 
-            if (!nob_cmd_run_sync_and_reset(&cmd)) return 1;
+            if (!cmd_run(&cmd, .async = &procs)) return 1;
         }
     }
+
+    if(!procs_flush(&procs)) return 1;
 
     bool rebuild_lib = false;
     for (size_t i = 0; i < count; i++) {

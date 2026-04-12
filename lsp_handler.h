@@ -107,7 +107,21 @@ void handle_publishDiagnostics(CCode* ccode, JsonValue* message){
 			if(lcd->diagnostics != NULL){
 				json_free(lcd->diagnostics);
 			}
+			if(lcd->ranges){
+				for(size_t i = 0; i < arrlenu(lcd->ranges); i++){
+					if(lcd->ranges[i])
+						free(lcd->ranges[i]);
+				}
+				arrfree(lcd->ranges);
+				lcd->ranges = NULL;
+			}
 			lcd->diagnostics = message;
+			JsonValue* params = shget(lcd->diagnostics->object, "params");
+            JsonValue* diags  = shget(params->object, "diagnostics");
+			arrsetlen(lcd->ranges, arrlenu(diags->array));
+			for(size_t i = 0; i < arrlenu(lcd->ranges); i++){
+				lcd->ranges[i] = NULL;
+			}
 			return;
 		}
 	}else{
@@ -115,7 +129,21 @@ void handle_publishDiagnostics(CCode* ccode, JsonValue* message){
 			if(lcd->diagnostics != NULL){
 				json_free(lcd->diagnostics);
 			}
+			if(lcd->ranges){
+				for(size_t i = 0; i < arrlenu(lcd->ranges); i++){
+					if(lcd->ranges[i])
+						free(lcd->ranges[i]);
+				}
+				arrfree(lcd->ranges);
+				lcd->ranges = NULL;
+			}
 			lcd->diagnostics = message;
+			JsonValue* params = shget(lcd->diagnostics->object, "params");
+            JsonValue* diags  = shget(params->object, "diagnostics");
+			arrsetlen(lcd->ranges, arrlenu(diags->array));
+			for(size_t i = 0; i < arrlenu(lcd->ranges); i++){
+				lcd->ranges[i] = NULL;
+			}
 			return;
 		}
 	}

@@ -64,6 +64,7 @@ Layer* new_layer_code(){
     lcd->version = 1;
     lcd->id = random_id();
     lcd->diagnostics = NULL;
+    lcd->ranges = NULL;
     lcd->completion_window = NULL;
 
     return code;
@@ -556,7 +557,7 @@ bool do_completion(CCode* ccode){
         // TODO: For example pylsp does not give textEdit. Support that
         return false;
     }
-    LSPRange range = get_range(text_edit);
+    LSPRange* range = get_range(text_edit);
     JsonValue* new_text = shget(text_edit->object, "newText");
 
     char* line = lcd->code_buffer[lcd->cursor->y];
@@ -565,7 +566,7 @@ bool do_completion(CCode* ccode){
     if(lcd->cursor->x > line_len - 1){
         lcd->cursor->x = line_len - 1;
     }
-    size_t start_char = range.start_character;
+    size_t start_char = range->start_character;
     size_t i = 0;
 
     (void)arrpop(line);
@@ -574,7 +575,7 @@ bool do_completion(CCode* ccode){
     int row = lcd->cursor->y;
 
     while(new_text->string[i]){
-        if(start_char < range.end_character && line_len-1 > start_char){
+        if(start_char < range->end_character && line_len-1 > start_char){
             line[start_char] = new_text->string[i];
             lcd->cursor->x--;
         }else{
@@ -591,9 +592,9 @@ bool do_completion(CCode* ccode){
     lcd->code_buffer[lcd->cursor->y] = line;
 
     if(lcd->parser && lcd->tree){
-        size_t start_col   = range.start_character;
-        size_t old_end_col = range.end_character;
-        size_t new_end_col = range.start_character + strlen(new_text->string);
+        size_t start_col   = range->start_character;
+        size_t old_end_col = range->end_character;
+        size_t new_end_col = range->start_character + strlen(new_text->string);
     
         TSInputEdit edit = {
             .start_byte    = buffer_byte_offset(lcd, row, start_col),
@@ -615,6 +616,7 @@ bool do_completion(CCode* ccode){
     if(is_lspkind_running(ccode, lang_to_lspkind[lcd->lang])){
         send_to_lsp(ccode, get_running_lsp(ccode, lang_to_lspkind[lcd->lang]));
     }
+    free(range);
     return true;
 }
 
@@ -668,6 +670,14 @@ void free_layer(Layer* layer){
             }
             if(lcd->diagnostics){
                 json_free(lcd->diagnostics);
+            }
+            if(lcd->ranges){
+                for(size_t i = 0; i < arrlenu(lcd->ranges); i++){
+                    if(lcd->ranges[i])
+                        free(lcd->ranges[i]);
+                }
+                arrfree(lcd->ranges);
+                lcd->ranges = NULL;
             }
             free(lcd);
         }
@@ -865,7 +875,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
         return;
     }
     if (arrlen(to.tokens) < 1 || to.tokens[0].type != TOKEN_COMMAND) {
-        return;
+        goto defer;
     }
 
     switch (to.tokens[0].command_type) {
@@ -932,7 +942,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
 
                 if(output == NULL){
                     arrfree(command);
-                    return;
+                    goto defer;
                 }
             
                 if (arrlen(output) > 1) {
@@ -1069,13 +1079,13 @@ void console_execute_command(CCode* ccode, const char* buffer){
 
         case COMMAND_TREE_CHANGE_DIR: {
             if(arrlen(to.tokens) <= 1){
-                return;
+                goto defer;
             }
 
             Layer* top_tree_layer = top_type_layer(ccode, LAYER_DIR_WALK);
             if(top_tree_layer == NULL){
                 message_to_console(ccode, "Cannot change directory outside tree");
-                return;
+                goto defer;
             }
 
             LayerDirWalkData* ldwd = top_tree_layer->layer_data;
@@ -1089,7 +1099,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
                     if(resolve_path(new_dir, resolved_path) == NULL){
                         free(as_str);
                         nob_temp_reset();
-                        return;
+                        goto defer;
                     }
                     change_tree_path(top_tree_layer, str_to_arr(resolved_path));
                     nob_temp_reset();
@@ -1097,7 +1107,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
                     // change to absolute path
                     if(!nob_file_exists(as_str)){
                         message_to_console(ccode, "invalid path");
-                        return;
+                        
                     }
                     change_tree_path(top_tree_layer, str_to_arr(as_str));
                 }
@@ -1122,7 +1132,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
             printf("  %d N=%d\n", to.tokens[i].type, to.tokens[i].integer);
         }
     }
-
+defer:
     arrfree(to.tokens);
     free(to.string_storage);
 }

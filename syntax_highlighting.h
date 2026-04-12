@@ -726,21 +726,14 @@ void destroy_syntax_highlihting(){
     shfree(c_type_map);
 }
 
-typedef struct {
-    int start_character;
-    int start_line;
 
-    int end_character;
-    int end_line;
-} LSPRange;
+LSPRange* get_range(JsonValue* diagnostic){
+    LSPRange* range = malloc(sizeof(LSPRange));
+    range->start_character = -1;
+    range->start_line = -1;
 
-LSPRange get_range(JsonValue* diagnostic){
-    LSPRange range = {0};
-    range.start_character = -1;
-    range.start_line = -1;
-
-    range.end_character = -1;
-    range.end_line = -1;
+    range->end_character = -1;
+    range->end_line = -1;
 
     JsonValue* range_json = shget(diagnostic->object, "range");
     if(!range_json){
@@ -753,11 +746,11 @@ LSPRange get_range(JsonValue* diagnostic){
         printf("Diagnostic does not have start or end!\n");
         return range;
     }
-    range.start_character = (int)(shget(start->object, "character")->number);
-    range.start_line = (int)(shget(start->object, "line")->number);
+    range->start_character = (int)(shget(start->object, "character")->number);
+    range->start_line = (int)(shget(start->object, "line")->number);
 
-    range.end_character = ((int)(shget(end->object, "character")->number));
-    range.end_line = (int)(shget(end->object, "line")->number);
+    range->end_character = ((int)(shget(end->object, "character")->number));
+    range->end_line = (int)(shget(end->object, "line")->number);
 
     return range;
 }
@@ -879,15 +872,19 @@ void apply_tree_sitter_syntax_highlighting(LayerCodeData* lcd, SyntaxLanguage la
                 JsonValue* params = shget(lcd->diagnostics->object, "params");
                 JsonValue* diags  = shget(params->object, "diagnostics");
                 for (size_t i = 0; i < arrlenu(diags->array); i++) {
-                    LSPRange range = get_range(diags->array[i]);
+                    LSPRange* range = lcd->ranges[i];
+                    if(range == NULL){
+                        lcd->ranges[i] = get_range(diags->array[i]);
+                        range = lcd->ranges[i];
+                    }
 
-                    if (br < range.start_line || br > range.end_line)
+                    if (br < range->start_line || br > range->end_line)
                         continue;
 
                     int run_bc_start = sc  + xoff;
                     int run_bc_end   = run_end - 1 + xoff;
-                    int col_start = (br == range.start_line) ? range.start_character : 0;
-                    int col_end   = (br == range.end_line)   ? range.end_character   : INT_MAX;
+                    int col_start = (br == range->start_line) ? range->start_character : 0;
+                    int col_end   = (br == range->end_line)   ? range->end_character   : INT_MAX;
                     if (run_bc_end >= col_start && run_bc_start <= col_end) {
                         diag_color = get_diagnostic_color(diags->array[i]);
                         break;
