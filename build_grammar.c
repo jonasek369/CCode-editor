@@ -1,5 +1,5 @@
 #define NOB_IMPLEMENTATION
-#include "../thirdparty/nob.h"
+#include "nob.h"
 
 #define BUILD_DIR "./build"
 #define LIB_NAME  BUILD_DIR"/libtslangs.a"

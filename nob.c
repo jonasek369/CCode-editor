@@ -1,7 +1,7 @@
 #define NOB_IMPLEMENTATION
 #include "nob.h"
 
-#define OPTIMISATION 0
+#define OPTIMISATION 1
 
 #define incl "./PDCurses"
 #define lib "./PDCurses/x11"
@@ -47,7 +47,7 @@ int main(int argc, char **argv)
         "-L", "./tree-sitter",
         "-Wl,-rpath=./PDCurses/x11",
         "-Wl,-rpath=./tree-sitter",
-        "-o", "main", "main.c", "../tiny_queue/tiny_queue.c",
+        "-o", "main", "main.c", "./tiny_queue/tiny_queue.c",
     #if(OPTIMISATION == 1)
         "-O3", "-march=native",
     #endif
