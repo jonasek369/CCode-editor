@@ -421,6 +421,7 @@ void read_file_to_code_layer(CCode* ccode, const char* filename_start, size_t si
     if(lsp_kind != LSPKIND_UNKNOWN && is_lspkind_installed(lsp_kind) && is_lspkind_running(ccode, lsp_kind) == false){
         LSPContext* ctx = start_lsp(lsp_kind, make_ccode_initialize_params(lcd->uri));
         arrput(ccode->lsp_ctxs, ctx);
+        printf("Started LSP %s\n", lsp_kind_cstr[lsp_kind]);
     }
     if(is_lspkind_running(ccode, lsp_kind)){
         LSPContext* ctx = get_running_lsp(ccode, lsp_kind);
@@ -1144,6 +1145,12 @@ defer:
     Layer character handling
 
 */
+
+
+void test(int* something){
+    printf("%d", *something);
+    return;
+} 
 
 
 void layer_code_update(CCode* ccode, Layer* layer, int chr){
@@ -2058,12 +2065,12 @@ void draw_ui(CCode* ccode) {
         for (int i = 0; i < num_layers; i++) {
             LayerCodeData* lcd = (LayerCodeData*) code_layers[i]->layer_data;
             const char* file_name = lcd->filename;
-            if (strlen(lcd->filename) > cells_per_layer - 1){
+            if (strlen(lcd->filename) > 16){
                 file_name = nob_path_name(lcd->filename);
             }
     
             char label[32];
-            snprintf(label, sizeof(label), "%s%s", file_name, lcd->saved ? "" : "*");
+            snprintf(label, sizeof(label), "[%d] %s%s", i+1, file_name, lcd->saved ? "" : "*");
     
             int label_len = strlen(label);
             if (label_len > cells_per_layer - 1) {

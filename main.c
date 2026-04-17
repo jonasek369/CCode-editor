@@ -7,7 +7,6 @@
 
 */
 
-
 void print_layers(CCode* ccode){
     printf("Layers:\n");
     for(size_t i = 0; i < arrlenu(ccode->layers); i++){
@@ -74,11 +73,13 @@ int main(int argc, char** argv) {
 
     while(RUNNING) {
         ch = getch();
+
         /*
         if(ch != -1){
             printf("%d\n", ch);
         }
         */
+
         // handle LSPs if some are active
         if(ccode.lsp_ctxs){
             for(size_t i = 0; i < arrlenu(ccode.lsp_ctxs); i++){
@@ -100,6 +101,19 @@ int main(int argc, char** argv) {
             }
             push_layer_to_top(&ccode, next);
             push_layer_to_bot(&ccode, top);
+        }
+        // 64 Reserved
+        if(ch >= KEY_F0 && ch <= KEY_F0+64 && top_layer(&ccode)->type != LAYER_CONSOLE){
+            int index = (ch-KEY_F0)-1;
+            Layer** code_layers = all_type_layers(&ccode, LAYER_CODE);
+            if(arrlen(code_layers) <= index){
+                arrfree(code_layers);
+            }else{
+                Layer* layer = code_layers[index];
+                remove_layer(&ccode, layer);
+                push_layer_to_top(&ccode, layer);
+                arrfree(code_layers);
+            }
         }
         // Console switching
         if(ch == CUSTOM_KEY_ESCAPE || CLOSE_CONSOLE){
@@ -184,7 +198,7 @@ int main(int argc, char** argv) {
     free_ccode(&ccode);
 
     destroy_commands();
-    destroy_syntax_highlihting();
+    destroy_syntax_highlighting();
     destory_lsp_handlers();
 
     arrfree(installed_lsps);

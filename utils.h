@@ -111,18 +111,21 @@ char* str_to_lower(char* str){
     return str;
 }
 
-int pstrcmp( const void* a, const void* b ){
-    // This is really inefficient but given it should be called only when loading
-    // directory and not in any tight loop it should be fine enough
+int pstrcmp(const void* a, const void* b) {
+    const char* s1 = *(const char**)a;
+    const char* s2 = *(const char**)b;
 
-    // TODO: Use stack instead of heap
-    char* lower_a = str_to_lower(strdup((*(const char**)a)));
-    char* lower_b = str_to_lower(strdup((*(const char**)b)));
+    while (*s1 && *s2) {
+        int c1 = tolower((unsigned char)*s1);
+        int c2 = tolower((unsigned char)*s2);
 
-    int res = strcmp(lower_a, lower_b);
-    free(lower_a);
-    free(lower_b);
-    return res;
+        if (c1 != c2)
+            return c1 - c2;
+
+        s1++;
+        s2++;
+    }
+
+    return tolower((unsigned char)*s1) - tolower((unsigned char)*s2);
 }
-
 #endif

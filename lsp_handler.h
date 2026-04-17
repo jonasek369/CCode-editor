@@ -18,6 +18,11 @@ static char* lsp_to_cstr_lang[64] = {
     [LSPKIND_PYLSP]   = "python",
     [LSPKIND_RUST_ANALYZER] = "rust"
 };
+static char* lsp_kind_cstr[64] = {
+	[LSPKIND_CLANGD] = "CLANGD",
+    [LSPKIND_PYLSP]   = "PYLSP",
+    [LSPKIND_RUST_ANALYZER] = "RUST-ANALYZER"
+};
 
 // Quite disgusting but I like it
 #define TYPE_CHECK_FIELD(obj, key, expected_type) 				 \

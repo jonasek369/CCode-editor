@@ -49,7 +49,7 @@ int main(int argc, char **argv)
         "-Wl,-rpath=./tree-sitter",
         "-o", "main", "main.c", "./tiny_queue/tiny_queue.c",
     #if(OPTIMISATION == 1)
-        "-O3", "-march=native",
+        "-O3", "-march=native", "-mtune=native",
     #endif
         "./tree-sitter/libtree-sitter.a",
         "./build/libtslangs.a",
