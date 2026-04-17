@@ -1628,6 +1628,10 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
         }
         printf("\n");
     }
+    /* Temp shortcut for tree CTRL + T*/
+    else if(!inFindSubstrMode && chr == 20) {
+        console_execute_command(ccode, ":tree");
+    }
 
     bool is_file_edit = isprint(chr) ||
                         chr == CUSTOM_KEY_BACKSPACE ||
@@ -1844,11 +1848,14 @@ int load_dir(LayerDirWalkData* ldwd){
     if(!status){
         return -1;
     }
+    if(paths.count > 0){
+        qsort(paths.items, paths.count, sizeof(char*), pstrcmp);
+    }
     char** add_to_top = NULL;
     for(size_t i = 0; i < paths.count; i++){
         // Noticed that on some implementation .. and . arent on top of the directory
         // so were skipping them and adding .. later to top
-        if(strncmp(paths.items[i], ".", 1) == 0 || strncmp(paths.items[i], "..", 2) == 0){
+        if(strlen(paths.items[i]) <= 2 && (strncmp(paths.items[i], ".", 1) == 0 || strncmp(paths.items[i], "..", 2) == 0)){
             continue;
         }
         char* arr = str_to_arr(paths.items[i]); // convert from c string to arr of chars ending with null
@@ -1869,6 +1876,7 @@ int load_dir(LayerDirWalkData* ldwd){
     arrput(go_back_dir, '\0');
 
     arrins(ldwd->current_dir_files, 0, go_back_dir);
+
     arrfree(add_to_top);
     free(paths.items);
     return 0;

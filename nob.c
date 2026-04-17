@@ -1,7 +1,7 @@
 #define NOB_IMPLEMENTATION
 #include "nob.h"
 
-#define OPTIMISATION 1
+#define OPTIMISATION 0
 
 #define incl "./PDCurses"
 #define lib "./PDCurses/x11"

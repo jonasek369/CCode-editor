@@ -153,7 +153,7 @@ typedef struct {
     int id;
     JsonValue* diagnostics; // object
     LSPRange** ranges;
-    CompletionWindow* completion_window; // array
+    CompletionWindow* completion_window;
 } LayerCodeData;
 
 

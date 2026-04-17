@@ -44,7 +44,7 @@ char* resolve_path(const char *path, char *out){
 }
 
 #ifdef __linux__
-void itoa(int num, char *str, int base) {
+    void itoa(int num, char *str, int base) {
     (void) base;
     int i = 0;
     int isNegative = 0;
@@ -79,8 +79,7 @@ void itoa(int num, char *str, int base) {
         start++;
         end--;
     }
-}
-
+    }
 #endif
 
 int32_t atoin(const char *str, int n) {
@@ -104,6 +103,26 @@ int32_t atoin(const char *str, int n) {
 
 int random_id(){
     return (int)((rand()/RAND_MAX)*INT_MAX);
+}
+
+
+char* str_to_lower(char* str){
+    for (char* p = str; *p; ++p) *p = tolower(*p);
+    return str;
+}
+
+int pstrcmp( const void* a, const void* b ){
+    // This is really inefficient but given it should be called only when loading
+    // directory and not in any tight loop it should be fine enough
+
+    // TODO: Use stack instead of heap
+    char* lower_a = str_to_lower(strdup((*(const char**)a)));
+    char* lower_b = str_to_lower(strdup((*(const char**)b)));
+
+    int res = strcmp(lower_a, lower_b);
+    free(lower_a);
+    free(lower_b);
+    return res;
 }
 
 #endif
