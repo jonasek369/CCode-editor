@@ -207,7 +207,7 @@ void save_config(CCodeConfig* config){
     char* out = NULL;
     json_dump(json_config, &out);
     arrput(out, NULL);
-    bool saved = nob_write_entire_file("config.json", out, arrlen(out));
+    bool saved = nob_write_entire_file("config.json", out, arrlen(out)-1);
     if(!saved){
         printf("failed to save config!\n");
     }

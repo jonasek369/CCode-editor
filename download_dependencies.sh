@@ -71,8 +71,8 @@ languages=(
 )
 
 # nob.h and stb_ds.h are stable wont really need to change
-[ -f stb_ds.h ] || wget https://raw.githubusercontent.com/nothings/stb/refs/heads/master/stb_ds.h -O stb_ds.h
-[ -f nob.h ] || wget https://raw.githubusercontent.com/tsoding/nob.h/refs/heads/main/nob.h -O nob.h
+wget https://raw.githubusercontent.com/nothings/stb/refs/heads/master/stb_ds.h -O stb_ds.h
+wget https://raw.githubusercontent.com/tsoding/nob.h/refs/heads/main/nob.h -O nob.h
 wget https://raw.githubusercontent.com/jonasek369/C-LSP-Client/refs/heads/main/LSP.h -O LSP.h
 wget https://raw.githubusercontent.com/jonasek369/C-JSON/refs/heads/main/parser.h -O parser.h
 clone_repo_if_needed "https://github.com/jonasek369/tiny_queue" "tiny_queue"
