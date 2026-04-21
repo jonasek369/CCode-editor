@@ -2,6 +2,7 @@
 #include "nob.h"
 
 #define OPTIMISATION 0
+#define COMPILE_PROFILING  1
 
 #define incl "./PDCurses"
 #define lib "./PDCurses/x11"
@@ -50,6 +51,9 @@ int main(int argc, char **argv)
         "-o", "main", "main.c", "./tiny_queue/tiny_queue.c",
     #if(OPTIMISATION == 1)
         "-O3", "-march=native", "-mtune=native",
+    #endif
+    #if(COMPILE_PROFILING == 1)
+        "-DCOMPILE_PROFILING=1",
     #endif
         "./tree-sitter/libtree-sitter.a",
         "./build/libtslangs.a",

@@ -1,0 +1,34 @@
+{
+    "background": {"r": 130, "g": 110, "b": 90},
+    "colors": [
+        { "name": "black",      "r": 130, "g": 110, "b": 90  },
+        { "name": "white",      "r": 800, "g": 780, "b": 700 },
+        { "name": "red",        "r": 950, "g": 100, "b": 100 },
+        { "name": "green",      "r": 100, "g": 850, "b": 200 },
+        { "name": "yellow",     "r": 950, "g": 800, "b": 50  },
+        { "name": "cyan",       "r": 50,  "g": 750, "b": 750 },
+        { "name": "magenta",    "r": 900, "g": 100, "b": 600 },
+        { "name": "purple",     "r": 550, "g": 150, "b": 950 },
+        { "name": "gray",       "r": 350, "g": 330, "b": 300 },
+        { "name": "orange",     "r": 980, "g": 500, "b": 50  },
+        { "name": "full_black", "r": 0,   "g": 0,   "b": 0   }
+    ],
+    "pairs": [
+        { "name": "default",    "fg": "white",      "bg": "black" },
+        { "name": "keyword",    "fg": "magenta",    "bg": "black" },
+        { "name": "type",       "fg": "cyan",       "bg": "black" },
+        { "name": "string",     "fg": "green",      "bg": "black" },
+        { "name": "number",     "fg": "orange",     "bg": "black" },
+        { "name": "comment",    "fg": "gray",       "bg": "black" },
+        { "name": "function",   "fg": "yellow",     "bg": "black" },
+        { "name": "operator",   "fg": "white",      "bg": "black" },
+        { "name": "preproc",    "fg": "purple",     "bg": "black" },
+        { "name": "dir",        "fg": "yellow",     "bg": "black" },
+        { "name": "file",       "fg": "cyan",       "bg": "black" },
+        { "name": "symlink",    "fg": "red",        "bg": "black" },
+        { "name": "info",       "fg": "cyan",       "bg": "black" },
+        { "name": "warning",    "fg": "orange",     "bg": "black" },
+        { "name": "error",      "fg": "red",        "bg": "black" },
+        { "name": "completion", "fg": "full_black", "bg": "white" }
+    ]
+}

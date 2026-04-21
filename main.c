@@ -26,6 +26,12 @@ void free_ccode(CCode* ccode){
         }
         arrfree(ccode->lsp_ctxs);
     }
+    if(ccode->config){
+        if(ccode->config->theme){
+            free_theme(ccode->config->theme);
+        }
+        free(ccode->config);
+    }
 }
 
 
@@ -44,11 +50,14 @@ void handle_args(CCode* ccode, int argc, char** argv){
 }
 
 
+
 int main(int argc, char** argv) {
     // For random file ids for LSP
     srand(time(NULL));
     CCode ccode   = {0};
     ccode.layers  = NULL;
+    ccode.config  = make_default_config("./themes/default.json");
+
 
     int ch;
 
@@ -60,7 +69,7 @@ int main(int argc, char** argv) {
 
     move(1, 0);
 
-    init_syntax_highlighting();
+    init_syntax_highlighting(ccode.config->theme);
     init_lsp_handler();
 
     init_commands();
@@ -71,7 +80,8 @@ int main(int argc, char** argv) {
         arrpush(ccode.layers, new_layer_code());
     }
 
-    while(RUNNING) {
+    while(ccode.config->PrivateRunning) {
+        START_PROFILING();
         ch = getch();
 
         /*
@@ -116,7 +126,7 @@ int main(int argc, char** argv) {
             }
         }
         // Console switching
-        if(ch == CUSTOM_KEY_ESCAPE || CLOSE_CONSOLE){
+        if(ch == CUSTOM_KEY_ESCAPE || ccode.config->PrivateCloseConsole){
             // if top layer has opened completion window remove it
             Layer* top = top_type_layer(&ccode, LAYER_CODE);
             if(top){
@@ -131,7 +141,7 @@ int main(int argc, char** argv) {
 
             Layer* top_console = top_type_layer(&ccode, LAYER_CONSOLE);
         
-            if(!top_console && !CLOSE_CONSOLE){
+            if(!top_console && !ccode.config->PrivateCloseConsole){
                 Layer* new_layer = new_layer_console();
                 push_layer_to_top(&ccode, new_layer);
             } else if(top_console){
@@ -141,11 +151,12 @@ int main(int argc, char** argv) {
                     arrdel(ccode.layers, index);
                 }
         
-                if(CLOSE_CONSOLE){
-                    CLOSE_CONSOLE = false;
+                if(ccode.config->PrivateCloseConsole){
+                    ccode.config->PrivateCloseConsole = false;
                 }
             }
         }
+        START_PROFILING();
         // figure out where to stop propagation
         int stop_input_propagation = arrlen(ccode.layers);
         for(size_t i = 0; i < arrlenu(ccode.layers); i++){
@@ -163,9 +174,11 @@ int main(int argc, char** argv) {
         }
         int propagated_ch = ch;
         clear();
+        END_PROFILING("propagation");
         /*if(ch != -1){
             print_layers(&ccode);
         }*/
+        START_PROFILING();
         for (int i = arrlen(ccode.layers) - 1; i >= 0; i--){
             Layer* layer = ccode.layers[i];
             propagated_ch = ch;
@@ -175,15 +188,27 @@ int main(int argc, char** argv) {
             bool should_draw = (i <= stop_drawing);
             switch(layer->type){
                 case LAYER_DIR_WALK: {
+                    START_PROFILING();
                     layer_dir_walk_handle_keypress(&ccode, layer, propagated_ch, should_draw);
+                    END_PROFILING("Layer dir walk");
                     break;
                 }
                 case LAYER_CODE: {
+                    START_PROFILING();
                     layer_code_handle_keypress(&ccode, layer, propagated_ch, should_draw);
+                    END_PROFILING("Layer code");
                     break;
                 }
                 case LAYER_CONSOLE: {
+                    START_PROFILING();
                     layer_console_handle_keypress(&ccode, layer, propagated_ch, should_draw);
+                    END_PROFILING("Layer console");
+                    break;
+                }
+                case LAYER_THEME_SELECTOR: {
+                    START_PROFILING();
+                    layer_theme_selector_handle_keypress(&ccode, layer, propagated_ch, should_draw);
+                    END_PROFILING("Layer theme selector");
                     break;
                 }
                 default: {
@@ -192,7 +217,16 @@ int main(int argc, char** argv) {
                 }
             }
         }
+        END_PROFILING("Layers updates");
+        START_PROFILING();
         draw_ui(&ccode);
+        END_PROFILING("UI");
+
+        END_PROFILING("Frame");
+        if(ccode.config->profiling){
+            prof_print(stdscr);
+        }
+        prof_reset();
         refresh();
     }
     free_ccode(&ccode);

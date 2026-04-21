@@ -1,0 +1,216 @@
+#ifndef _H_CONFIG
+#define _H_CONFIG
+
+
+typedef struct {
+    short       id;   // ncurses color slot
+    char* name;
+    uint64_t    color;
+} Color;
+
+
+typedef struct {
+	char* name;
+	char* foreground_key;
+	char* background_key;
+} ColorPair;
+
+typedef struct {
+    Color* background;
+	Color** colors;
+	ColorPair** pairs;
+} ColorTheme;
+
+typedef struct {
+	bool PrivateRunning;
+	bool PrivateCloseConsole;
+	bool profiling;
+	ColorTheme* theme;
+} CCodeConfig;
+
+
+
+Color* make_color(short id, const char* name, uint64_t color) {
+    Color* c = malloc(sizeof(Color));
+    c->id = id;
+    if(name){
+        c->name = strdup(name);
+    }else{
+        c->name = NULL;
+    }
+    c->color = color;
+    return c;
+}
+
+ColorPair* make_pair(const char* name, const char* fg, const char* bg) {
+    ColorPair* p = malloc(sizeof(ColorPair));
+    p->name = strdup(name);
+    p->foreground_key = strdup(fg);
+    p->background_key = strdup(bg);
+    return p;
+}
+
+uint64_t pack_rgb16(uint16_t r, uint16_t g, uint16_t b) {
+    return ((uint64_t)r << 32) |
+           ((uint64_t)g << 16) |
+           (uint64_t)b;
+}
+
+void unpack_rgb16(uint64_t packed, uint16_t *r, uint16_t *g, uint16_t *b) {
+    *r = (packed >> 32) & 0xFFFFULL;
+    *g = (packed >> 16) & 0xFFFFULL;
+    *b = packed & 0xFFFFULL;
+}
+
+const char *default_theme_json =
+"{\n"
+"    \"background\": {\"r\": 130, \"g\": 110, \"b\": 90},\n"
+"    \"colors\": [\n"
+"        { \"name\": \"black\",      \"r\": 130, \"g\": 110, \"b\": 90  },\n"
+"        { \"name\": \"white\",      \"r\": 800, \"g\": 780, \"b\": 700 },\n"
+"        { \"name\": \"red\",        \"r\": 950, \"g\": 100, \"b\": 100 },\n"
+"        { \"name\": \"green\",      \"r\": 100, \"g\": 850, \"b\": 200 },\n"
+"        { \"name\": \"yellow\",     \"r\": 950, \"g\": 800, \"b\": 50  },\n"
+"        { \"name\": \"cyan\",       \"r\": 50,  \"g\": 750, \"b\": 750 },\n"
+"        { \"name\": \"magenta\",    \"r\": 900, \"g\": 100, \"b\": 600 },\n"
+"        { \"name\": \"purple\",     \"r\": 550, \"g\": 150, \"b\": 950 },\n"
+"        { \"name\": \"gray\",       \"r\": 350, \"g\": 330, \"b\": 300 },\n"
+"        { \"name\": \"orange\",     \"r\": 980, \"g\": 500, \"b\": 50  },\n"
+"        { \"name\": \"full_black\", \"r\": 0,   \"g\": 0,   \"b\": 0   }\n"
+"    ],\n"
+"    \"pairs\": [\n"
+"        { \"name\": \"default\",    \"fg\": \"white\",      \"bg\": \"black\" },\n"
+"        { \"name\": \"keyword\",    \"fg\": \"magenta\",    \"bg\": \"black\" },\n"
+"        { \"name\": \"type\",       \"fg\": \"cyan\",       \"bg\": \"black\" },\n"
+"        { \"name\": \"string\",     \"fg\": \"green\",      \"bg\": \"black\" },\n"
+"        { \"name\": \"number\",     \"fg\": \"orange\",     \"bg\": \"black\" },\n"
+"        { \"name\": \"comment\",    \"fg\": \"gray\",       \"bg\": \"black\" },\n"
+"        { \"name\": \"function\",   \"fg\": \"yellow\",     \"bg\": \"black\" },\n"
+"        { \"name\": \"operator\",   \"fg\": \"white\",      \"bg\": \"black\" },\n"
+"        { \"name\": \"preproc\",    \"fg\": \"purple\",     \"bg\": \"black\" },\n"
+"        { \"name\": \"dir\",        \"fg\": \"yellow\",     \"bg\": \"black\" },\n"
+"        { \"name\": \"file\",       \"fg\": \"cyan\",       \"bg\": \"black\" },\n"
+"        { \"name\": \"symlink\",    \"fg\": \"red\",        \"bg\": \"black\" },\n"
+"        { \"name\": \"info\",       \"fg\": \"cyan\",       \"bg\": \"black\" },\n"
+"        { \"name\": \"warning\",    \"fg\": \"orange\",     \"bg\": \"black\" },\n"
+"        { \"name\": \"error\",      \"fg\": \"red\",        \"bg\": \"black\" },\n"
+"        { \"name\": \"completion\", \"fg\": \"full_black\", \"bg\": \"white\" }\n"
+"    ]\n"
+"}";
+
+
+
+ColorTheme* load_theme(const char* path){
+    JsonValue* json_theme = malloc(sizeof(JsonValue));
+    if(!json_theme){
+        return NULL;
+    }
+    if(!path){
+        jsonStringLoad((char*)default_theme_json, json_theme);
+    }else{
+        jsonFileLoad(path, json_theme);
+    }
+
+    if(json_theme->type != JSON_OBJECT){
+        return NULL;
+    }
+
+    JsonValue* colors = shget(json_theme->object, "colors");
+    JsonValue* pairs = shget(json_theme->object, "pairs");
+    JsonValue* background = shget(json_theme->object, "background");
+    if(!colors || !pairs || !background){
+        return NULL;
+    }
+
+    ColorTheme* theme = malloc(sizeof(ColorTheme));
+    theme->colors = NULL;
+    theme->pairs  = NULL;
+    for(size_t i = 0; i < arrlenu(colors->array); i++){
+        JsonValue* color = colors->array[i];
+        char* name = shget(color->object, "name")->string;
+        uint16_t r = (uint16_t)shget(color->object, "r")->number;
+        uint16_t g = (uint16_t)shget(color->object, "g")->number;
+        uint16_t b = (uint16_t)shget(color->object, "b")->number;
+        arrput(theme->colors, make_color(64+i, name, pack_rgb16(r, g, b)));
+    }
+
+    for(size_t i = 0; i < arrlenu(pairs->array); i++){
+        JsonValue* pair = pairs->array[i];
+        char* name = shget(pair->object, "name")->string;
+        char* fg = shget(pair->object, "fg")->string;
+        char* bg = shget(pair->object, "bg")->string;
+        arrput(theme->pairs, make_pair(name, fg, bg));
+    }
+
+    uint16_t r = (uint16_t)shget(background->object, "r")->number;
+    uint16_t g = (uint16_t)shget(background->object, "g")->number;
+    uint16_t b = (uint16_t)shget(background->object, "b")->number;
+    theme->background = make_color(-1, NULL, pack_rgb16(r, g, b));
+    if(json_theme){
+        json_free(json_theme);
+    }
+    return theme;
+}
+
+CCodeConfig* make_default_config(const char* path){
+	CCodeConfig* conf = malloc(sizeof(CCodeConfig));
+	if(!conf){
+		return NULL;
+	}
+	conf->PrivateRunning = true;
+	conf->PrivateCloseConsole = false;
+	conf->profiling = false;
+    if(path){
+        conf->theme = load_theme(path);
+        if(conf->theme == NULL){
+            fprintf(stderr, "Could not load '%s' theme using default\n", path);
+            conf->theme = load_theme(NULL);
+        }
+    }else{
+        conf->theme = load_theme(NULL);
+    }
+	return conf;
+}
+
+
+void free_color(Color* color){
+    if (color->name) {
+        free(color->name);
+    }
+    free(color);
+}
+
+void free_color_pair(ColorPair* pair){
+    if (pair->name) {
+        free(pair->name);
+    }
+    if (pair->foreground_key) {
+        free(pair->foreground_key);
+    }
+    if (pair->background_key) {
+        free(pair->background_key);
+    }
+    free(pair);
+}
+
+void free_theme(ColorTheme* theme){
+    if(theme->background)
+        free_color(theme->background);
+    if(theme->pairs){
+        for (size_t i = 0; i < arrlenu(theme->pairs); i++) {
+            free_color_pair(theme->pairs[i]);
+        }
+        arrfree(theme->pairs);
+    }
+    if(theme->colors){
+        for (size_t i = 0; i < arrlenu(theme->colors); i++) {
+            free_color(theme->colors[i]);
+        }
+        arrfree(theme->colors);
+    }
+    free(theme);
+}
+
+
+
+#endif

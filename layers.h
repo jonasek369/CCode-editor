@@ -116,6 +116,29 @@ Layer* new_layer_dir_walk(char* dir){
     return tree;
 }
 
+
+Layer* new_layer_theme_selector(){
+    Layer* tree = malloc(sizeof(Layer));
+    if(!tree){
+        return NULL;
+    }
+    tree->type = LAYER_THEME_SELECTOR;
+    tree->consume_input = true;
+    tree->draws_fullscreen = true;
+
+    LayerThemeSelectorData* ltsd = malloc(sizeof(LayerThemeSelectorData));
+    if(!ltsd){
+        free(tree);
+        return NULL;
+    }
+    ltsd->current_dir_files = NULL;
+    ltsd->selected = 0;
+    ltsd->offset = 0;
+
+    tree->layer_data = ltsd;
+    return tree;
+}
+
 /*
 
     Layers managment helpers
@@ -338,8 +361,8 @@ void make_parser(CCode* ccode, char* filename){
 
 
 void message_to_console(CCode* ccode, const char* message){
-    if(CLOSE_CONSOLE){
-        CLOSE_CONSOLE = false;
+    if(ccode->config->PrivateCloseConsole){
+        ccode->config->PrivateCloseConsole = false;
     }
     Layer* console = top_type_layer(ccode, LAYER_CONSOLE);
     LayerConsoleData* layer_console_data = (LayerConsoleData*) console->layer_data;
@@ -704,6 +727,17 @@ void free_layer(Layer* layer){
             }
             free(ldwd);
         }
+    }else if(layer->type == LAYER_THEME_SELECTOR){
+        LayerThemeSelectorData* ltsd = (LayerThemeSelectorData*) layer->layer_data;
+        if(ltsd){
+            if(ltsd->current_dir_files){
+                for(size_t i = 0; i < arrlenu(ltsd->current_dir_files); i++){
+                    arrfree(ltsd->current_dir_files[i]);
+                }
+                arrfree(ltsd->current_dir_files);
+            }
+            free(ltsd);
+        }
     }
     free(layer);
 }
@@ -881,7 +915,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
 
     switch (to.tokens[0].command_type) {
         case COMMAND_QUIT: {
-            RUNNING = false;
+            ccode->config->PrivateRunning = false;
             break;
         } 
     
@@ -993,7 +1027,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
 
             if(second_layer->type == LAYER_CODE){
                 close_code_layer(ccode, false);
-            }else if(second_layer->type == LAYER_DIR_WALK){
+            }else if(second_layer->type == LAYER_DIR_WALK || second_layer->type == LAYER_THEME_SELECTOR){
                 remove_layer(ccode, second_layer);
                 free_layer(second_layer);
             }
@@ -1117,7 +1151,30 @@ void console_execute_command(CCode* ccode, const char* buffer){
             }
 
             break;
-        } 
+        }
+
+        case COMMAND_PROFILING: {
+            ccode->config->profiling = !ccode->config->profiling;
+            break;
+        }
+
+        case COMMAND_THEME: {
+            if(arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_STRING){
+                char* as_str = stringview_to_str(to.tokens[1].string.start, to.tokens[1].string.size);
+                printf("loading %s\n", as_str);
+                ColorTheme* new_theme =  load_theme(as_str);
+                if(new_theme){
+                    free_theme(ccode->config->theme);
+                    ccode->config->theme = new_theme;
+                    init_syntax_colors(ccode->config->theme);
+                }
+                free(as_str);
+            }else if (arrlen(to.tokens) >= 1){
+                Layer* layer = new_layer_theme_selector();
+                push_layer_to_top(ccode, layer);
+            }
+            break;
+        }
 
         default: {
             // Unknown command
@@ -1147,16 +1204,12 @@ defer:
 */
 
 
-void test(int* something){
-    printf("%d", *something);
-    return;
-} 
-
 
 void layer_code_update(CCode* ccode, Layer* layer, int chr){
     if(!ccode || !layer || layer->type != LAYER_CODE || layer->layer_data == NULL){
         return;
     }
+    START_PROFILING();
     LayerCodeData* code_data = (LayerCodeData*) layer->layer_data;
 
     bool inFindSubstrMode = code_data->finding_substr != NULL;
@@ -1640,6 +1693,9 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
         console_execute_command(ccode, ":tree");
     }
 
+    END_PROFILING("handle_keypress");
+    START_PROFILING();
+
     bool is_file_edit = isprint(chr) ||
                         chr == CUSTOM_KEY_BACKSPACE ||
                         chr == CUSTOM_KEY_ENTER ||
@@ -1685,19 +1741,24 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
     } else if(screen_x >= content_width){
         code_data->cursor->xoff = code_data->cursor->x - content_width + 1;
     }
+    END_PROFILING("send_to_lsp");
 }
+
 
 void layer_code_render(CCode* ccode, Layer* layer) {
     if (!ccode || !layer || layer->type != LAYER_CODE || layer->layer_data == NULL) {
         return;
     }
     LayerCodeData* code_data = (LayerCodeData*) layer->layer_data;
-    // clock_t begin = clock();
 
     // Renders syntax highlighting or plain text if no parser is present
+    START_PROFILING();
     apply_tree_sitter_syntax_highlighting(code_data, code_data->lang);
+    END_PROFILING("apply_tree_sitter_syntax_highlighting");
 
+    START_PROFILING();
     if(!code_data->completion_window){
+        END_PROFILING("completion window");
         return;
     }
 
@@ -1756,9 +1817,7 @@ void layer_code_render(CCode* ccode, Layer* layer) {
     }
     attroff(COLOR_PAIR(COLOR_PAIR_COMPLETION));
     
-    //clock_t end = clock();
-    //double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
-    // printf("Render time: %f\n", time_spent);
+    END_PROFILING("completion window");
 }
 
 
@@ -1792,7 +1851,7 @@ void layer_console_update(CCode* ccode, Layer* layer, int chr){
             console_data->console_buffer_x++;
         }
     } else if(chr == CUSTOM_KEY_ENTER){
-        CLOSE_CONSOLE = true;
+        ccode->config->PrivateCloseConsole = true;
         console_execute_command(ccode, console_data->console_buffer);
     } else if(chr == CUSTOM_KEY_BACKSPACE){
         if(console_data->console_buffer_x > 0 && arrlen(console_data->console_buffer) > 1){
@@ -1889,6 +1948,44 @@ int load_dir(LayerDirWalkData* ldwd){
     return 0;
 }
 
+
+int load_themes(LayerThemeSelectorData* ltsd, const char* path){
+    if(path == NULL){
+        return -1;
+    }
+    Nob_File_Paths paths = {0};
+    ltsd->selected = 0;
+    ltsd->offset = 0;
+    bool status = nob_read_entire_dir(path, &paths);
+    if(!status){
+        return -1;
+    }
+    if(paths.count > 0){
+        qsort(paths.items, paths.count, sizeof(char*), pstrcmp);
+    }
+    char** add_to_top = NULL;
+    for(size_t i = 0; i < paths.count; i++){
+        // Noticed that on some implementation .. and . arent on top of the directory
+        // so were skipping them and adding .. later to top
+        if(strlen(paths.items[i]) <= 2 && (strncmp(paths.items[i], ".", 1) == 0 || strncmp(paths.items[i], "..", 2) == 0)){
+            continue;
+        }
+        char* arr = str_to_arr(paths.items[i]); // convert from c string to arr of chars ending with null
+        if(nob_get_file_type(nob_temp_sprintf("./themes/%s", arr)) == NOB_FILE_DIRECTORY){
+            arrput(add_to_top, arr);
+        }else{
+            arrput(ltsd->current_dir_files, arr);
+        }
+    }
+    if(add_to_top){
+        for(size_t i = 0; i < arrlenu(add_to_top); i++){
+            arrins(ltsd->current_dir_files, 0, add_to_top[i]);
+        }
+    }
+    arrfree(add_to_top);
+    free(paths.items);
+    return 0;
+}
 
 bool layer_dir_walk_update(CCode* ccode, Layer* layer, int chr){
     if(!ccode || !layer || layer->type != LAYER_DIR_WALK || layer->layer_data == NULL){
@@ -2020,27 +2117,205 @@ void layer_dir_walk_render(CCode* ccode, Layer* layer){
     }
 }
 
+
+bool layer_theme_selector_update(CCode* ccode, Layer* layer, int chr){
+    if(!ccode || !layer || layer->type != LAYER_THEME_SELECTOR || layer->layer_data == NULL){
+        return false;
+    }
+
+    LayerThemeSelectorData* ltsd = (LayerThemeSelectorData*) layer->layer_data;
+
+    if(ltsd->current_dir_files == NULL){
+        if(load_themes(ltsd, "./themes") == -1){
+            printf("There was error reading the directory themes");
+            return false;
+        }
+    }
+
+    int screen_y, screen_x;
+    getmaxyx(stdscr, screen_y, screen_x);
+
+    (void)screen_x;
+
+    int list_height = screen_y - 1; // because drawing starts at y=1
+
+    if(chr == KEY_DOWN){
+        if((ltsd->selected + 1) < arrlen(ltsd->current_dir_files)){
+            ltsd->selected++;
+            char* theme_path = nob_temp_sprintf("./themes/%s", ltsd->current_dir_files[ltsd->selected]);
+            ColorTheme* new_theme =  load_theme(theme_path);
+            if(new_theme){
+                free_theme(ccode->config->theme);
+                ccode->config->theme = new_theme;
+                init_syntax_colors(ccode->config->theme);
+            }
+            nob_temp_reset();
+        }
+    }
+
+    if(chr == KEY_UP){
+        if(ltsd->selected > 0){
+            ltsd->selected--;
+            char* theme_path = nob_temp_sprintf("./themes/%s", ltsd->current_dir_files[ltsd->selected]);
+            ColorTheme* new_theme =  load_theme(theme_path);
+            if(new_theme){
+                free_theme(ccode->config->theme);
+                ccode->config->theme = new_theme;
+                init_syntax_colors(ccode->config->theme);
+            }
+            nob_temp_reset();
+        }
+    }
+
+    if(chr == CUSTOM_KEY_ENTER){
+        remove_layer(ccode, layer);
+        free_layer(layer);
+    }
+
+    // adjust offset
+    if(ltsd->selected < ltsd->offset){
+        ltsd->offset = ltsd->selected;
+    }
+
+    if(ltsd->selected >= ltsd->offset + list_height){
+        ltsd->offset = ltsd->selected - list_height + 1;
+    }
+    return false;
+}
+
+void layer_theme_selector_render(CCode* ccode, Layer* layer){
+    if(!ccode || !layer || layer->type != LAYER_THEME_SELECTOR || layer->layer_data == NULL){
+        return;
+    }
+
+    LayerThemeSelectorData* ltsd = (LayerThemeSelectorData*) layer->layer_data;
+
+    int y, x;
+    getmaxyx(stdscr, y, x);
+    (void)x;
+
+    int draw_y = 1;
+    for(size_t i = ltsd->offset; i < arrlenu(ltsd->current_dir_files); i++){
+        if(draw_y >= y) break;
+        Nob_File_Type ft = dir_walk_get_file_type("./themes/", ltsd->current_dir_files[i]);
+        if(ft == NOB_FILE_DIRECTORY){
+            attron(COLOR_PAIR(COLOR_DIR));
+        }else if (ft == NOB_FILE_SYMLINK){
+            attron(COLOR_PAIR(COLOR_SYMLINK));
+        }else{
+            attron(COLOR_PAIR(COLOR_FILE));
+        }
+
+        if(i == ltsd->selected){
+            attron(A_REVERSE);
+            if(ft == NOB_FILE_DIRECTORY){
+                mvprintw(draw_y, 0,"/%s", ltsd->current_dir_files[i]);
+            }else{
+                mvprintw(draw_y, 0,"%s", ltsd->current_dir_files[i]);
+            }
+            attroff(A_REVERSE);
+        } else {
+            if(ft == NOB_FILE_DIRECTORY){
+                mvprintw(draw_y, 0,"/%s", ltsd->current_dir_files[i]);
+            }else{
+                mvprintw(draw_y, 0,"%s", ltsd->current_dir_files[i]);
+            }
+        }
+        if(ft == NOB_FILE_DIRECTORY){
+            attroff(COLOR_PAIR(COLOR_DIR));
+        }else if (ft == NOB_FILE_SYMLINK){
+            attroff(COLOR_PAIR(COLOR_SYMLINK));
+        }else{
+            attroff(COLOR_PAIR(COLOR_FILE));
+        }
+    
+        draw_y++;
+    }
+
+    #define PREVIEW_X 36
+
+    typedef struct { const char* text; int pair; } Seg;
+
+    static const Seg preview[][16] = {
+        { {"#include <stdio.h>", COLOR_PAIR_PREPROC}, {NULL,0} },
+        { {NULL, 0} },
+        { {"// Entry point", COLOR_PAIR_COMMENT}, {NULL,0} },
+        { {"int", COLOR_PAIR_TYPE}, {" ", COLOR_PAIR_DEFAULT}, {"main", COLOR_PAIR_FUNCTION}, {"()", COLOR_PAIR_OPERATOR}, {" {", COLOR_PAIR_OPERATOR}, {NULL,0} },
+        { {"    ", COLOR_PAIR_DEFAULT}, {"int", COLOR_PAIR_TYPE}, {" x ", COLOR_PAIR_DEFAULT}, {"=", COLOR_PAIR_OPERATOR}, {" ", COLOR_PAIR_DEFAULT}, {"42", COLOR_PAIR_NUMBER}, {";", COLOR_PAIR_OPERATOR}, {NULL,0} },
+        { {"    ", COLOR_PAIR_DEFAULT}, {"const", COLOR_PAIR_KEYWORD}, {" char", COLOR_PAIR_TYPE}, {"* msg ", COLOR_PAIR_DEFAULT}, {"=", COLOR_PAIR_OPERATOR}, {" ", COLOR_PAIR_DEFAULT}, {"\"hello\"", COLOR_PAIR_STRING}, {";", COLOR_PAIR_OPERATOR}, {NULL,0} },
+        { {"    ", COLOR_PAIR_DEFAULT}, {"printf", COLOR_PAIR_FUNCTION}, {"(", COLOR_PAIR_OPERATOR}, {"msg", COLOR_PAIR_DEFAULT}, {")", COLOR_PAIR_OPERATOR}, {";", COLOR_PAIR_OPERATOR}, {NULL,0} },
+        { {"    ", COLOR_PAIR_DEFAULT}, {"return", COLOR_PAIR_KEYWORD}, {" ", COLOR_PAIR_DEFAULT}, {"0", COLOR_PAIR_NUMBER}, {";", COLOR_PAIR_OPERATOR}, {NULL,0} },
+        { {"}", COLOR_PAIR_OPERATOR}, {NULL,0} },
+    };
+
+    int preview_lines = (int)(sizeof(preview) / sizeof(preview[0]));
+
+    attron(COLOR_PAIR(COLOR_PAIR_COMMENT));
+    mvprintw(0, PREVIEW_X, "~ preview ~");
+    attroff(COLOR_PAIR(COLOR_PAIR_COMMENT));
+
+    for (int pl = 0; pl < preview_lines && (pl + 1) < y; pl++) {
+        int col = PREVIEW_X;
+        for (int s = 0; preview[pl][s].text != NULL; s++) {
+            const Seg* seg = &preview[pl][s];
+            attron(COLOR_PAIR(seg->pair));
+            mvprintw(pl + 1, col, "%s", seg->text);
+            col += (int)strlen(seg->text);
+            attroff(COLOR_PAIR(seg->pair));
+        }
+        move(pl + 1, col);
+        clrtoeol();
+    }
+
+    #undef PREVIEW_X
+}
+
+void layer_theme_selector_handle_keypress(CCode* ccode, Layer* layer, int chr, bool should_draw){
+    START_PROFILING();
+    layer_theme_selector_update(ccode, layer, chr);
+    END_PROFILING("layer_theme_selector_update");
+    if(should_draw){
+        START_PROFILING();
+        layer_theme_selector_render(ccode, layer);
+        END_PROFILING("layer_theme_selector_render");
+
+    }
+}
+
 void layer_dir_walk_handle_keypress(CCode* ccode, Layer* layer, int chr, bool should_draw){
+    START_PROFILING();
     bool redirected = layer_dir_walk_update(ccode, layer, chr);
+    END_PROFILING("layer_dir_walk_update");
     if(redirected){
         return;
     }
     if(should_draw){
+        START_PROFILING();
         layer_dir_walk_render(ccode, layer);
+        END_PROFILING("layer_dir_walk_render");
+
     }
 }
 
 void layer_console_handle_keypress(CCode* ccode, Layer* layer, int chr, bool should_draw){
+    START_PROFILING();
     layer_console_update(ccode, layer, chr);
+    END_PROFILING("layer_console_update");
     if(should_draw){
+        START_PROFILING();
         layer_console_render(ccode, layer);
+        END_PROFILING("layer_console_render");
     }
 }
 
 void layer_code_handle_keypress(CCode* ccode, Layer* layer, int chr, bool should_draw){
+    START_PROFILING();
     layer_code_update(ccode, layer, chr);
+    END_PROFILING("layer_code_update");
     if(should_draw){
+        START_PROFILING();
         layer_code_render(ccode, layer);
+        END_PROFILING("layer_code_render");
     }
 }
 
@@ -2126,6 +2401,10 @@ void draw_ui(CCode* ccode) {
         LayerDirWalkData* ldwd = layer_at_top->layer_data;
         size_t bot_line_size = snprintf(NULL, 0, "%c%d:%d", mode, ldwd->selected + ldwd->offset, 0);
         mvprintw(y - 1, x - bot_line_size, "%c%d:%d", mode, ldwd->selected + ldwd->offset, 0);
+    }else if(layer_at_top->type == LAYER_THEME_SELECTOR){
+        LayerThemeSelectorData* ltsd = layer_at_top->layer_data;
+        size_t bot_line_size = snprintf(NULL, 0, "%c%d:%d", mode, ltsd->selected + ltsd->offset, 0);
+        mvprintw(y - 1, x - bot_line_size, "%c%d:%d", mode, ltsd->selected + ltsd->offset, 0);
     }else{
         size_t bot_line_size = snprintf(NULL, 0, "%c%d:%d", mode, 0, 0);
         mvprintw(y - 1, x - bot_line_size, "%c%d:%d", mode, 0, 0);
@@ -2143,8 +2422,9 @@ void draw_ui(CCode* ccode) {
     }else if(layer_at_top->type == LAYER_DIR_WALK){
         // LayerDirWalkData* ldwd = (LayerDirWalkData*) layer_at_top->layer_data;
         // move(ldwd->selected+ldwd->offset+3, 0);
-    }
-    else {
+    }else if(layer_at_top->type == LAYER_THEME_SELECTOR){
+
+    }else {
         assert(false && "unknown layer");
     }
 

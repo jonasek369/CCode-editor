@@ -5,11 +5,7 @@
 // Color indices
 // ═══════════════════════════════════════════════════════════════════════════════
 
-#define COLOR_GRAY        8
-#define COLOR_ORANGE      9
-#define COLOR_PURPLE      10
-#define COLOR_BROWN_GRAY  11
-#define COLOR_FULL_BLACK  12
+
 
 // ── Syntax color pairs ────────────────────────────────────────────────────────
 
@@ -43,45 +39,62 @@
 // Color / pair initialization
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void init_syntax_colors(void) {
+int get_pair_id(const char* name) {
+    if (strcmp(name, "default") == 0)    return COLOR_PAIR_DEFAULT;
+    if (strcmp(name, "keyword") == 0)    return COLOR_PAIR_KEYWORD;
+    if (strcmp(name, "type") == 0)       return COLOR_PAIR_TYPE;
+    if (strcmp(name, "string") == 0)     return COLOR_PAIR_STRING;
+    if (strcmp(name, "number") == 0)     return COLOR_PAIR_NUMBER;
+    if (strcmp(name, "comment") == 0)    return COLOR_PAIR_COMMENT;
+    if (strcmp(name, "function") == 0)   return COLOR_PAIR_FUNCTION;
+    if (strcmp(name, "operator") == 0)   return COLOR_PAIR_OPERATOR;
+    if (strcmp(name, "preproc") == 0)    return COLOR_PAIR_PREPROC;
+    // File browser
+    if (strcmp(name, "dir") == 0)        return COLOR_DIR;
+    if (strcmp(name, "file") == 0)       return COLOR_FILE;
+    if (strcmp(name, "symlink") == 0)    return COLOR_SYMLINK;
+    // Diagnostics
+    if (strcmp(name, "info") == 0)       return COLOR_PAIR_INFORMATION;
+    if (strcmp(name, "warning") == 0)    return COLOR_PAIR_WARNING;
+    if (strcmp(name, "error") == 0)      return COLOR_PAIR_ERROR;
+    // Completion
+    if (strcmp(name, "completion") == 0) return COLOR_PAIR_COMPLETION;
+    return -1;
+}
+
+Color* get_color_from_key(ColorTheme* theme, const char* key){
+    for (size_t i = 0; i < arrlenu(theme->colors); i++) {
+        Color* e = theme->colors[i];
+        if(strcmp(e->name, key) == 0) return e;
+    }
+    return NULL;
+}
+
+void init_syntax_colors(ColorTheme* theme) {
     start_color();
+
     if (can_change_color()) {
-        init_color(COLOR_BLACK,      100, 100, 100);
-        init_color(COLOR_WHITE,      700, 700, 700);
-        init_color(COLOR_RED,        800, 120, 120);
-        init_color(COLOR_GREEN,      120, 700, 300);
-        init_color(COLOR_YELLOW,     800, 700, 300);
-        init_color(COLOR_CYAN,       300, 600, 700);
-        init_color(COLOR_MAGENTA,    700, 400, 700);
-        init_color(COLOR_PURPLE,     500, 400, 700);
-        init_color(COLOR_GRAY,       400, 400, 400);
-        init_color(COLOR_ORANGE,     850, 500, 150);
-        init_color(COLOR_FULL_BLACK,   0,   0,   0);
+        uint16_t r, g, b;
+        unpack_rgb16(theme->background->color, &r, &g, &b);
+        init_color(COLOR_BLACK, r, g, b);
+
+        for (size_t i = 0; i < arrlenu(theme->colors); i++) {
+            Color* e = theme->colors[i];
+            uint16_t r, g, b;
+            unpack_rgb16(e->color, &r, &g, &b);
+            init_color(e->id, r, g, b);
+        }
     }
 
-    // Syntax
-    init_pair(COLOR_PAIR_DEFAULT,  COLOR_WHITE,   COLOR_BLACK);
-    init_pair(COLOR_PAIR_KEYWORD,  COLOR_MAGENTA, COLOR_BLACK);
-    init_pair(COLOR_PAIR_TYPE,     COLOR_CYAN,    COLOR_BLACK);
-    init_pair(COLOR_PAIR_STRING,   COLOR_GREEN,   COLOR_BLACK);
-    init_pair(COLOR_PAIR_NUMBER,   COLOR_YELLOW,  COLOR_BLACK);
-    init_pair(COLOR_PAIR_COMMENT,  COLOR_GRAY,    COLOR_BLACK);
-    init_pair(COLOR_PAIR_FUNCTION, COLOR_ORANGE,  COLOR_BLACK);
-    init_pair(COLOR_PAIR_OPERATOR, COLOR_WHITE,   COLOR_BLACK);
-    init_pair(COLOR_PAIR_PREPROC,  COLOR_MAGENTA, COLOR_BLACK);
-
-    // File browser
-    init_pair(COLOR_DIR,     COLOR_YELLOW, COLOR_BLACK);
-    init_pair(COLOR_FILE,    COLOR_CYAN,   COLOR_BLACK);
-    init_pair(COLOR_SYMLINK, COLOR_RED,    COLOR_BLACK);
-
-    // Diagnostics
-    init_pair(COLOR_PAIR_INFORMATION, COLOR_BLUE,   COLOR_BLACK);
-    init_pair(COLOR_PAIR_WARNING,     COLOR_YELLOW, COLOR_BLACK);
-    init_pair(COLOR_PAIR_ERROR,       COLOR_RED,    COLOR_BLACK);
-
-    // Completion
-    init_pair(COLOR_PAIR_COMPLETION, COLOR_FULL_BLACK, COLOR_WHITE);
+    for (size_t i = 0; i < arrlenu(theme->pairs); i++) {
+        ColorPair* p = theme->pairs[i];
+        Color* fg = get_color_from_key(theme, p->foreground_key);
+        Color* bg = get_color_from_key(theme, p->background_key);
+        int pair_id = get_pair_id(p->name);
+        if (pair_id == -1) continue;
+        if (fg == NULL || bg == NULL) { init_pair((short)pair_id, 1, 0); }
+        else{init_pair((short)pair_id, fg->id, bg->id);}
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -89,10 +102,7 @@ void init_syntax_colors(void) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 static attr_t pair_to_attrs(int pair) {
-    if (pair == COLOR_PAIR_KEYWORD ||
-        pair == COLOR_PAIR_FUNCTION ||
-        pair == COLOR_PAIR_TYPE)
-        return A_BOLD;
+    (void) pair;
     return A_NORMAL;
 }
 
@@ -769,9 +779,9 @@ int get_diagnostic_color(JsonValue* diagnostic) {
 // Public API
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void init_syntax_highlighting(void) {
+void init_syntax_highlighting(ColorTheme* theme) {
     init_c_type_map();
-    init_syntax_colors();
+    init_syntax_colors(theme);
 }
 
 void destroy_syntax_highlighting(void) {
@@ -799,6 +809,7 @@ void apply_tree_sitter_syntax_highlighting(LayerCodeData* lcd, SyntaxLanguage la
     int xoff        = lcd->cursor->xoff;
 
     // 1. Collect spans — viewport-pruned walk
+    START_PROFILING();
     HSpan* spans = NULL;
     if (lcd->parser && lcd->tree) {
         TSNode root = ts_tree_root_node(lcd->tree);
@@ -823,6 +834,7 @@ void apply_tree_sitter_syntax_highlighting(LayerCodeData* lcd, SyntaxLanguage la
                 break;
         }
     }
+    END_PROFILING("collecting highlights");
 
     // 2. Sort spans by (start_row, start_col) for the forward-pass renderer
     int span_count = arrlen(spans);
@@ -830,6 +842,7 @@ void apply_tree_sitter_syntax_highlighting(LayerCodeData* lcd, SyntaxLanguage la
         qsort(spans, span_count, sizeof(HSpan), hspan_cmp);
 
     // 3. Render — one forward pass per screen row, no 2-D colour_map
+    START_PROFILING();
     for (int sr = 0; sr < vh; sr++) {
         int br = sr + yoff;
         move(sr + 1, 0);
@@ -919,7 +932,7 @@ void apply_tree_sitter_syntax_highlighting(LayerCodeData* lcd, SyntaxLanguage la
             attroff(COLOR_PAIR(COLOR_PAIR_DEFAULT));
         }
     }
-
+    END_PROFILING("render");
     arrfree(spans);
 }
 

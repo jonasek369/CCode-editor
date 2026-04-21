@@ -28,6 +28,10 @@
 #include "parser.h"
 #include "./tiny_queue/tiny_queue.h"
 
+
+#include "config.h"
+
+
 #define LSP_NO_STB_DS
 #define LSP_NO_CJSON
 #define LSP_NO_TINY_QUEUE
@@ -35,6 +39,7 @@
     
 #define NOB_IMPLEMENTATION
 #include "nob.h"
+
 
 
 #include "utils.h"
@@ -55,7 +60,7 @@
     #define MAX_PATH 4096
 #endif
 
-typedef enum {LAYER_CODE=0, LAYER_CONSOLE, LAYER_DIR_WALK} LayerType;
+typedef enum {LAYER_CODE=0, LAYER_CONSOLE, LAYER_DIR_WALK, LAYER_THEME_SELECTOR} LayerType;
 typedef enum {TOKEN_INVALID = 0, TOKEN_COMMAND, TOKEN_STRING, TOKEN_INTEGER, TOKEN_UNKNOWN} ConsoleTokenType;
 typedef enum {
     COMMAND_INVALID = 0,
@@ -71,7 +76,9 @@ typedef enum {
     COMMAND_FORCE_CLOSE,
     COMMAND_TREE,
     COMMAND_SET_TAB_SIZE,
-    COMMAND_TREE_CHANGE_DIR
+    COMMAND_TREE_CHANGE_DIR,
+    COMMAND_PROFILING,
+    COMMAND_THEME
 } CommandType;
 
 typedef enum {
@@ -171,6 +178,12 @@ typedef struct {
 
 
 typedef struct {
+    char** current_dir_files;
+    int selected;
+    int offset;
+}LayerThemeSelectorData;
+
+typedef struct {
     LayerType type;
     bool consume_input;
     bool draws_fullscreen;
@@ -181,16 +194,13 @@ typedef struct {
 typedef struct {
     Layer** layers;
     LSPContext** lsp_ctxs;
+    CCodeConfig* config;
 } CCode;
-
-
-// global flags
-bool RUNNING = true;
-bool CLOSE_CONSOLE = false;
 
 int TAB_SIZE = 4;
 #define LABEL(x) x:
 
+#include "profiling.h"
 #include "syntax_highlighting.h"
 #include "lsp_handler.h"
 
