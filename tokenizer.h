@@ -33,6 +33,7 @@ void init_commands(){
     add_command(":cd",    COMMAND_TREE_CHANGE_DIR);
     add_command(":prof",  COMMAND_PROFILING);
     add_command(":theme", COMMAND_THEME);
+    add_command(":wconf", COMMAND_WRITE_CONFIG);
 }
 
 void destroy_commands(){

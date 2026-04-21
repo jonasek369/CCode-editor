@@ -1106,7 +1106,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
 
         case COMMAND_SET_TAB_SIZE: {
             if(arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_INTEGER){
-                TAB_SIZE = to.tokens[1].integer;
+                ccode->config->tab_size = to.tokens[1].integer;
             }
 
             break;
@@ -1174,6 +1174,10 @@ void console_execute_command(CCode* ccode, const char* buffer){
                 push_layer_to_top(ccode, layer);
             }
             break;
+        }
+
+        case COMMAND_WRITE_CONFIG: {
+            save_config(ccode->config);
         }
 
         default: {
@@ -1260,7 +1264,7 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
                 chr = -1;
             }
         }else{
-            for(size_t i = 0; i < TAB_SIZE; i++){
+            for(size_t i = 0; i < ccode->config->tab_size; i++){
                 layer_code_update(ccode, layer, ' ');
             }            
         }
@@ -2130,6 +2134,14 @@ bool layer_theme_selector_update(CCode* ccode, Layer* layer, int chr){
             printf("There was error reading the directory themes");
             return false;
         }
+        char* theme_path = nob_temp_sprintf("./themes/%s", ltsd->current_dir_files[ltsd->selected]);
+        ColorTheme* new_theme = load_theme(theme_path);
+        if(new_theme){
+            free_theme(ccode->config->theme);
+            ccode->config->theme = new_theme;
+            init_syntax_colors(ccode->config->theme);
+        }
+        nob_temp_reset();
     }
 
     int screen_y, screen_x;
@@ -2143,7 +2155,7 @@ bool layer_theme_selector_update(CCode* ccode, Layer* layer, int chr){
         if((ltsd->selected + 1) < arrlen(ltsd->current_dir_files)){
             ltsd->selected++;
             char* theme_path = nob_temp_sprintf("./themes/%s", ltsd->current_dir_files[ltsd->selected]);
-            ColorTheme* new_theme =  load_theme(theme_path);
+            ColorTheme* new_theme = load_theme(theme_path);
             if(new_theme){
                 free_theme(ccode->config->theme);
                 ccode->config->theme = new_theme;
@@ -2157,7 +2169,7 @@ bool layer_theme_selector_update(CCode* ccode, Layer* layer, int chr){
         if(ltsd->selected > 0){
             ltsd->selected--;
             char* theme_path = nob_temp_sprintf("./themes/%s", ltsd->current_dir_files[ltsd->selected]);
-            ColorTheme* new_theme =  load_theme(theme_path);
+            ColorTheme* new_theme = load_theme(theme_path);
             if(new_theme){
                 free_theme(ccode->config->theme);
                 ccode->config->theme = new_theme;

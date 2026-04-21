@@ -29,7 +29,6 @@
 #include "./tiny_queue/tiny_queue.h"
 
 
-#include "config.h"
 
 
 #define LSP_NO_STB_DS
@@ -40,7 +39,7 @@
 #define NOB_IMPLEMENTATION
 #include "nob.h"
 
-
+#include "config.h"
 
 #include "utils.h"
 
@@ -78,7 +77,8 @@ typedef enum {
     COMMAND_SET_TAB_SIZE,
     COMMAND_TREE_CHANGE_DIR,
     COMMAND_PROFILING,
-    COMMAND_THEME
+    COMMAND_THEME,
+    COMMAND_WRITE_CONFIG
 } CommandType;
 
 typedef enum {
@@ -197,7 +197,6 @@ typedef struct {
     CCodeConfig* config;
 } CCode;
 
-int TAB_SIZE = 4;
 #define LABEL(x) x:
 
 #include "profiling.h"

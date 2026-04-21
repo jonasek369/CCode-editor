@@ -16,17 +16,13 @@ typedef struct {
 } ColorPair;
 
 typedef struct {
+    char* path;
     Color* background;
 	Color** colors;
 	ColorPair** pairs;
 } ColorTheme;
 
-typedef struct {
-	bool PrivateRunning;
-	bool PrivateCloseConsole;
-	bool profiling;
-	ColorTheme* theme;
-} CCodeConfig;
+
 
 
 
@@ -98,7 +94,13 @@ const char *default_theme_json =
 "    ]\n"
 "}";
 
-
+typedef struct {
+    bool PrivateRunning;
+    bool PrivateCloseConsole;
+    bool profiling;
+    ColorTheme* theme;
+    size_t tab_size;
+} CCodeConfig;
 
 ColorTheme* load_theme(const char* path){
     JsonValue* json_theme = malloc(sizeof(JsonValue));
@@ -149,10 +151,71 @@ ColorTheme* load_theme(const char* path){
     if(json_theme){
         json_free(json_theme);
     }
+    theme->path = strdup(path);
     return theme;
 }
 
-CCodeConfig* make_default_config(const char* path){
+
+CCodeConfig* load_config(const char* path){
+    if(!path){
+        return NULL;
+    }
+    CCodeConfig* config = malloc(sizeof(CCodeConfig));
+    config->PrivateRunning = true;
+    config->PrivateCloseConsole = false;
+    JsonValue* json_config = malloc(sizeof(JsonValue));
+    if(!json_config){
+        return NULL;
+    }
+    jsonFileLoad(path, json_config);
+    if(json_config->type != JSON_OBJECT){
+        free(json_config);
+        return NULL;
+    }
+    JsonValue* profiling = shget(json_config->object, "profiling");
+    if(!profiling || profiling->type != JSON_BOOL){
+        config->profiling = false; // defualt
+    }else{
+        config->profiling = profiling->boolean;
+    }
+    JsonValue* theme = shget(json_config->object, "theme");
+    if(!theme || theme->type != JSON_STRING){
+        config->theme = load_theme(NULL); // defualt
+    }else{
+        config->theme = load_theme(theme->string);
+        if(config->theme == NULL){
+            config->theme = load_theme(NULL);
+        }
+    }
+    JsonValue* tab_size = shget(json_config->object, "tab_size");
+    if(!tab_size || tab_size->type != JSON_NUMBER){
+        config->tab_size = 4; // defualt
+    }else{
+        config->tab_size = (size_t)tab_size->number;
+    }
+    json_free(json_config);
+    return config;
+}
+
+void save_config(CCodeConfig* config){
+    if(!config)
+        return;
+    JsonValue* json_config = json_new_object();
+    json_add_child(json_config, "theme", json_new_string(config->theme->path));
+    json_add_child(json_config, "profiling", json_new_bool(config->profiling));
+    json_add_child(json_config, "tab_size", json_new_number(config->tab_size));
+    char* out = NULL;
+    json_dump(json_config, &out);
+    arrput(out, NULL);
+    bool saved = nob_write_entire_file("config.json", out, arrlen(out));
+    if(!saved){
+        printf("failed to save config!\n");
+    }
+    arrfree(out);
+    json_free(json_config);
+}
+
+CCodeConfig* make_default_config(){
 	CCodeConfig* conf = malloc(sizeof(CCodeConfig));
 	if(!conf){
 		return NULL;
@@ -160,15 +223,8 @@ CCodeConfig* make_default_config(const char* path){
 	conf->PrivateRunning = true;
 	conf->PrivateCloseConsole = false;
 	conf->profiling = false;
-    if(path){
-        conf->theme = load_theme(path);
-        if(conf->theme == NULL){
-            fprintf(stderr, "Could not load '%s' theme using default\n", path);
-            conf->theme = load_theme(NULL);
-        }
-    }else{
-        conf->theme = load_theme(NULL);
-    }
+    conf->theme = load_theme(NULL);
+    conf->tab_size = 4;
 	return conf;
 }
 
@@ -194,6 +250,8 @@ void free_color_pair(ColorPair* pair){
 }
 
 void free_theme(ColorTheme* theme){
+    if(theme->path)
+        free(theme->path);
     if(theme->background)
         free_color(theme->background);
     if(theme->pairs){

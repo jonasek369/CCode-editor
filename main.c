@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
     srand(time(NULL));
     CCode ccode   = {0};
     ccode.layers  = NULL;
-    ccode.config  = make_default_config("./themes/default.json");
+    ccode.config  = load_config("./config.json");
 
 
     int ch;
@@ -73,7 +73,7 @@ int main(int argc, char** argv) {
     init_lsp_handler();
 
     init_commands();
-
+    
     handle_args(&ccode, argc, argv);
 
     if(ccode.layers == NULL){
