@@ -573,11 +573,27 @@ bool do_completion(CCode* ccode){
     if(!lcd->completion_window){
         return false;
     }
+    if(!lcd->completion_window->completion || lcd->completion_window->completion->type == JSON_NULL){
+        return false;
+    }
     JsonValue* result = shget(lcd->completion_window->completion->object, "result");
     JsonValue* items = shget(result->object, "items");
+    if(items == NULL || items->type != JSON_ARRAY){
+        return false;
+    }
+
+    if(lcd->completion_window->selected >= arrlen(items->array)){
+        json_free(lcd->completion_window->completion);
+        free(lcd->completion_window);
+        lcd->completion_window = NULL;
+        return false;
+    }
     JsonValue* to_add = items->array[lcd->completion_window->selected];
+    if(to_add == NULL || to_add->type != JSON_OBJECT){
+        return false;
+    }
     JsonValue* text_edit = shget(to_add->object, "textEdit");
-    if(text_edit == NULL){
+    if(text_edit == NULL || text_edit->type != JSON_OBJECT  ){
         // TODO: For example pylsp does not give textEdit. Support that
         return false;
     }
@@ -2182,6 +2198,7 @@ bool layer_theme_selector_update(CCode* ccode, Layer* layer, int chr){
     if(chr == CUSTOM_KEY_ENTER){
         remove_layer(ccode, layer);
         free_layer(layer);
+        return true;
     }
 
     // adjust offset
@@ -2284,8 +2301,11 @@ void layer_theme_selector_render(CCode* ccode, Layer* layer){
 
 void layer_theme_selector_handle_keypress(CCode* ccode, Layer* layer, int chr, bool should_draw){
     START_PROFILING();
-    layer_theme_selector_update(ccode, layer, chr);
+    bool closed = layer_theme_selector_update(ccode, layer, chr);
     END_PROFILING("layer_theme_selector_update");
+    if(closed){
+        return;
+    }
     if(should_draw){
         START_PROFILING();
         layer_theme_selector_render(ccode, layer);

@@ -112,7 +112,7 @@ int main(int argc, char** argv) {
             push_layer_to_top(&ccode, next);
             push_layer_to_bot(&ccode, top);
         }
-        // 64 Reserved
+        // 64 Reserved by pdcurses
         if(ch >= KEY_F0 && ch <= KEY_F0+64 && top_layer(&ccode)->type != LAYER_CONSOLE){
             int index = (ch-KEY_F0)-1;
             Layer** code_layers = all_type_layers(&ccode, LAYER_CODE);
@@ -173,8 +173,8 @@ int main(int argc, char** argv) {
             }
         }
         int propagated_ch = ch;
-        clear();
         END_PROFILING("propagation");
+        clear();
         /*if(ch != -1){
             print_layers(&ccode);
         }*/

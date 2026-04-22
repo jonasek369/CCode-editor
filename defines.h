@@ -167,6 +167,8 @@ typedef struct {
 typedef struct {
     char* console_buffer;
     int console_buffer_x;
+    char** history;
+    int history_index;
 } LayerConsoleData;
 
 typedef struct {

@@ -206,7 +206,7 @@ void save_config(CCodeConfig* config){
     json_add_child(json_config, "tab_size", json_new_number(config->tab_size));
     char* out = NULL;
     json_dump(json_config, &out);
-    arrput(out, NULL);
+    arrput(out, (char)0);
     bool saved = nob_write_entire_file("config.json", out, arrlen(out)-1);
     if(!saved){
         printf("failed to save config!\n");
