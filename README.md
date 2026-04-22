@@ -56,7 +56,7 @@ Json config and theme definition are now being loaded there is also new commands
 :wconf (write config)  
 :theme (theme selector)   
 
-![Themes](https://i.imgur.com/qv7QFnB.png)
+![Themes](https://i.imgur.com/44lSrPn.png)
 
 ---
 
