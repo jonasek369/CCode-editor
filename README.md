@@ -50,6 +50,17 @@ Run the following commands in your terminal:
 
 ## Latest Development
 
+### Config, Theme & Theme selector
+
+Json config and theme definition are now being loaded there is also new commands  
+:wconf (write config)  
+:theme (theme selector)   
+
+![Themes](https://i.imgur.com/a/qv7QFnB.png)
+
+---
+
+
 ### Support for more LSP was added
 
 CCode editor now supports more than one lsp running at one  

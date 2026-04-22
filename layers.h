@@ -2279,10 +2279,6 @@ void layer_theme_selector_render(CCode* ccode, Layer* layer){
 
     int preview_lines = (int)(sizeof(preview) / sizeof(preview[0]));
 
-    attron(COLOR_PAIR(COLOR_PAIR_COMMENT));
-    mvprintw(0, PREVIEW_X, "~ preview ~");
-    attroff(COLOR_PAIR(COLOR_PAIR_COMMENT));
-
     for (int pl = 0; pl < preview_lines && (pl + 1) < y; pl++) {
         int col = PREVIEW_X;
         for (int s = 0; preview[pl][s].text != NULL; s++) {
