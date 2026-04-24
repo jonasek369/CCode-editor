@@ -129,6 +129,44 @@ int pstrcmp(const void* a, const void* b) {
     return tolower((unsigned char)*s1) - tolower((unsigned char)*s2);
 }
 
+#ifdef _WIN32
+
+#include <windows.h>
+#include <mmsystem.h>
+
+static LARGE_INTEGER freq;
+
+void init_timer() {
+    QueryPerformanceFrequency(&freq);
+    timeBeginPeriod(1); // improve sleep resolution
+}
+
+void sleep_until_next_frame(LARGE_INTEGER frame_start) {
+    LARGE_INTEGER now;
+    QueryPerformanceCounter(&now);
+
+    // convert elapsed time to nanoseconds
+    int64_t elapsed_ns = (now.QuadPart - frame_start.QuadPart) * 1000000000LL / freq.QuadPart;
+    int64_t remaining_ns = FRAME_NS - elapsed_ns;
+
+    if (remaining_ns <= 0) return;
+
+    // --- coarse sleep (millisecond-level) ---
+    if (remaining_ns > 2000000) { // >2 ms
+        DWORD sleep_ms = (DWORD)(remaining_ns / 1000000LL - 1);
+        Sleep(sleep_ms);
+    }
+
+    // --- fine spin-wait for precision ---
+    do {
+        QueryPerformanceCounter(&now);
+        elapsed_ns = (now.QuadPart - frame_start.QuadPart) * 1000000000LL / freq.QuadPart;
+        remaining_ns = FRAME_NS - elapsed_ns;
+    } while (remaining_ns > 0);
+}
+
+#else
+
 void sleep_until_next_frame(struct timespec frame_start) {
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
@@ -147,6 +185,6 @@ void sleep_until_next_frame(struct timespec frame_start) {
         nanosleep(&sleep_time, NULL);
     }
 }
-
+#endif
 
 #endif

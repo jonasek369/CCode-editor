@@ -78,11 +78,21 @@ int main(int argc, char** argv) {
     if(ccode.layers == NULL){
         arrpush(ccode.layers, new_layer_code());
     }
-    struct timespec frame_start;
+
+    #ifdef _WIN32
+        init_timer();
+        LARGE_INTEGER frame_start;
+    #else
+        struct timespec frame_start;
+    #endif
 
     while(ccode.config->PrivateRunning) {
         START_PROFILING();
-        clock_gettime(CLOCK_MONOTONIC, &frame_start);
+        #ifdef _WIN32
+            QueryPerformanceCounter(&frame_start);
+        #else
+            clock_gettime(CLOCK_MONOTONIC, &frame_start);
+        #endif
         ch = getch();
 
         /*
@@ -244,7 +254,7 @@ int main(int argc, char** argv) {
 
     // Clean up
     endwin();   // End curses mode
-    wait(NULL);
+
     return 0;
 }
 

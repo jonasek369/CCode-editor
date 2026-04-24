@@ -7,7 +7,7 @@
 #define CUSTOM_CTL_F 6
 #define CUSTOM_CTL_S 19
 
-#define FPS 144
+#define FPS 240
 #define FRAME_NS (1000000000L / FPS)
 
 #include <stdbool.h>
