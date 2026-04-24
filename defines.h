@@ -7,6 +7,9 @@
 #define CUSTOM_CTL_F 6
 #define CUSTOM_CTL_S 19
 
+#define FPS 144
+#define FRAME_NS (1000000000L / FPS)
+
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -29,8 +32,6 @@
 #include "./tiny_queue/tiny_queue.h"
 
 
-
-
 #define LSP_NO_STB_DS
 #define LSP_NO_CJSON
 #define LSP_NO_TINY_QUEUE
@@ -40,7 +41,6 @@
 #include "nob.h"
 
 #include "config.h"
-
 #include "utils.h"
 
 

@@ -50,7 +50,6 @@ void handle_args(CCode* ccode, int argc, char** argv){
 }
 
 
-
 int main(int argc, char** argv) {
     // For random file ids for LSP
     srand(time(NULL));
@@ -79,9 +78,11 @@ int main(int argc, char** argv) {
     if(ccode.layers == NULL){
         arrpush(ccode.layers, new_layer_code());
     }
+    struct timespec frame_start;
 
     while(ccode.config->PrivateRunning) {
         START_PROFILING();
+        clock_gettime(CLOCK_MONOTONIC, &frame_start);
         ch = getch();
 
         /*
@@ -113,7 +114,7 @@ int main(int argc, char** argv) {
             push_layer_to_bot(&ccode, top);
         }
         // 64 Reserved by pdcurses
-        if(ch >= KEY_F0 && ch <= KEY_F0+64 && top_layer(&ccode)->type != LAYER_CONSOLE){
+        if(ch > KEY_F0 && ch <= KEY_F0+64 && arrlen(ccode.layers) >= 2 && top_layer(&ccode)->type != LAYER_CONSOLE){
             int index = (ch-KEY_F0)-1;
             Layer** code_layers = all_type_layers(&ccode, LAYER_CODE);
             if(arrlen(code_layers) <= index){
@@ -221,7 +222,11 @@ int main(int argc, char** argv) {
         START_PROFILING();
         draw_ui(&ccode);
         END_PROFILING("UI");
-
+        
+        START_PROFILING();
+        sleep_until_next_frame(frame_start);
+        END_PROFILING("sleep_until_next_frame");
+        
         END_PROFILING("Frame");
         if(ccode.config->profiling){
             prof_print(stdscr);

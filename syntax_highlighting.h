@@ -40,6 +40,8 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 int get_pair_id(const char* name) {
+    if(name == NULL){ return COLOR_PAIR_DEFAULT;}
+
     if (strcmp(name, "default") == 0)    return COLOR_PAIR_DEFAULT;
     if (strcmp(name, "keyword") == 0)    return COLOR_PAIR_KEYWORD;
     if (strcmp(name, "type") == 0)       return COLOR_PAIR_TYPE;
@@ -63,6 +65,9 @@ int get_pair_id(const char* name) {
 }
 
 Color* get_color_from_key(ColorTheme* theme, const char* key){
+    if(theme == NULL || key == NULL){
+        return NULL;
+    }
     for (size_t i = 0; i < arrlenu(theme->colors); i++) {
         Color* e = theme->colors[i];
         if(strcmp(e->name, key) == 0) return e;

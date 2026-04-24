@@ -128,4 +128,25 @@ int pstrcmp(const void* a, const void* b) {
 
     return tolower((unsigned char)*s1) - tolower((unsigned char)*s2);
 }
+
+void sleep_until_next_frame(struct timespec frame_start) {
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+
+    long elapsed_ns =
+        (now.tv_sec - frame_start.tv_sec) * 1000000000L +
+        (now.tv_nsec - frame_start.tv_nsec);
+
+    long remaining_ns = FRAME_NS - elapsed_ns;
+
+    if (remaining_ns > 0) {
+        struct timespec sleep_time;
+        sleep_time.tv_sec = remaining_ns / 1000000000L;
+        sleep_time.tv_nsec = remaining_ns % 1000000000L;
+
+        nanosleep(&sleep_time, NULL);
+    }
+}
+
+
 #endif
