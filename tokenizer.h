@@ -18,22 +18,24 @@ void add_command(const char* command, CommandType type){
 }
 
 void init_commands(){
-    add_command(":o",     COMMAND_OPEN);
-    add_command(":q",     COMMAND_QUIT);
-    add_command(":gt",    COMMAND_GOTO);
-    add_command(":s",     COMMAND_SAVE);
-    add_command(":w",     COMMAND_WRITE);
-    add_command(":chn",   COMMAND_CHANGE_NAME);
-    add_command(":sys",   COMMAND_SYS);
-    add_command(":f",     COMMAND_FIND);
-    add_command(":c",     COMMAND_CLOSE);
-    add_command(":c!",    COMMAND_FORCE_CLOSE);
-    add_command(":tree",  COMMAND_TREE);
-    add_command(":ts",    COMMAND_SET_TAB_SIZE);
-    add_command(":cd",    COMMAND_TREE_CHANGE_DIR);
-    add_command(":prof",  COMMAND_PROFILING);
-    add_command(":theme", COMMAND_THEME);
-    add_command(":wconf", COMMAND_WRITE_CONFIG);
+    add_command(":o",      COMMAND_OPEN);
+    add_command(":q",      COMMAND_QUIT);
+    add_command(":gt",     COMMAND_GOTO);
+    add_command(":s",      COMMAND_SAVE);
+    add_command(":w",      COMMAND_WRITE);
+    add_command(":chn",    COMMAND_CHANGE_NAME);
+    add_command(":sys",    COMMAND_SYS);
+    add_command(":f",      COMMAND_FIND);
+    add_command(":c",      COMMAND_CLOSE);
+    add_command(":c!",     COMMAND_FORCE_CLOSE);
+    add_command(":tree",   COMMAND_TREE);
+    add_command(":ts",     COMMAND_SET_TAB_SIZE);
+    add_command(":cd",     COMMAND_TREE_CHANGE_DIR);
+    add_command(":prof",   COMMAND_PROFILING);
+    add_command(":theme",  COMMAND_THEME);
+    add_command(":wconf",  COMMAND_WRITE_CONFIG);
+    add_command(":mkdir",  COMMAND_MAKE_DIRECTORY);
+    add_command(":mkfile", COMMAND_MAKE_FILE);
 }
 
 void destroy_commands(){
@@ -98,7 +100,7 @@ void parse_unquoted_string(TokenizerState* ts, Token* out){
     while(
         ts->source[ts->index] != '\0'                                      &&
         !is_whitespace[(uint8_t)ts->source[ts->index]]                     &&
-        !(isdigit(ts->source[ts->index]) || ts->source[ts->index] == '-' ) &&
+        (start != ts->index || !(isdigit(ts->source[ts->index]) || ts->source[ts->index] == '-' )) &&
         ts->source[ts->index] != '"'                                       
         ){
         ts->index++;

@@ -15,15 +15,13 @@ typedef struct {
 	char* background_key;
 } ColorPair;
 
+
 typedef struct {
     char* path;
     Color* background;
 	Color** colors;
 	ColorPair** pairs;
 } ColorTheme;
-
-
-
 
 
 Color* make_color(short id, const char* name, uint64_t color) {

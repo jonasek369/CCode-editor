@@ -565,8 +565,7 @@ void write_code_layer_to_file(CCode* ccode){
 
 bool do_completion(CCode* ccode){
     Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
-    // No code layer to save
-    if(top_code_layer == NULL){
+    if(top_code_layer == NULL){ 
         return false;
     }
     LayerCodeData* lcd = (LayerCodeData*) top_code_layer->layer_data;
@@ -581,7 +580,6 @@ bool do_completion(CCode* ccode){
     if(items == NULL || items->type != JSON_ARRAY){
         return false;
     }
-
     if(lcd->completion_window->selected >= arrlen(items->array)){
         json_free(lcd->completion_window->completion);
         free(lcd->completion_window);
@@ -593,49 +591,55 @@ bool do_completion(CCode* ccode){
         return false;
     }
     JsonValue* text_edit = shget(to_add->object, "textEdit");
-    if(text_edit == NULL || text_edit->type != JSON_OBJECT  ){
-        // TODO: For example pylsp does not give textEdit. Support that
+    if(text_edit == NULL || text_edit->type != JSON_OBJECT){
         return false;
     }
     LSPRange* range = get_range(text_edit);
     JsonValue* new_text = shget(text_edit->object, "newText");
-
-    char* line = lcd->code_buffer[lcd->cursor->y];
+    int row = lcd->cursor->y;
+    char* line = lcd->code_buffer[row];
     int line_len = arrlen(line);
-        
+
     if(lcd->cursor->x > line_len - 1){
         lcd->cursor->x = line_len - 1;
     }
-    size_t start_char = range->start_character;
-    size_t i = 0;
-
-    (void)arrpop(line);
-    (void)arrpop(line);
-
-    int row = lcd->cursor->y;
-
-    while(new_text->string[i]){
-        if(start_char < range->end_character && line_len-1 > start_char){
-            line[start_char] = new_text->string[i];
-            lcd->cursor->x--;
-        }else{
-            arrins(line, start_char, new_text->string[i]);
-        }
-        i++;
-        start_char++;
-        lcd->cursor->x++;
+    
+    (void)arrpop(line); // \0
+    (void)arrpop(line); // \n
+    
+    size_t start   = range->start_character;
+    size_t end     = range->end_character;
+    size_t new_len = strlen(new_text->string);
+    int    cur_len = arrlen(line);
+    
+    if((int)end > cur_len) end = (size_t)cur_len;
+    if((int)start > cur_len) start = (size_t)cur_len;
+    
+    char* new_line = NULL;
+    
+    for(size_t k = 0; k < start; k++){
+        arrput(new_line, line[k]);
     }
-
-    arrput(line, '\n');
-    arrput(line, '\0');
-
-    lcd->code_buffer[lcd->cursor->y] = line;
+    for(size_t k = 0; k < new_len; k++){
+        arrput(new_line, new_text->string[k]);
+    }
+    for(int k = (int)end; k < cur_len; k++){
+        arrput(new_line, line[k]);
+    }
+    arrput(new_line, '\n');
+    arrput(new_line, '\0');
+    
+    arrfree(line);
+    lcd->code_buffer[row] = new_line;
+    line = new_line;
+    
+    lcd->cursor->x = (int)(start + new_len);
 
     if(lcd->parser && lcd->tree){
         size_t start_col   = range->start_character;
-        size_t old_end_col = range->end_character;
-        size_t new_end_col = range->start_character + strlen(new_text->string);
-    
+        size_t old_end_col = end;
+        size_t new_end_col = start + new_len;
+
         TSInputEdit edit = {
             .start_byte    = buffer_byte_offset(lcd, row, start_col),
             .old_end_byte  = buffer_byte_offset(lcd, row, old_end_col),
@@ -648,7 +652,8 @@ bool do_completion(CCode* ccode){
     }
     TS_REPARSE(lcd);
 
-    // free window
+    free(range);
+
     json_free(lcd->completion_window->completion);
     free(lcd->completion_window);
     lcd->completion_window = NULL;
@@ -656,7 +661,7 @@ bool do_completion(CCode* ccode){
     if(is_lspkind_running(ccode, lang_to_lspkind[lcd->lang])){
         send_to_lsp(ccode, get_running_lsp(ccode, lang_to_lspkind[lcd->lang]));
     }
-    free(range);
+
     return true;
 }
 
@@ -1194,6 +1199,75 @@ void console_execute_command(CCode* ccode, const char* buffer){
 
         case COMMAND_WRITE_CONFIG: {
             save_config(ccode->config);
+            break;
+        }
+
+        case COMMAND_MAKE_DIRECTORY: {
+            if(arrlen(to.tokens) <= 1){
+                goto defer;
+            }
+
+            Layer* top_tree_layer = top_type_layer(ccode, LAYER_DIR_WALK);
+            if(top_tree_layer == NULL){
+                message_to_console(ccode, "Cannot make directory outside tree");
+                goto defer;
+            }
+
+            LayerDirWalkData* ldwd = top_tree_layer->layer_data;
+
+            if(to.tokens[1].type == TOKEN_STRING){
+                char* as_str = stringview_to_str(to.tokens[1].string.start, to.tokens[1].string.size);
+
+                char* full_path = nob_temp_sprintf("%s/%s", ldwd->current_dir_path, as_str);
+
+                bool status = nob_mkdir_if_not_exists(full_path);
+                if(!status){
+                    char* message = nob_temp_sprintf("Directory '%s' could not be created!", as_str);
+                    message_to_console(ccode, message);
+                }else{
+                    char* message = nob_temp_sprintf("Directory '%s' was created!", as_str);
+                    message_to_console(ccode, message);
+                }
+                nob_temp_reset();
+                free(as_str);
+                char* dir = str_to_arr(ldwd->current_dir_path);
+                change_tree_path(top_tree_layer, dir);
+            }
+            break;
+        } 
+
+        case COMMAND_MAKE_FILE: {
+            if(arrlen(to.tokens) <= 1){
+                goto defer;
+            }
+
+            Layer* top_tree_layer = top_type_layer(ccode, LAYER_DIR_WALK);
+            if(top_tree_layer == NULL){
+                message_to_console(ccode, "Cannot make file outside tree");
+                goto defer;
+            }
+
+            LayerDirWalkData* ldwd = top_tree_layer->layer_data;
+
+            if(to.tokens[1].type == TOKEN_STRING){
+                char* as_str = stringview_to_str(to.tokens[1].string.start, to.tokens[1].string.size);
+
+                char* full_path = nob_temp_sprintf("%s/%s", ldwd->current_dir_path, as_str);
+
+                bool status = nob_write_entire_file(full_path, NULL, 0);
+                if(!status){
+                    char* message = nob_temp_sprintf("File '%s' could not be created!", as_str);
+                    message_to_console(ccode, message);
+                }else{
+                    char* message = nob_temp_sprintf("File '%s' was created!", as_str);
+                    message_to_console(ccode, message);
+                }
+                nob_temp_reset();
+                free(as_str);
+                char* dir = str_to_arr(ldwd->current_dir_path);
+                change_tree_path(top_tree_layer, dir);
+            }
+            break;
         }
 
         default: {
