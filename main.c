@@ -1,4 +1,4 @@
-#include "layers.h"
+#include "defines.h"
 
 /*
 
@@ -197,28 +197,11 @@ int main(int argc, char** argv) {
             }
             bool should_draw = (i <= stop_drawing);
             switch(layer->type){
-                case LAYER_DIR_WALK: {
-                    START_PROFILING();
-                    layer_dir_walk_handle_keypress(&ccode, layer, propagated_ch, should_draw);
-                    END_PROFILING("Layer dir walk");
-                    break;
-                }
-                case LAYER_CODE: {
-                    START_PROFILING();
-                    layer_code_handle_keypress(&ccode, layer, propagated_ch, should_draw);
-                    END_PROFILING("Layer code");
-                    break;
-                }
-                case LAYER_CONSOLE: {
-                    START_PROFILING();
-                    layer_console_handle_keypress(&ccode, layer, propagated_ch, should_draw);
-                    END_PROFILING("Layer console");
-                    break;
-                }
+                case LAYER_DIR_WALK: 
+                case LAYER_CODE: 
+                case LAYER_CONSOLE: 
                 case LAYER_THEME_SELECTOR: {
-                    START_PROFILING();
-                    layer_theme_selector_handle_keypress(&ccode, layer, propagated_ch, should_draw);
-                    END_PROFILING("Layer theme selector");
+                    layer->handle_keypress_function(&ccode, layer, propagated_ch, should_draw);
                     break;
                 }
                 default: {

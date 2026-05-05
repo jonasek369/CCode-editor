@@ -95,6 +95,8 @@ typedef enum {
 static const bool is_whitespace[256] = {
   [' '] = 1, ['\t'] = 1, ['\n'] = 1, ['\r'] = 1
 };
+#define default_filename_length 8
+static char* default_filename = "untitled";
 
 typedef struct {
     ConsoleTokenType type;
@@ -187,19 +189,24 @@ typedef struct {
     int offset;
 }LayerThemeSelectorData;
 
-typedef struct {
+
+typedef struct Layer Layer;
+typedef struct CCode CCode;
+
+struct Layer {
     LayerType type;
     bool consume_input;
     bool draws_fullscreen;
     void* layer_data;
-} Layer;
+    void (*handle_keypress_function)(CCode*, Layer*, int, bool);
+};
 
 
-typedef struct {
+struct CCode{
     Layer** layers;
     LSPContext** lsp_ctxs;
     CCodeConfig* config;
-} CCode;
+};
 
 #define LABEL(x) x:
 
@@ -207,5 +214,7 @@ typedef struct {
 #include "syntax_highlighting.h"
 #include "lsp_handler.h"
 
+
+#include "layers.h"
 
 #endif
