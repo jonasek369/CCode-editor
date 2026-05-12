@@ -48,6 +48,71 @@ void handle_args(CCode* ccode, int argc, char** argv){
     }
 }
 
+// XCurses*lines:  78
+// XCurses*cols:   320
+void handle_mouse(CCode* ccode){
+    MEVENT event;
+
+    nc_getmouse(&event);
+    printf("%d\n", event.bstate);
+
+    Layer* current_top_layer = top_layer(ccode);
+
+    if(!current_top_layer){
+        return;
+    }
+
+    // scroll up
+    if(event.bstate & BUTTON4_PRESSED){
+        current_top_layer->update_function(ccode, current_top_layer, KEY_UP);
+    }
+
+    // scroll down
+    if(event.bstate & BUTTON5_PRESSED){
+        current_top_layer->update_function(ccode, current_top_layer, KEY_DOWN);
+    }
+    if(event.x < 0) event.x = 0;
+    if(event.y < 0) event.y = 0;
+
+    if(event.bstate & BUTTON1_CLICKED){
+        // handle click based on the type of layer
+        switch(current_top_layer->type){
+            case LAYER_CODE: {
+                LayerCodeData* lcd = current_top_layer->layer_data;
+                if(!lcd || !lcd->cursor) break;
+            
+                int target_y = lcd->cursor->yoff + event.y - 1;
+            
+                if(target_y < 0 || target_y >= arrlen(lcd->code_buffer))
+                    break;
+            
+                lcd->cursor->y = target_y;
+            
+                char* line = lcd->code_buffer[target_y];
+                int len = arrlen(line)-2;
+            
+                int target_x = lcd->cursor->xoff + event.x;
+            
+                if(target_x > len) target_x = len;
+                if(target_x < 0) target_x = 0;
+            
+                lcd->cursor->x = target_x;
+            
+                break;
+            }
+            case LAYER_DIR_WALK: {
+                LayerDirWalkData* ldwd = current_top_layer->layer_data;
+                if(!ldwd || (event.y - 3) < 0) break;
+                if(ldwd->selected + ldwd->offset == event.y-3 + ldwd->offset){
+                    layer_dir_walk_open(ccode, current_top_layer, ldwd);
+                }else{
+                    ldwd->selected = event.y-3 + ldwd->offset;
+                }
+                break;
+            }
+        }
+    }
+}
 
 int main(int argc, char** argv) {
     // For random file ids for LSP
@@ -64,6 +129,7 @@ int main(int argc, char** argv) {
     keypad(stdscr, TRUE);
     nodelay(stdscr, TRUE);
     noecho();
+    mousemask(ALL_MOUSE_EVENTS | REPORT_MOUSE_POSITION, NULL);
 
     move(1, 0);
 
@@ -99,6 +165,11 @@ int main(int argc, char** argv) {
             printf("%d\n", ch);
         }
         */
+
+        if(ch == 539){
+            handle_mouse(&ccode);
+        }
+
 
         // handle LSPs if some are active
         if(ccode.lsp_ctxs){

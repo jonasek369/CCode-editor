@@ -3,6 +3,8 @@
 
 
 void layer_console_handle_keypress(CCode* ccode, Layer* layer, int chr, bool should_draw);
+bool layer_console_update(CCode* ccode, Layer* layer, int chr);
+
 
 Layer* new_layer_console(){
     Layer* console = malloc(sizeof(Layer));
@@ -13,6 +15,7 @@ Layer* new_layer_console(){
     console->consume_input = true;
     console->draws_fullscreen = false;
     console->handle_keypress_function = &layer_console_handle_keypress;
+    console->update_function = &layer_console_update;
 
     LayerConsoleData* lcd = malloc(sizeof(LayerConsoleData));
     if(!lcd){
@@ -165,6 +168,10 @@ void console_execute_command(CCode* ccode, const char* buffer){
         }
 
         case COMMAND_FIND: {
+            Layer* layer_at_top = top_layer(ccode);
+
+            if(layer_at_top->type != LAYER_CODE){ goto defer; }
+
             if (arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_STRING) {
                 int32_t nth_occurence = 1;
                 if(arrlen(to.tokens) >= 3 && to.tokens[2].type == TOKEN_INTEGER){
@@ -427,9 +434,9 @@ defer:
 }
 
 
-void layer_console_update(CCode* ccode, Layer* layer, int chr){
+bool layer_console_update(CCode* ccode, Layer* layer, int chr){
     if(!ccode || !layer || layer->type != LAYER_CONSOLE || layer->layer_data == NULL){
-        return;
+        return false;
     }
     LayerConsoleData* console_data = (LayerConsoleData*) layer->layer_data;
     int y, x;
@@ -476,6 +483,8 @@ void layer_console_update(CCode* ccode, Layer* layer, int chr){
             console_data->console_buffer_x++;
         }
     }
+
+    return true;
 }
 
 

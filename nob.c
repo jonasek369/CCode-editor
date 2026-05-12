@@ -49,7 +49,7 @@ int main(int argc, char **argv)
 
     // Build Ccode-editor
     nob_cmd_append(&cmd,
-        "gcc", "-D_POSIX_C_SOURCE=200809L", "-m64", "-std=c11", "-g",
+        "gcc", "-D_DEFAULT_SOURCE", "-m64", "-std=c11", "-g",
         "-I", incl,
         "-L", lib,
         "-I", "./tree-sitter/lib/include",
@@ -75,9 +75,6 @@ int main(int argc, char **argv)
     #endif
         "-Wall", "-Wextra", "-Wno-sign-compare"
     );
-    #if (OPTIMISATION == 1)
-        nob_cmd_append(&cmd, "-O3", "-march=native");
-    #endif
     generate_compile_flags(&cmd);
     if (!nob_cmd_run_sync_and_reset(&cmd)) return 1;
 

@@ -199,6 +199,7 @@ struct Layer {
     bool draws_fullscreen;
     void* layer_data;
     void (*handle_keypress_function)(CCode*, Layer*, int, bool);
+    bool (*update_function)(CCode*, Layer*, int);
 };
 
 

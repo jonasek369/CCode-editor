@@ -21,6 +21,8 @@ extern const TSLanguage *tree_sitter_c_sharp();
 
 
 void layer_code_handle_keypress(CCode* ccode, Layer* layer, int chr, bool should_draw);
+bool layer_code_update(CCode* ccode, Layer* layer, int chr);
+
 
 Layer* new_layer_code(){
     Layer* code = malloc(sizeof(Layer));
@@ -31,6 +33,7 @@ Layer* new_layer_code(){
     code->consume_input = true;
     code->draws_fullscreen = true;
     code->handle_keypress_function = &layer_code_handle_keypress;
+    code->update_function = &layer_code_update;
 
     LayerCodeData* lcd = malloc(sizeof(LayerCodeData));
     if(!lcd){
@@ -523,9 +526,9 @@ void find_jump(CCode* ccode, char *finding, int32_t size, int32_t nth_occurence)
 }
 
 
-void layer_code_update(CCode* ccode, Layer* layer, int chr){
+bool layer_code_update(CCode* ccode, Layer* layer, int chr){
     if(!ccode || !layer || layer->type != LAYER_CODE || layer->layer_data == NULL){
-        return;
+        return false;
     }
     START_PROFILING();
     LayerCodeData* code_data = (LayerCodeData*) layer->layer_data;
@@ -549,7 +552,7 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
     }
 
     if(code_data->cursor->y >= arrlen(code_data->code_buffer)){
-        return;
+        return false;
     }
 
     if(chr == CUSTOM_CTL_F){
@@ -1056,6 +1059,8 @@ void layer_code_update(CCode* ccode, Layer* layer, int chr){
         code_data->cursor->xoff = code_data->cursor->x - content_width + 1;
     }
     END_PROFILING("send_to_lsp");
+
+    return true;
 }
 
 

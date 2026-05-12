@@ -3,6 +3,8 @@
 
 
 void layer_dir_walk_handle_keypress(CCode* ccode, Layer* layer, int chr, bool should_draw);
+bool layer_dir_walk_update(CCode* ccode, Layer* layer, int chr);
+
 
 Layer* new_layer_dir_walk(char* dir){
     Layer* tree = malloc(sizeof(Layer));
@@ -13,6 +15,7 @@ Layer* new_layer_dir_walk(char* dir){
     tree->consume_input = true;
     tree->draws_fullscreen = true;
     tree->handle_keypress_function = &layer_dir_walk_handle_keypress;
+    tree->update_function = &layer_dir_walk_update;
 
     LayerDirWalkData* ldwd = malloc(sizeof(LayerDirWalkData));
     if(!ldwd){
@@ -80,6 +83,33 @@ int load_dir(LayerDirWalkData* ldwd){
 }
 
 
+bool layer_dir_walk_open(CCode* ccode, Layer* layer, LayerDirWalkData* ldwd){
+    char* dir = nob_temp_sprintf("%s/%s",
+        ldwd->current_dir_path,
+        ldwd->current_dir_files[ldwd->selected]);
+    char resolved_path[MAX_PATH] = {0};
+    if(resolve_path(dir, resolved_path) == NULL){
+        return false;
+    }
+    switch(nob_get_file_type(resolved_path)){
+        case NOB_FILE_DIRECTORY: {
+            char* arr = str_to_arr(resolved_path);
+            change_tree_path(layer, arr);
+            load_dir(ldwd);
+            nob_temp_reset();
+            return true;
+        }
+        default: {
+            char* arr = str_to_arr(resolved_path);
+            read_file_to_code_layer(ccode, arr, arrlen(arr)-1);
+            arrfree(arr);
+            remove_layer(ccode, layer);
+            free_layer(layer);
+            return true;
+        }
+    }
+}
+
 bool layer_dir_walk_update(CCode* ccode, Layer* layer, int chr){
     if(!ccode || !layer || layer->type != LAYER_DIR_WALK || layer->layer_data == NULL){
         return false;
@@ -121,36 +151,7 @@ bool layer_dir_walk_update(CCode* ccode, Layer* layer, int chr){
     }
 
     if(chr == CUSTOM_KEY_ENTER){
-        char* dir = nob_temp_sprintf("%s/%s",
-            ldwd->current_dir_path,
-            ldwd->current_dir_files[ldwd->selected]);
-        char resolved_path[MAX_PATH] = {0};
-
-        if(resolve_path(dir, resolved_path) == NULL){
-            return false;
-        }
-
-        switch(nob_get_file_type(resolved_path)){
-            case NOB_FILE_DIRECTORY: {
-                char* arr = str_to_arr(resolved_path);
-
-                change_tree_path(layer, arr);
-
-                load_dir(ldwd);
-
-                nob_temp_reset();
-                break;
-            }
-
-            default: {
-                char* arr = str_to_arr(resolved_path);
-                read_file_to_code_layer(ccode, arr, arrlen(arr)-1);
-                arrfree(arr);
-                remove_layer(ccode, layer);
-                free_layer(layer);
-                return true;
-            }
-        }
+        return layer_dir_walk_open(ccode, layer, ldwd);
     }
     return false;
 }

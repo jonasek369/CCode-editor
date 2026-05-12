@@ -2,6 +2,7 @@
 #define _H_LAYER_THEME_SELECTOR
 
 void layer_theme_selector_handle_keypress(CCode* ccode, Layer* layer, int chr, bool should_draw);
+bool layer_theme_selector_update(CCode* ccode, Layer* layer, int chr);
 
 
 Layer* new_layer_theme_selector(){
@@ -13,6 +14,7 @@ Layer* new_layer_theme_selector(){
     tree->consume_input = true;
     tree->draws_fullscreen = true;
     tree->handle_keypress_function = &layer_theme_selector_handle_keypress;
+    tree->update_function = &layer_theme_selector_update;
 
     LayerThemeSelectorData* ltsd = malloc(sizeof(LayerThemeSelectorData));
     if(!ltsd){
