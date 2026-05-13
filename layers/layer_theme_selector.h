@@ -30,7 +30,7 @@ Layer* new_layer_theme_selector(){
 }
 
 
-int load_themes(LayerThemeSelectorData* ltsd, const char* path){
+int layer_theme_selector_load_themes(LayerThemeSelectorData* ltsd, const char* path){
     if(path == NULL){
         return -1;
     }
@@ -67,6 +67,18 @@ int load_themes(LayerThemeSelectorData* ltsd, const char* path){
 }
 
 
+void layer_theme_selector_set_theme(CCode* ccode, LayerThemeSelectorData* ltsd){
+    char* theme_path = nob_temp_sprintf("./themes/%s", ltsd->current_dir_files[ltsd->selected]);
+    ColorTheme* new_theme = load_theme(theme_path);
+    if(new_theme){
+        free_theme(ccode->config->theme);
+        ccode->config->theme = new_theme;
+        init_syntax_colors(ccode->config->theme);
+    }
+    nob_temp_reset();
+}
+
+
 bool layer_theme_selector_update(CCode* ccode, Layer* layer, int chr){
     if(!ccode || !layer || layer->type != LAYER_THEME_SELECTOR || layer->layer_data == NULL){
         return false;
@@ -75,18 +87,11 @@ bool layer_theme_selector_update(CCode* ccode, Layer* layer, int chr){
     LayerThemeSelectorData* ltsd = (LayerThemeSelectorData*) layer->layer_data;
 
     if(ltsd->current_dir_files == NULL){
-        if(load_themes(ltsd, "./themes") == -1){
+        if(layer_theme_selector_load_themes(ltsd, "./themes") == -1){
             printf("There was error reading the directory themes");
             return false;
         }
-        char* theme_path = nob_temp_sprintf("./themes/%s", ltsd->current_dir_files[ltsd->selected]);
-        ColorTheme* new_theme = load_theme(theme_path);
-        if(new_theme){
-            free_theme(ccode->config->theme);
-            ccode->config->theme = new_theme;
-            init_syntax_colors(ccode->config->theme);
-        }
-        nob_temp_reset();
+        layer_theme_selector_set_theme(ccode, ltsd);
     }
 
     int screen_y, screen_x;
@@ -98,28 +103,14 @@ bool layer_theme_selector_update(CCode* ccode, Layer* layer, int chr){
     if(chr == KEY_DOWN){
         if((ltsd->selected + 1) < arrlen(ltsd->current_dir_files)){
             ltsd->selected++;
-            char* theme_path = nob_temp_sprintf("./themes/%s", ltsd->current_dir_files[ltsd->selected]);
-            ColorTheme* new_theme = load_theme(theme_path);
-            if(new_theme){
-                free_theme(ccode->config->theme);
-                ccode->config->theme = new_theme;
-                init_syntax_colors(ccode->config->theme);
-            }
-            nob_temp_reset();
+            layer_theme_selector_set_theme(ccode, ltsd);
         }
     }
 
     if(chr == KEY_UP){
         if(ltsd->selected > 0){
             ltsd->selected--;
-            char* theme_path = nob_temp_sprintf("./themes/%s", ltsd->current_dir_files[ltsd->selected]);
-            ColorTheme* new_theme = load_theme(theme_path);
-            if(new_theme){
-                free_theme(ccode->config->theme);
-                ccode->config->theme = new_theme;
-                init_syntax_colors(ccode->config->theme);
-            }
-            nob_temp_reset();
+            layer_theme_selector_set_theme(ccode, ltsd);
         }
     }
 

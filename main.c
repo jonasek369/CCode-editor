@@ -54,7 +54,7 @@ void handle_mouse(CCode* ccode){
     MEVENT event;
 
     nc_getmouse(&event);
-    printf("%d\n", event.bstate);
+    // printf("%d\n", event.bstate);
 
     Layer* current_top_layer = top_layer(ccode);
 
@@ -71,6 +71,7 @@ void handle_mouse(CCode* ccode){
     if(event.bstate & BUTTON5_PRESSED){
         current_top_layer->update_function(ccode, current_top_layer, KEY_DOWN);
     }
+
     if(event.x < 0) event.x = 0;
     if(event.y < 0) event.y = 0;
 
@@ -102,12 +103,55 @@ void handle_mouse(CCode* ccode){
             }
             case LAYER_DIR_WALK: {
                 LayerDirWalkData* ldwd = current_top_layer->layer_data;
-                if(!ldwd || (event.y - 3) < 0) break;
-                if(ldwd->selected + ldwd->offset == event.y-3 + ldwd->offset){
+                if(!ldwd) break;
+            
+                int header_offset = 3;
+                int list_height = event.y - header_offset;
+                if(list_height < 0) break;
+            
+                int idx = event.y - header_offset + ldwd->offset;
+            
+                if(idx < 0) break;
+                if(idx >= arrlen(ldwd->current_dir_files)) break;
+            
+                if(ldwd->selected == idx){
                     layer_dir_walk_open(ccode, current_top_layer, ldwd);
-                }else{
-                    ldwd->selected = event.y-3 + ldwd->offset;
+                } else {
+                    ldwd->selected = idx;
                 }
+                break;
+            }
+            case LAYER_THEME_SELECTOR: {
+                LayerThemeSelectorData* ltsd = current_top_layer->layer_data;
+                if(!ltsd) break;
+            
+                int header_offset = 1;
+            
+                int screen_row = event.y - header_offset;
+                if(screen_row < 0) break;
+            
+                int idx = screen_row + ltsd->offset;
+            
+                if(idx < 0 || idx >= arrlen(ltsd->current_dir_files)) break;
+            
+                ltsd->selected = idx;
+                layer_theme_selector_set_theme(ccode, ltsd);
+            
+                break;
+            }
+            case LAYER_CONSOLE: {
+                int x, y;
+                (void) x;
+                getmaxyx(stdscr, y, x);
+                if(event.y == y-1){
+                    LayerConsoleData* lcd = current_top_layer->layer_data;
+
+                    if(event.x > arrlen(lcd->console_buffer)-1) break;
+
+                    lcd->console_buffer_x = event.x;
+                }
+            }
+            default: {
                 break;
             }
         }
