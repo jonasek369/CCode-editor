@@ -69,6 +69,13 @@ Layer** all_type_layers(CCode* ccode, LayerType type){
 
 Layer* top_type_layer(CCode* ccode, LayerType type){
     for(int i = 0; i < arrlen(ccode->layers); i++){
+        if(type == LAYER_CODE && ccode->layers[i]->type == LAYER_SPLIT_VIEW ){
+            Layer* sv_layer = ccode->layers[i];
+            LayerSplitViewData* lsvd = sv_layer->layer_data;
+            if(lsvd->splitten_layers == NULL || arrlen(lsvd->splitten_layers) == 0) 
+                continue;
+            return lsvd->splitten_layers[lsvd->focused];
+        }
         if(ccode->layers[i]->type == type) return ccode->layers[i];
     }
     return NULL;
@@ -202,7 +209,7 @@ void free_layer(Layer* layer){
             }
             free(lcd);
         }
-    } else if(layer->type == LAYER_CONSOLE){
+    }else if(layer->type == LAYER_CONSOLE){
         LayerConsoleData* lcd = (LayerConsoleData*) layer->layer_data;
         if(lcd){
             if(lcd->console_buffer){
@@ -235,7 +242,26 @@ void free_layer(Layer* layer){
             }
             free(ltsd);
         }
+    }else if(layer->type == LAYER_SPLIT_VIEW){
+        LayerSplitViewData* lsvd = layer->layer_data;
+        if(lsvd){
+            if(lsvd->splitten_layers){
+                for(size_t i = 0; i < arrlenu(lsvd->splitten_layers); i++){
+                    free_layer(lsvd->splitten_layers[i]);
+                }
+                arrfree(lsvd->splitten_layers);
+            }
+            if(lsvd->virtual_windows){
+                for(size_t i = 0; i < arrlenu(lsvd->virtual_windows); i++){
+                    free(lsvd->virtual_windows[i]);
+                }
+                arrfree(lsvd->virtual_windows);
+            }
+            free(lsvd);
+        }
     }
+
+    
     free(layer);
 }
 
@@ -267,6 +293,7 @@ void change_tree_path(Layer* layer, char* new_path){
 void draw_ui(CCode* ccode) {
     Layer** code_layers = all_type_layers(ccode, LAYER_CODE);
     Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
+    Layer* top_split_view = top_type_layer(ccode, LAYER_SPLIT_VIEW);
     Layer* layer_at_top = top_layer(ccode);
 
     if(layer_at_top == NULL) {
@@ -275,7 +302,7 @@ void draw_ui(CCode* ccode) {
 
     int y, x;
     getmaxyx(stdscr, y, x);
-    if (code_layers != NULL) {
+    if (code_layers != NULL && top_split_view == NULL) {
         char top_line[x + 1];
         size_t size = 0;
 
@@ -320,6 +347,55 @@ void draw_ui(CCode* ccode) {
         }
         attroff(A_REVERSE);
     }
+    if(layer_at_top->type != LAYER_CODE && top_split_view != NULL){
+        LayerSplitViewData* lsvd = top_split_view->layer_data;
+        char top_line[x + 1];
+        size_t size = 0;
+
+        int num_layers = arrlen(lsvd->splitten_layers);
+        int cells_per_layer = x / num_layers;
+
+        for (int i = 0; i < num_layers; i++) {
+            LayerCodeData* lcd = lsvd->splitten_layers[i]->layer_data;
+            const char* file_name = lcd->filename;
+            if (strlen(lcd->filename) > 16){
+                file_name = nob_path_name(lcd->filename);
+            }
+
+            char label[32];
+            snprintf(label, sizeof(label), "[%d] %s%s", i+1, file_name, lcd->saved ? "" : "*");
+
+            int label_len = strlen(label);
+            if (label_len > cells_per_layer - 1) {
+                label_len = cells_per_layer - 1;
+            }
+
+            for (int j = 0; j < label_len; j++) {
+                top_line[size++] = label[j];
+            }
+
+            while (size % cells_per_layer != 0 && size < (size_t)x) {
+                top_line[size++] = ' ';
+            }
+        }
+        if (size > (size_t)x) size = x;
+        top_line[size] = '\0';
+
+        move(0, 0);
+        
+        for(int i = 0; i < size; i++) {
+            if(lsvd->focused * cells_per_layer <= i &&
+                i < (lsvd->focused + 1) * cells_per_layer) {
+                attron(A_REVERSE);
+            } else {
+                attroff(A_REVERSE);
+            }
+        
+            addch(top_line[i]);
+        }
+        
+        attroff(A_REVERSE);
+    }
 
     char mode = 'I';
 
@@ -349,6 +425,19 @@ void draw_ui(CCode* ccode) {
         LayerThemeSelectorData* ltsd = layer_at_top->layer_data;
         size_t bot_line_size = snprintf(NULL, 0, "%c%d:%d", mode, ltsd->selected + ltsd->offset, 0);
         mvprintw(y - 1, x - bot_line_size, "%c%d:%d", mode, ltsd->selected + ltsd->offset, 0);
+    }else if(layer_at_top->type == LAYER_SPLIT_VIEW){
+        LayerSplitViewData* lsvd = layer_at_top->layer_data;
+    
+        if(lsvd->splitten_layers == NULL || arrlenu(lsvd->splitten_layers) == 0){
+            goto defer;
+        }
+        if(lsvd->focused > arrlenu(lsvd->splitten_layers)){
+            lsvd->focused = 0;
+        }
+    
+        LayerCodeData* lcd = (LayerCodeData*) lsvd->splitten_layers[lsvd->focused]->layer_data;
+        size_t bot_line_size = snprintf(NULL, 0, "%c%d:%d", mode, lcd->cursor->y, lcd->cursor->x);
+        mvprintw(y - 1, x - bot_line_size, "%c%d:%d", mode, lcd->cursor->y, lcd->cursor->x);
     }else{
         size_t bot_line_size = snprintf(NULL, 0, "%c%d:%d", mode, 0, 0);
         mvprintw(y - 1, x - bot_line_size, "%c%d:%d", mode, 0, 0);
@@ -366,10 +455,32 @@ void draw_ui(CCode* ccode) {
         // no cursor movement needed
     }else if(layer_at_top->type == LAYER_THEME_SELECTOR){
         // no cursor movement needed
+    }else if(layer_at_top->type == LAYER_SPLIT_VIEW){
+        LayerSplitViewData* lsvd = layer_at_top->layer_data;
+    
+        if(lsvd->splitten_layers == NULL || arrlenu(lsvd->splitten_layers) == 0){
+            goto defer;
+        }
+        if(lsvd->focused > arrlenu(lsvd->splitten_layers)){
+            lsvd->focused = 0;
+        }
+    
+        LayerCodeData* lcd = (LayerCodeData*) lsvd->splitten_layers[lsvd->focused]->layer_data;
+    
+        int virt_x, virt_y;
+        if (lcd->virtual_window != NULL) {
+            virt_x = (lcd->cursor->x - lcd->cursor->xoff) + lcd->virtual_window->x;
+            virt_y = (lcd->cursor->y - lcd->cursor->yoff) + lcd->virtual_window->y;
+        } else {
+            virt_x = lcd->cursor->x - lcd->cursor->xoff;
+            virt_y = lcd->cursor->y - lcd->cursor->yoff + 1;
+        }
+    
+        move(virt_y, virt_x);
     }else {
         assert(false && "unknown layer");
     }
-
+defer:
     arrfree(code_layers);
 }
 

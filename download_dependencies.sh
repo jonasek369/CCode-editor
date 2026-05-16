@@ -1,67 +1,81 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+JOBS="$(nproc)"
+MAX_PARALLEL=$JOBS
+
 clone_repo_if_needed() {
     local repo_url="$1"
     local repo_dir="$2"
 
-    if [ ! -d "$repo_dir" ]; then
-        git clone "$repo_url" "$repo_dir"
-    else
-        echo "Repo '$repo_dir' already exists, skipping clone."
+    if [[ ! -d "$repo_dir" ]]; then
+        git clone --depth 1 "$repo_url" "$repo_dir"
     fi
+}
+
+run_limited() {
+    # limits background jobs to MAX_PARALLEL
+    while (( $(jobs -rp | wc -l) >= MAX_PARALLEL )); do
+        wait -n
+    done
 }
 
 build_pdcurses() {
-    local repo_url="https://github.com/wmcbrine/PDCurses"
-    local repo_dir="PDCurses"
+    (
+        echo "==> Building PDCurses..."
 
-    echo "==> Building PDCurses..."
+        clone_repo_if_needed "https://github.com/wmcbrine/PDCurses" "PDCurses"
 
-    clone_repo_if_needed "$repo_url" "$repo_dir"
+        cd PDCurses/x11
 
-    pushd "$repo_dir/x11" > /dev/null
+        [[ ! -f Makefile ]] && ./configure
 
-    if [ ! -f Makefile ]; then
-        ./configure
-    fi
+        make -j"$JOBS"
 
-    make -j"$(nproc)"
-
-    popd > /dev/null
-
-    echo "==> PDCurses build complete."
+        echo "==> PDCurses done"
+    ) &
 }
 
 build_tree_sitter() {
-    local repo_url="https://github.com/tree-sitter/tree-sitter"
-    local repo_dir="tree-sitter"
+    (
+        echo "==> Building Tree-sitter..."
 
-    echo "==> Building Tree-sitter..."
+        clone_repo_if_needed "https://github.com/tree-sitter/tree-sitter" "tree-sitter"
 
-    clone_repo_if_needed "$repo_url" "$repo_dir"
+        cd tree-sitter
+        make -j"$JOBS"
 
-    pushd "$repo_dir" > /dev/null
-
-    make -j"$(nproc)"
-
-    popd > /dev/null
-
-    echo "==> Tree-sitter build complete."
+        echo "==> Tree-sitter done"
+    ) &
 }
 
 download_tree_sitter_language() {
     local repo_url="$1"
     local repo_dir="$2"
 
-    local target_dir="tree-sitter-grammar/$repo_dir"
+    run_limited
 
-    echo "==> Cloning $repo_dir..."
-
-    clone_repo_if_needed "$repo_url" "$target_dir"
-
-    echo "==> $repo_dir cloning complete."
+    (
+        clone_repo_if_needed "$repo_url" "tree-sitter-grammar/$repo_dir"
+    ) &
 }
+
+echo "==> downloading headers in parallel"
+
+wget https://raw.githubusercontent.com/nothings/stb/refs/heads/master/stb_ds.h -O stb_ds.h &
+wget https://raw.githubusercontent.com/tsoding/nob.h/refs/heads/main/nob.h -O nob.h &
+wget https://raw.githubusercontent.com/jonasek369/C-LSP-Client/refs/heads/main/LSP.h -O LSP.h &
+wget https://raw.githubusercontent.com/jonasek369/C-JSON/refs/heads/main/parser.h -O parser.h &
+
+wait
+
+clone_repo_if_needed "https://github.com/jonasek369/tiny_queue" "tiny_queue" &
+
+# start builds ASAP (parallel)
+build_pdcurses
+build_tree_sitter
+
+mkdir -p tree-sitter-grammar
 
 languages=(
     "https://github.com/tree-sitter/tree-sitter-c tree-sitter-c"
@@ -70,25 +84,19 @@ languages=(
     "https://github.com/tree-sitter/tree-sitter-c-sharp tree-sitter-c-sharp"
 )
 
-# nob.h and stb_ds.h are stable wont really need to change
-wget https://raw.githubusercontent.com/nothings/stb/refs/heads/master/stb_ds.h -O stb_ds.h
-wget https://raw.githubusercontent.com/tsoding/nob.h/refs/heads/main/nob.h -O nob.h
-wget https://raw.githubusercontent.com/jonasek369/C-LSP-Client/refs/heads/main/LSP.h -O LSP.h
-wget https://raw.githubusercontent.com/jonasek369/C-JSON/refs/heads/main/parser.h -O parser.h
-clone_repo_if_needed "https://github.com/jonasek369/tiny_queue" "tiny_queue"
-
-build_pdcurses
-build_tree_sitter
-
-mkdir -p tree-sitter-grammar
+echo "==> cloning grammars in parallel (limited concurrency)"
 
 for entry in "${languages[@]}"; do
     repo_url="${entry%% *}"
     repo_dir="${entry##* }"
-
     download_tree_sitter_language "$repo_url" "$repo_dir"
 done
 
+wait
+
 echo "==> building nob"
-gcc nob.c -o nob
+gcc nob.c -o nob -O2 -march=native -pipe
+
+wait
+
 echo "==> run ./nob to compile and start Ccode-editor"

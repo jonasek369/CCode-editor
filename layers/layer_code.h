@@ -52,6 +52,7 @@ Layer* new_layer_code(){
     lcd->cursor->yoff = 0;
 
     lcd->finding_substr = NULL;
+    lcd->virtual_window = NULL;
 
     lcd->filename = NULL;
     for(size_t i = 0; i < default_filename_length; i++){
@@ -237,6 +238,7 @@ void read_file_to_code_layer(CCode* ccode, const char* filename_start, size_t si
 
 
 void send_to_lsp(CCode* ccode, LSPContext* ctx){
+    printf("Sending to lsp!\n");
     Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
     if(top_code_layer == NULL){
         return;
@@ -255,6 +257,7 @@ void send_to_lsp(CCode* ccode, LSPContext* ctx){
 
 
 void get_completion(CCode* ccode, LSPContext* ctx){
+    printf("asking for completion\n");
     Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
     if(top_code_layer == NULL){
         return;
@@ -533,6 +536,12 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
     START_PROFILING();
     LayerCodeData* code_data = (LayerCodeData*) layer->layer_data;
 
+    int y, x;
+    getmaxyx(stdscr, y, x);
+
+    int content_height = code_data->virtual_window ? code_data->virtual_window->height : y - 1;
+    int content_width  = code_data->virtual_window ? code_data->virtual_window->width  : x;
+
     bool inFindSubstrMode = code_data->finding_substr != NULL;
 
     if(code_data->code_buffer == NULL){
@@ -587,8 +596,6 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
         }
     }
 
-    int y, x;
-    getmaxyx(stdscr, y, x);
 
     if(inFindSubstrMode){
         FindingSubstr* fss = code_data->finding_substr;
@@ -1042,16 +1049,14 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
         get_completion(ccode, ctx);
     }
 
-    int content_height = y - 1;
-    int content_width = x;
-
+    
     int screen_y = code_data->cursor->y - code_data->cursor->yoff;
     if(screen_y < 0){
         code_data->cursor->yoff = code_data->cursor->y;
     } else if(screen_y >= content_height){
         code_data->cursor->yoff = code_data->cursor->y - content_height + 1;
     }
-
+    
     int screen_x = code_data->cursor->x - code_data->cursor->xoff;
     if(screen_x < 0){
         code_data->cursor->xoff = code_data->cursor->x;
@@ -1064,26 +1069,28 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
 }
 
 
-void layer_code_render(CCode* ccode, Layer* layer) {
+void layer_code_render_completion_window(CCode* ccode, Layer* layer){
     if (!ccode || !layer || layer->type != LAYER_CODE || layer->layer_data == NULL) {
         return;
     }
+    START_PROFILING();
     LayerCodeData* code_data = (LayerCodeData*) layer->layer_data;
 
-    START_PROFILING();
-    apply_tree_sitter_syntax_highlighting(code_data, code_data->lang);
-    END_PROFILING("apply_tree_sitter_syntax_highlighting");
-
-    START_PROFILING();
     if(!code_data->completion_window){
         END_PROFILING("completion window");
         return;
     }
 
-    int y, x;
+    int y, x;   
     getmaxyx(stdscr, y, x);
     int cursor_screen_y = code_data->cursor->y - code_data->cursor->yoff + 1;
     int cursor_screen_x = code_data->cursor->x - code_data->cursor->xoff;
+
+    if(code_data->virtual_window != NULL){
+        cursor_screen_y += code_data->virtual_window->y-1;
+        cursor_screen_x += code_data->virtual_window->x;
+    }
+
     JsonValue* result = shget(code_data->completion_window->completion->object, "result");
     JsonValue* items = shget(result->object, "items");
 
@@ -1138,6 +1145,46 @@ void layer_code_render(CCode* ccode, Layer* layer) {
     END_PROFILING("completion window");
 }
 
+void layer_code_render(CCode* ccode, Layer* layer) {
+    if (!ccode || !layer || layer->type != LAYER_CODE || layer->layer_data == NULL) {
+        return;
+    }
+    LayerCodeData* code_data = (LayerCodeData*) layer->layer_data;
+
+    bool syntax_highlighting = code_data->virtual_window == NULL;
+
+    if(syntax_highlighting){
+        START_PROFILING();
+        apply_tree_sitter_syntax_highlighting(code_data, code_data->lang);
+        END_PROFILING("apply_tree_sitter_syntax_highlighting");
+        layer_code_render_completion_window(ccode, layer);
+    }else{
+        VirtualWindow* virtual_window = code_data->virtual_window;
+        int xoff = code_data->cursor->xoff;
+        
+        for(int r = 0; r < virtual_window->height; r++){
+            int br = r + code_data->cursor->yoff;
+        
+            if(br < arrlen(code_data->code_buffer) && code_data->code_buffer[br]){
+        
+                char *line = code_data->code_buffer[br];
+        
+                int len = strlen(line);
+                if(xoff > len) continue;
+        
+                mvprintw(
+                    virtual_window->y + r,
+                    virtual_window->x,
+                    "%.*s",
+                    virtual_window->width,
+                    line + xoff
+                );
+            }
+        }
+
+        layer_code_render_completion_window(ccode, layer);
+    }
+}
 
 void layer_code_handle_keypress(CCode* ccode, Layer* layer, int chr, bool should_draw){
     START_PROFILING();

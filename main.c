@@ -33,7 +33,6 @@ void free_ccode(CCode* ccode){
     }
 }
 
-
 void handle_args(CCode* ccode, int argc, char** argv){
     if(argc <= 1){
         return;
@@ -46,6 +45,15 @@ void handle_args(CCode* ccode, int argc, char** argv){
     }else{
         read_file_to_code_layer(ccode, argv[1], strlen(argv[1]));
     }
+}
+
+bool is_inside_virtual_window(int x, int y, VirtualWindow* virt_win){
+    return (
+        x >= virt_win->x &&
+        x <= virt_win->x + virt_win->width &&
+        y >= virt_win->y &&
+        y <= virt_win->y + virt_win->height
+    );
 }
 
 // XCurses*lines:  78
@@ -150,6 +158,34 @@ void handle_mouse(CCode* ccode){
 
                     lcd->console_buffer_x = event.x;
                 }
+                break;
+            }
+            case LAYER_SPLIT_VIEW: {
+                LayerSplitViewData* lsvd = current_top_layer->layer_data;
+                for(size_t i = 0; i < arrlenu(lsvd->splitten_layers); i++){
+                    LayerCodeData* lcd = lsvd->splitten_layers[i]->layer_data;
+                    if(!lcd || !lcd->virtual_window) continue;
+                    if(!is_inside_virtual_window(event.x, event.y, lcd->virtual_window)) continue;
+                    lsvd->focused = i;
+                    int target_y = lcd->cursor->yoff + event.y - lcd->virtual_window->y;
+            
+                    if(target_y < 0 || target_y >= arrlen(lcd->code_buffer))
+                        break;
+                
+                    lcd->cursor->y = target_y;
+                
+                    char* line = lcd->code_buffer[target_y];
+                    int len = arrlen(line)-2;
+                
+                    int target_x = lcd->cursor->xoff + event.x - lcd->virtual_window->x;
+                
+                    if(target_x > len) target_x = len;
+                    if(target_x < 0) target_x = 0;
+                
+                    lcd->cursor->x = target_x;
+                
+                    break;
+                }
             }
             default: {
                 break;
@@ -238,16 +274,24 @@ int main(int argc, char** argv) {
             push_layer_to_bot(&ccode, top);
         }
         // 64 Reserved by pdcurses
-        if(ch > KEY_F0 && ch <= KEY_F0+64 && arrlen(ccode.layers) >= 2 && top_layer(&ccode)->type != LAYER_CONSOLE){
-            int index = (ch-KEY_F0)-1;
-            Layer** code_layers = all_type_layers(&ccode, LAYER_CODE);
-            if(arrlen(code_layers) <= index){
-                arrfree(code_layers);
-            }else{
-                Layer* layer = code_layers[index];
-                remove_layer(&ccode, layer);
-                push_layer_to_top(&ccode, layer);
-                arrfree(code_layers);
+        if(ch > KEY_F0 && ch <= KEY_F0+64 && arrlen(ccode.layers) >= 1){
+            if(top_layer(&ccode)->type == LAYER_CODE){
+                int index = (ch-KEY_F0)-1;
+                Layer** code_layers = all_type_layers(&ccode, LAYER_CODE);
+                if(arrlen(code_layers) <= index){
+                    arrfree(code_layers);
+                }else{
+                    Layer* layer = code_layers[index];
+                    remove_layer(&ccode, layer);
+                    push_layer_to_top(&ccode, layer);
+                    arrfree(code_layers);
+                } 
+            }else if(top_layer(&ccode)->type == LAYER_SPLIT_VIEW){
+                int index = (ch-KEY_F0)-1;
+                if(index >= 0 && index <= 1){
+                    LayerSplitViewData* lsvd = top_layer(&ccode)->layer_data;
+                    lsvd->focused = index;
+                }
             }
         }
         // Console switching
@@ -304,8 +348,12 @@ int main(int argc, char** argv) {
             print_layers(&ccode);
         }*/
         START_PROFILING();
-        for (int i = arrlen(ccode.layers) - 1; i >= 0; i--){
-            Layer* layer = ccode.layers[i];
+        Layer** layers_snapshot = NULL;
+        for(int i = 0; i < arrlen(ccode.layers); i++){
+            arrput(layers_snapshot, ccode.layers[i]);
+        }
+        for (int i = arrlen(layers_snapshot) - 1; i >= 0; i--){
+            Layer* layer = layers_snapshot[i];
             propagated_ch = ch;
             if(stop_input_propagation < i){
                 propagated_ch = -1;
@@ -315,7 +363,8 @@ int main(int argc, char** argv) {
                 case LAYER_DIR_WALK: 
                 case LAYER_CODE: 
                 case LAYER_CONSOLE: 
-                case LAYER_THEME_SELECTOR: {
+                case LAYER_THEME_SELECTOR:
+                case LAYER_SPLIT_VIEW: {
                     layer->handle_keypress_function(&ccode, layer, propagated_ch, should_draw);
                     break;
                 }
@@ -325,6 +374,8 @@ int main(int argc, char** argv) {
                 }
             }
         }
+        arrfree(layers_snapshot);
+
         END_PROFILING("Layers updates");
         START_PROFILING();
         draw_ui(&ccode);

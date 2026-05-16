@@ -202,6 +202,8 @@ void console_execute_command(CCode* ccode, const char* buffer){
             }else if(second_layer->type == LAYER_DIR_WALK || second_layer->type == LAYER_THEME_SELECTOR){
                 remove_layer(ccode, second_layer);
                 free_layer(second_layer);
+            }else if(second_layer->type == LAYER_SPLIT_VIEW){
+                layer_split_view_close(ccode, second_layer);
             }
             break;
         }
@@ -412,6 +414,58 @@ void console_execute_command(CCode* ccode, const char* buffer){
                 char* dir = str_to_arr(ldwd->current_dir_path);
                 change_tree_path(top_tree_layer, dir);
             }
+            break;
+        }
+
+        case COMMAND_SPLIT_VIEW: {
+            Layer** code_layers = all_type_layers(ccode, LAYER_CODE);
+        
+            int layer_count = arrlen(code_layers);
+            if (layer_count < 2) {
+                message_to_console(ccode, "At least two code layers have to be opened!");
+                goto defer;
+            }
+        
+            int win_a_index = 0;
+            int win_b_index = 1;
+        
+            if (arrlen(to.tokens) >= 2 &&
+                to.tokens[1].type == TOKEN_INTEGER) {
+        
+                int idx = to.tokens[1].integer - 1;
+                if (idx >= 0 && idx < layer_count) {
+                    win_a_index = idx;
+                }
+            }
+        
+            if (arrlen(to.tokens) >= 3 &&
+                to.tokens[2].type == TOKEN_INTEGER) {
+        
+                int idx = to.tokens[2].integer - 1;
+                if (idx >= 0 && idx < layer_count) {
+                    win_b_index = idx;
+                }
+            }
+        
+            if (win_a_index == win_b_index) {
+                message_to_console(ccode, "Cannot split view with the same layer twice!");
+                goto defer;
+            }
+        
+            Layer* layer_a = code_layers[win_a_index];
+            Layer* layer_b = code_layers[win_b_index];
+        
+            remove_layer(ccode, layer_a);
+            remove_layer(ccode, layer_b);
+        
+            Layer* split_view = new_layer_split_view();
+            if (!split_view || !make_split_view(split_view, layer_a, layer_b)) {
+                if (split_view) free_layer(split_view);
+                goto defer;
+            }
+        
+            push_layer_to_top(ccode, split_view);
+            arrfree(code_layers);
             break;
         }
 

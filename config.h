@@ -1,7 +1,6 @@
 #ifndef _H_CONFIG
 #define _H_CONFIG
 
-
 typedef struct {
     short       id;   // ncurses color slot
     char* name;
@@ -10,17 +9,17 @@ typedef struct {
 
 
 typedef struct {
-	char* name;
-	char* foreground_key;
-	char* background_key;
+    char* name;
+    char* foreground_key;
+    char* background_key;
 } ColorPair;
 
 
 typedef struct {
     char* path;
     Color* background;
-	Color** colors;
-	ColorPair** pairs;
+    Color** colors;
+    ColorPair** pairs;
 } ColorTheme;
 
 
@@ -214,16 +213,16 @@ void save_config(CCodeConfig* config){
 }
 
 CCodeConfig* make_default_config(){
-	CCodeConfig* conf = malloc(sizeof(CCodeConfig));
-	if(!conf){
-		return NULL;
-	}
-	conf->PrivateRunning = true;
-	conf->PrivateCloseConsole = false;
-	conf->profiling = false;
+    CCodeConfig* conf = malloc(sizeof(CCodeConfig));
+    if(!conf){
+        return NULL;
+    }
+    conf->PrivateRunning = true;
+    conf->PrivateCloseConsole = false;
+    conf->profiling = false;
     conf->theme = load_theme(NULL);
     conf->tab_size = 4;
-	return conf;
+    return conf;
 }
 
 

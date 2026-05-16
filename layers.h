@@ -47,6 +47,7 @@ void change_tree_path(Layer* layer, char* new_path);
 void draw_ui(CCode* ccode);
 
 #include "./layers/layer_code.h"
+#include "./layers/layer_split_view.h"
 #include "./layers/layer_console.h"
 #include "./layers/layer_dir_walk.h"
 #include "./layers/layer_theme_selector.h"

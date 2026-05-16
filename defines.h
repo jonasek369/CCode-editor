@@ -7,6 +7,7 @@
 #define CUSTOM_CTL_F 6
 #define CUSTOM_CTL_S 19
 
+#define LIMIT_FPS 0
 #define FPS 240
 #define FRAME_NS (1000000000L / FPS)
 
@@ -59,7 +60,7 @@
     #define MAX_PATH 4096
 #endif
 
-typedef enum {LAYER_CODE=0, LAYER_CONSOLE, LAYER_DIR_WALK, LAYER_THEME_SELECTOR} LayerType;
+typedef enum {LAYER_CODE=0, LAYER_CONSOLE, LAYER_DIR_WALK, LAYER_THEME_SELECTOR, LAYER_SPLIT_VIEW} LayerType;
 typedef enum {TOKEN_INVALID = 0, TOKEN_COMMAND, TOKEN_STRING, TOKEN_INTEGER, TOKEN_UNKNOWN} ConsoleTokenType;
 typedef enum {
     COMMAND_INVALID = 0,
@@ -80,7 +81,8 @@ typedef enum {
     COMMAND_THEME,
     COMMAND_WRITE_CONFIG,
     COMMAND_MAKE_DIRECTORY,
-    COMMAND_MAKE_FILE
+    COMMAND_MAKE_FILE,
+    COMMAND_SPLIT_VIEW
 } CommandType;
 
 typedef enum {
@@ -147,11 +149,19 @@ typedef struct {
 } CompletionWindow;
 
 typedef struct {
+    int x;
+    int y;
+    int width;
+    int height;
+} VirtualWindow;
+
+typedef struct {
     bool saved;
     char* filename;
     char** code_buffer;
     Cursor* cursor;
     FindingSubstr* finding_substr;
+    VirtualWindow* virtual_window;
 
     // tree sitter
     SyntaxLanguage lang;
@@ -187,7 +197,7 @@ typedef struct {
     char** current_dir_files;
     int selected;
     int offset;
-}LayerThemeSelectorData;
+} LayerThemeSelectorData;
 
 
 typedef struct Layer Layer;
@@ -202,6 +212,11 @@ struct Layer {
     bool (*update_function)(CCode*, Layer*, int);
 };
 
+typedef struct {
+    Layer** splitten_layers;         // Array of split layers 
+    VirtualWindow** virtual_windows;
+    int focused;                     // index into splitten_layers
+} LayerSplitViewData;
 
 struct CCode{
     Layer** layers;

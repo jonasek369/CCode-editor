@@ -87,7 +87,7 @@ JsonValue* make_ccode_initialize_params(const char* root_uri) {
 void handle_publishDiagnostics(CCode* ccode, JsonValue* message){
 	Layer* top_code_layer = NULL;
 	for(int i = 0; i < arrlen(ccode->layers); i++){
-        if(ccode->layers[i]->type == LAYER_CODE){
+        if(ccode->layers[i]->type == LAYER_CODE || ccode->layers[i]->type == LAYER_SPLIT_VIEW){
         	top_code_layer = ccode->layers[i];
         	break;
         }
@@ -96,6 +96,15 @@ void handle_publishDiagnostics(CCode* ccode, JsonValue* message){
 		printf("CCode layers do not have any code layers!\n");
 		goto defer;
 	}
+	if(top_code_layer->type == LAYER_SPLIT_VIEW){
+    	LayerSplitViewData* lsvd = top_code_layer->layer_data;
+    	if(lsvd->splitten_layers != NULL && arrlen(lsvd->splitten_layers) > 0){
+    		top_code_layer = lsvd->splitten_layers[lsvd->focused];
+    	}	
+    }
+    if(top_code_layer->type != LAYER_CODE){
+    	goto defer;
+    }
 	LayerCodeData* lcd = top_code_layer->layer_data;
 	JsonValue* params = NULL;
 	JsonValue* uri = NULL;
@@ -162,7 +171,7 @@ defer:
 void handle_completion(CCode* ccode, JsonValue* message){
 	Layer* top_code_layer = NULL;
 	for(int i = 0; i < arrlen(ccode->layers); i++){
-        if(ccode->layers[i]->type == LAYER_CODE){
+        if(ccode->layers[i]->type == LAYER_CODE || ccode->layers[i]->type == LAYER_SPLIT_VIEW){
         	top_code_layer = ccode->layers[i];
         	break;
         }
@@ -171,6 +180,15 @@ void handle_completion(CCode* ccode, JsonValue* message){
 		printf("CCode layers do not have any code layers!\n");
 		goto defer;
 	}
+	if(top_code_layer->type == LAYER_SPLIT_VIEW){
+    	LayerSplitViewData* lsvd = top_code_layer->layer_data;
+    	if(lsvd->splitten_layers != NULL && arrlen(lsvd->splitten_layers) > 0){
+    		top_code_layer = lsvd->splitten_layers[lsvd->focused];
+    	}	
+    }
+    if(top_code_layer->type != LAYER_CODE){
+    	goto defer;
+    }
 	LayerCodeData* lcd = top_code_layer->layer_data;
 	JsonValue* result = NULL;
 	JsonValue* items = NULL;
