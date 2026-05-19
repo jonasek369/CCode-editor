@@ -238,7 +238,6 @@ void read_file_to_code_layer(CCode* ccode, const char* filename_start, size_t si
 
 
 void send_to_lsp(CCode* ccode, LSPContext* ctx){
-    printf("Sending to lsp!\n");
     Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
     if(top_code_layer == NULL){
         return;
@@ -257,7 +256,6 @@ void send_to_lsp(CCode* ccode, LSPContext* ctx){
 
 
 void get_completion(CCode* ccode, LSPContext* ctx){
-    printf("asking for completion\n");
     Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
     if(top_code_layer == NULL){
         return;
@@ -529,6 +527,47 @@ void find_jump(CCode* ccode, char *finding, int32_t size, int32_t nth_occurence)
 }
 
 
+void layer_code_add_character(int chr, LayerCodeData* code_data){
+    char* line = code_data->code_buffer[code_data->cursor->y];
+    int line_len = arrlen(line);
+
+    if(code_data->cursor->x > line_len - 1){
+        code_data->cursor->x = line_len - 1;
+    }
+
+    if(line_len > 0){
+        (void) arrpop(line);
+    }
+
+    if(code_data->cursor->x >= 0 && code_data->cursor->x <= arrlen(line)){
+        arrins(line, code_data->cursor->x, (char)chr);
+    } else {
+        arrput(line, (char)chr);
+    }
+    code_data->saved = false;
+    arrput(line, '\0');
+    code_data->code_buffer[code_data->cursor->y] = line;
+
+    int row = code_data->cursor->y;
+    int col = code_data->cursor->x;
+
+    if(code_data->parser && code_data->tree){
+        TSInputEdit edit = {
+            .start_byte    = buffer_byte_offset(code_data, row, col),
+            .old_end_byte  = buffer_byte_offset(code_data, row, col),
+            .new_end_byte  = buffer_byte_offset(code_data, row, col + 1),
+            .start_point   = {row, col},
+            .old_end_point = {row, col},
+            .new_end_point = {row, col + 1},
+        };
+        ts_tree_edit(code_data->tree, &edit);
+    }
+    TS_REPARSE(code_data);
+
+    code_data->cursor->x++;
+}
+
+
 bool layer_code_update(CCode* ccode, Layer* layer, int chr){
     if(!ccode || !layer || layer->type != LAYER_CODE || layer->layer_data == NULL){
         return false;
@@ -583,7 +622,7 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
     if(chr == CUSTOM_CTL_S){
         write_code_layer_to_file(ccode);
     }
-
+    // 9 is for TAB
     if(chr == 9){
         if(code_data->completion_window){
             if(do_completion(ccode)){
@@ -591,7 +630,7 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
             }
         }else{
             for(size_t i = 0; i < ccode->config->tab_size; i++){
-                layer_code_update(ccode, layer, ' ');
+                layer_code_add_character(' ', code_data);
             }
         }
     }
@@ -623,43 +662,7 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
     }
 
     if((chr >= 0 && chr <= 255) && isprint(chr)){
-        char* line = code_data->code_buffer[code_data->cursor->y];
-        int line_len = arrlen(line);
-
-        if(code_data->cursor->x > line_len - 1){
-            code_data->cursor->x = line_len - 1;
-        }
-
-        if(line_len > 0){
-            (void) arrpop(line);
-        }
-
-        if(code_data->cursor->x >= 0 && code_data->cursor->x <= arrlen(line)){
-            arrins(line, code_data->cursor->x, (char)chr);
-        } else {
-            arrput(line, (char)chr);
-        }
-        code_data->saved = false;
-        arrput(line, '\0');
-        code_data->code_buffer[code_data->cursor->y] = line;
-
-        int row = code_data->cursor->y;
-        int col = code_data->cursor->x;
-
-        if(code_data->parser && code_data->tree){
-            TSInputEdit edit = {
-                .start_byte    = buffer_byte_offset(code_data, row, col),
-                .old_end_byte  = buffer_byte_offset(code_data, row, col),
-                .new_end_byte  = buffer_byte_offset(code_data, row, col + 1),
-                .start_point   = {row, col},
-                .old_end_point = {row, col},
-                .new_end_point = {row, col + 1},
-            };
-            ts_tree_edit(code_data->tree, &edit);
-        }
-        TS_REPARSE(code_data);
-
-        code_data->cursor->x++;
+        layer_code_add_character(chr, code_data);
     }
 
     else if(chr == CUSTOM_KEY_BACKSPACE){

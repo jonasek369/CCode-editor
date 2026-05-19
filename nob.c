@@ -1,7 +1,7 @@
 #define NOB_IMPLEMENTATION
 #include "nob.h"
 
-#define OPTIMISATION 0
+#define OPTIMISATION       0
 #define COMPILE_PROFILING  1
 
 

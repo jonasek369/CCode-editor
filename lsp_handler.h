@@ -199,6 +199,10 @@ void handle_completion(CCode* ccode, JsonValue* message){
 	if(lcd->completion_window){
 		json_free(lcd->completion_window->completion);
 		free(lcd->completion_window);
+		lcd->completion_window = NULL;
+	}
+	if(arrlenu(items->array) == 0){
+		goto defer;
 	}
 	CompletionWindow* win = malloc(sizeof(CompletionWindow));
 	win->completion = message;

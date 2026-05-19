@@ -38,17 +38,20 @@ bool make_split_view(Layer* split_view, Layer* layer_a, Layer* layer_b){
     int y, x;
     getmaxyx(stdscr, y, x);
 
+	int left_w = x / 2;
+	int right_w = x - left_w;
+	
 	VirtualWindow* virt_win_a = malloc(sizeof(VirtualWindow));
 	virt_win_a->x = 0;
 	virt_win_a->y = 1;
-	virt_win_a->width  = x/2;
-	virt_win_a->height = y-1;
-
+	virt_win_a->width  = left_w;
+	virt_win_a->height = y - 1;
+	
 	VirtualWindow* virt_win_b = malloc(sizeof(VirtualWindow));
-	virt_win_b->x = x/2 + 1;
+	virt_win_b->x = left_w;
 	virt_win_b->y = 1;
-	virt_win_b->width  = x/2 -1;
-	virt_win_b->height = y-1;
+	virt_win_b->width  = right_w;
+	virt_win_b->height = y - 1;
 
 	arrput(lsvd->splitten_layers, layer_a);
 	arrput(lsvd->splitten_layers, layer_b);

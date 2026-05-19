@@ -47,12 +47,12 @@ void handle_args(CCode* ccode, int argc, char** argv){
     }
 }
 
-bool is_inside_virtual_window(int x, int y, VirtualWindow* virt_win){
+bool is_inside_virtual_window(int x, int y, VirtualWindow* w){
     return (
-        x >= virt_win->x &&
-        x <= virt_win->x + virt_win->width &&
-        y >= virt_win->y &&
-        y <= virt_win->y + virt_win->height
+        x >= w->x &&
+        x <  w->x + w->width &&
+        y >= w->y &&
+        y <  w->y + w->height
     );
 }
 
@@ -201,7 +201,6 @@ int main(int argc, char** argv) {
     ccode.layers  = NULL;
     ccode.config  = load_config("./config.json");
 
-
     int ch;
 
     initscr();
@@ -246,7 +245,7 @@ int main(int argc, char** argv) {
         }
         */
 
-        if(ch == 539){
+        if(ch == KEY_MOUSE){
             handle_mouse(&ccode);
         }
 
@@ -380,11 +379,11 @@ int main(int argc, char** argv) {
         START_PROFILING();
         draw_ui(&ccode);
         END_PROFILING("UI");
-        
-        START_PROFILING();
-        sleep_until_next_frame(frame_start);
-        END_PROFILING("sleep_until_next_frame");
-        
+        #if LIMIT_FPS == 1
+            START_PROFILING();
+            sleep_until_next_frame(frame_start);
+            END_PROFILING("sleep_until_next_frame");
+        #endif
         END_PROFILING("Frame");
         if(ccode.config->profiling){
             prof_print(stdscr);
