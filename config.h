@@ -95,6 +95,7 @@ typedef struct {
     bool PrivateRunning;
     bool PrivateCloseConsole;
     bool profiling;
+    bool close_code_layer_on_split_view_close;
     ColorTheme* theme;
     size_t tab_size;
 } CCodeConfig;
@@ -148,10 +149,27 @@ ColorTheme* load_theme(const char* path){
     if(json_theme){
         json_free(json_theme);
     }
-    theme->path = strdup(path);
+    if(!path){
+        theme->path = NULL;
+    }else{
+        theme->path = strdup(path);
+    }
     return theme;
 }
 
+CCodeConfig* make_default_config(){
+    CCodeConfig* conf = malloc(sizeof(CCodeConfig));
+    if(!conf){
+        return NULL;
+    }
+    conf->PrivateRunning = true;
+    conf->PrivateCloseConsole = false;
+    conf->profiling = false;
+    conf->theme = load_theme(NULL);
+    conf->tab_size = 4;
+    conf->close_code_layer_on_split_view_close = false;
+    return conf;
+}
 
 CCodeConfig* load_config(const char* path){
     if(!path){
@@ -164,11 +182,20 @@ CCodeConfig* load_config(const char* path){
     if(!json_config){
         return NULL;
     }
+    if(!can_read_file(path)){
+        json_free(json_config);
+        free(config);
+        CCodeConfig* def = make_default_config();
+        fprintf(stderr, "config.json not found making default. Use :wconf to save current settings\n");
+        return def;
+    }
+
     jsonFileLoad(path, json_config);
     if(json_config->type != JSON_OBJECT){
         free(json_config);
         return NULL;
     }
+
     JsonValue* profiling = shget(json_config->object, "profiling");
     if(!profiling || profiling->type != JSON_BOOL){
         config->profiling = false; // defualt
@@ -190,6 +217,14 @@ CCodeConfig* load_config(const char* path){
     }else{
         config->tab_size = (size_t)tab_size->number;
     }
+
+    JsonValue* close_code_on_sv_close = shget(json_config->object, "close_code_layer_on_split_view_close");
+    if(!close_code_on_sv_close || close_code_on_sv_close->type != JSON_BOOL){
+        config->close_code_layer_on_split_view_close = false; // defualt
+    }else{
+        config->close_code_layer_on_split_view_close = close_code_on_sv_close->boolean;
+    }
+
     json_free(json_config);
     return config;
 }
@@ -201,6 +236,7 @@ void save_config(CCodeConfig* config){
     json_add_child(json_config, "theme", json_new_string(config->theme->path));
     json_add_child(json_config, "profiling", json_new_bool(config->profiling));
     json_add_child(json_config, "tab_size", json_new_number(config->tab_size));
+    json_add_child(json_config, "close_code_layer_on_split_view_close", json_new_bool(config->close_code_layer_on_split_view_close));
     char* out = NULL;
     json_dump(json_config, &out);
     arrput(out, (char)0);
@@ -211,20 +247,6 @@ void save_config(CCodeConfig* config){
     arrfree(out);
     json_free(json_config);
 }
-
-CCodeConfig* make_default_config(){
-    CCodeConfig* conf = malloc(sizeof(CCodeConfig));
-    if(!conf){
-        return NULL;
-    }
-    conf->PrivateRunning = true;
-    conf->PrivateCloseConsole = false;
-    conf->profiling = false;
-    conf->theme = load_theme(NULL);
-    conf->tab_size = 4;
-    return conf;
-}
-
 
 void free_color(Color* color){
     if (color->name) {

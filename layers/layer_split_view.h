@@ -62,7 +62,7 @@ bool make_split_view(Layer* split_view, Layer* layer_a, Layer* layer_b){
 	arrput(lsvd->virtual_windows, virt_win_b);
 	if(layer_b->layer_data) {((LayerCodeData*) layer_b->layer_data)->virtual_window = virt_win_b;}
 
-	lsvd->focused = 1;
+	lsvd->focused = 0;
 	return true;
 }
 
@@ -80,6 +80,11 @@ void layer_split_view_close(CCode* ccode, Layer* split_view){
 			Layer* layer = lsvd->splitten_layers[i];
 			if(layer && layer->layer_data != NULL){
 				((LayerCodeData*)layer->layer_data)->virtual_window = NULL;
+				if(i == lsvd->focused && ccode->config->close_code_layer_on_split_view_close){
+					printf("freeing and closing layer\n");
+					free_layer(layer);
+					continue;
+				}
 				push_layer_to_top(ccode, layer);
 			}
 		}

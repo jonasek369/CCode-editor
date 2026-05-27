@@ -6,6 +6,7 @@ extern const TSLanguage *tree_sitter_c();
 extern const TSLanguage *tree_sitter_json();
 extern const TSLanguage *tree_sitter_python();
 extern const TSLanguage *tree_sitter_c_sharp();
+extern const TSLanguage *tree_sitter_rust();
 
 #define TS_REPARSE(code_data)                                                        \
     do {                                                                             \
@@ -67,6 +68,7 @@ Layer* new_layer_code(){
     lcd->parser = NULL;
     lcd->tree = NULL;
     lcd->lang = LANG_UNKNOWN;
+    lcd->query = NULL;
 
     // LSP
     lcd->uri = NULL;
@@ -119,8 +121,47 @@ const TSLanguage* get_filetype_language_parser(const char* filename, SyntaxLangu
             return tree_sitter_python();
         case LANG_C_SHARP:
             return tree_sitter_c_sharp();
+        case LANG_RUST:
+            return tree_sitter_rust();
         default:
             return NULL;
+    }
+}
+
+bool get_language_scm_query(SyntaxLanguage lang, Nob_String_Builder* out){
+    if(lang == LANG_UNKNOWN){
+        return false;
+    }
+
+    switch(lang){
+        case(LANG_C): {
+            if(!nob_read_entire_file("./tree-sitter-queries/c/highlights.scm", out)){
+                fprintf(stderr, "Error reading C scm file\n");
+                nob_sb_free(*out);
+                return false;
+            }
+            return true;
+        }
+        case(LANG_PYTHON): {
+            if(!nob_read_entire_file("./tree-sitter-queries/python/highlights.scm", out)){
+                fprintf(stderr, "Error reading Python scm file\n");
+                nob_sb_free(*out);
+                return false;
+            }
+            return true;
+        }
+        case(LANG_RUST): {
+            if(!nob_read_entire_file("./tree-sitter-queries/rust/highlights.scm", out)){
+                fprintf(stderr, "Error reading Python scm file\n");
+                nob_sb_free(*out);
+                return false;
+            }
+            return true;
+        }
+        default: {
+            printf("No scm found for %d\n", lang);
+            return false;
+        } 
     }
 }
 
@@ -130,20 +171,48 @@ void make_parser(CCode* ccode, char* filename){
     if(!layer){
         return;
     }
+
     LayerCodeData* lcd = layer->layer_data;
-    const TSLanguage* parser = get_filetype_language_parser(filename, &(lcd->lang));
-    if(!parser){
+
+    const TSLanguage* lang = get_filetype_language_parser(filename, &(lcd->lang));
+    if(!lang){
         return;
     }
+
     lcd->parser = ts_parser_new();
-    if(!ts_parser_set_language(lcd->parser, parser)){
+    if(!ts_parser_set_language(lcd->parser, lang)){
         ts_parser_delete(lcd->parser);
         lcd->parser = NULL;
         fprintf(stderr, "Language version mismatch\n");
         return;
     }
 
+    lcd->query = NULL;
+
+    Nob_String_Builder sb = {0};
+
+    if(get_language_scm_query(lcd->lang, &sb)){
+        TSQueryError error;
+        uint32_t error_offset;
+
+        TSQuery *query = ts_query_new(
+            lang,
+            sb.items,
+            sb.count,
+            &error_offset,
+            &error
+        );
+
+        if(!query){
+            fprintf(stderr, "Query error at %u %d\n", error_offset, error);
+        } else {
+            lcd->query = query;
+        }
+        nob_sb_free(sb);
+    }
+
     char* flatten = flatten_buffer(lcd);
+
     lcd->tree = ts_parser_parse_string(
         lcd->parser,
         NULL,
@@ -153,7 +222,6 @@ void make_parser(CCode* ccode, char* filename){
 
     free(flatten);
 }
-
 
 void read_file_to_code_layer(CCode* ccode, const char* filename_start, size_t size){
     Nob_String_Builder sb = {0};
@@ -1153,39 +1221,14 @@ void layer_code_render(CCode* ccode, Layer* layer) {
         return;
     }
     LayerCodeData* code_data = (LayerCodeData*) layer->layer_data;
-
-    bool syntax_highlighting = code_data->virtual_window == NULL;
-
-    if(syntax_highlighting){
+    if(code_data && code_data->query && code_data->tree){
         START_PROFILING();
-        apply_tree_sitter_syntax_highlighting(code_data, code_data->lang);
-        END_PROFILING("apply_tree_sitter_syntax_highlighting");
+        syntax_highlighting_render(code_data);
+        END_PROFILING("rendering");
         layer_code_render_completion_window(ccode, layer);
     }else{
-        VirtualWindow* virtual_window = code_data->virtual_window;
-        int xoff = code_data->cursor->xoff;
+        // fallback for raw text
         
-        for(int r = 0; r < virtual_window->height; r++){
-            int br = r + code_data->cursor->yoff;
-        
-            if(br < arrlen(code_data->code_buffer) && code_data->code_buffer[br]){
-        
-                char *line = code_data->code_buffer[br];
-        
-                int len = strlen(line);
-                if(xoff > len) continue;
-        
-                mvprintw(
-                    virtual_window->y + r,
-                    virtual_window->x,
-                    "%.*s",
-                    virtual_window->width,
-                    line + xoff
-                );
-            }
-        }
-
-        layer_code_render_completion_window(ccode, layer);
     }
 }
 

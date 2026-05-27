@@ -36,7 +36,6 @@ void print_layer(Layer* l);
 */
 
 size_t buffer_byte_offset(LayerCodeData *code, int row, int col);
-char* flatten_buffer(LayerCodeData *code);
 void message_to_console(CCode* ccode, const char* message);
 void console_execute_command(CCode* ccode, const char* buffer);
 void change_tree_path(Layer* layer, char* new_path);

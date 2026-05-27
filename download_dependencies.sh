@@ -82,6 +82,7 @@ languages=(
     "https://github.com/tree-sitter/tree-sitter-python tree-sitter-python"
     "https://github.com/tree-sitter/tree-sitter-json tree-sitter-json"
     "https://github.com/tree-sitter/tree-sitter-c-sharp tree-sitter-c-sharp"
+    "https://github.com/tree-sitter/tree-sitter-rust tree-sitter-rust"
 )
 
 echo "==> cloning grammars in parallel (limited concurrency)"

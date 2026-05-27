@@ -41,8 +41,8 @@
 #define NOB_IMPLEMENTATION
 #include "nob.h"
 
-#include "config.h"
 #include "utils.h"
+#include "config.h"
 
 
 #ifdef __linux__
@@ -165,8 +165,9 @@ typedef struct {
 
     // tree sitter
     SyntaxLanguage lang;
-    TSParser *parser;
-    TSTree *tree;
+    TSParser* parser;
+    TSTree* tree;
+    TSQuery* query;
 
     // LSP
     char* uri;
@@ -224,13 +225,32 @@ struct CCode{
     CCodeConfig* config;
 };
 
+char *flatten_buffer(LayerCodeData *code){
+    size_t total = 0;
+
+    for(int i = 0; i < arrlen(code->code_buffer); i++) {
+        total += strlen(code->code_buffer[i]);
+    }
+
+    char *result = malloc(total + 1);
+    size_t pos = 0;
+
+    for (int i = 0; i < arrlen(code->code_buffer); i++) {
+        size_t len = strlen(code->code_buffer[i]);
+        memcpy(result + pos, code->code_buffer[i], len);
+        pos += len;
+    }
+
+    result[pos] = '\0';
+    return result;
+}
+
+
 #define LABEL(x) x:
 
 #include "profiling.h"
 #include "syntax_highlighting.h"
 #include "lsp_handler.h"
-
-
 #include "layers.h"
 
 #endif

@@ -119,27 +119,6 @@ size_t buffer_byte_offset(LayerCodeData *code, int row, int col){
 }
 
 
-char *flatten_buffer(LayerCodeData *code){
-    size_t total = 0;
-
-    for(int i = 0; i < arrlen(code->code_buffer); i++) {
-        total += strlen(code->code_buffer[i]);
-    }
-
-    char *result = malloc(total + 1);
-    size_t pos = 0;
-
-    for (int i = 0; i < arrlen(code->code_buffer); i++) {
-        size_t len = strlen(code->code_buffer[i]);
-        memcpy(result + pos, code->code_buffer[i], len);
-        pos += len;
-    }
-
-    result[pos] = '\0';
-    return result;
-}
-
-
 /*
     Layer debug helpers
 */
@@ -192,6 +171,9 @@ void free_layer(Layer* layer){
             }
             if(lcd->tree){
                 ts_tree_delete(lcd->tree);
+            }
+            if(lcd->query){
+                ts_query_delete(lcd->query);
             }
             if(lcd->uri){
                 arrfree(lcd->uri);

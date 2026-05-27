@@ -22,6 +22,8 @@ int main(int argc, char **argv)
         {"./tree-sitter-grammar/tree-sitter-python/src/scanner.c", BUILD_DIR"/py_scanner.o"},
         {"./tree-sitter-grammar/tree-sitter-c-sharp/src/parser.c", BUILD_DIR"/cs_parser.o"},
         {"./tree-sitter-grammar/tree-sitter-c-sharp/src/scanner.c",BUILD_DIR"/cs_scanner.o"},
+        {"./tree-sitter-grammar/tree-sitter-rust/src/parser.c",    BUILD_DIR"/rs_parser.o"},
+        {"./tree-sitter-grammar/tree-sitter-rust/src/scanner.c",   BUILD_DIR"/rs_scanner.o"},
     };
 
     size_t count = sizeof(files)/sizeof(files[0]);

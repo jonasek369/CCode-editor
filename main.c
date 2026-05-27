@@ -60,7 +60,6 @@ bool is_inside_virtual_window(int x, int y, VirtualWindow* w){
 // XCurses*cols:   320
 void handle_mouse(CCode* ccode){
     MEVENT event;
-
     nc_getmouse(&event);
     // printf("%d\n", event.bstate);
 
