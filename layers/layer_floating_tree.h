@@ -90,7 +90,7 @@ void layer_floating_tree_load_file(CCode* ccode, LayerFloatingTreeData* float_tr
 	if(float_tree_data->filtered_files == NULL){
 		return;
 	}
-	if(arrlenu(float_tree_data) < float_tree_data->selected){
+	if(arrlenu(float_tree_data->filtered_files) < float_tree_data->selected){
 		return;
 	}
 	char* dir = nob_temp_sprintf("%s/%s",
