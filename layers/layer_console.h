@@ -145,7 +145,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
 
                 if(output == NULL){
                     arrfree(command);
-                    goto defer;
+                    break;
                 }
 
                 if (arrlen(output) > 1) {
@@ -168,9 +168,15 @@ void console_execute_command(CCode* ccode, const char* buffer){
         }
 
         case COMMAND_FIND: {
-            Layer* layer_at_top = top_layer(ccode);
-
-            if(layer_at_top->type != LAYER_CODE){ goto defer; }
+            Layer* top_fs_layer = top_fullsceen_layer(ccode);
+            if(top_fs_layer == NULL){
+                message_to_console(ccode, "no available layer to look for string");
+                break;
+            }
+            if(top_fs_layer->type != LAYER_CODE || top_fs_layer->type == LAYER_SPLIT_VIEW){ 
+                message_to_console(ccode, "cannot find string in this layer");
+                break;
+            }
 
             if (arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_STRING) {
                 int32_t nth_occurence = 1;
@@ -285,13 +291,13 @@ void console_execute_command(CCode* ccode, const char* buffer){
 
         case COMMAND_TREE_CHANGE_DIR: {
             if(arrlen(to.tokens) <= 1){
-                goto defer;
+                break;
             }
 
             Layer* top_tree_layer = top_type_layer(ccode, LAYER_DIR_WALK);
             if(top_tree_layer == NULL){
                 message_to_console(ccode, "Cannot change directory outside tree");
-                goto defer;
+                break;
             }
 
             LayerDirWalkData* ldwd = top_tree_layer->layer_data;
@@ -304,7 +310,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
                     if(resolve_path(new_dir, resolved_path) == NULL){
                         free(as_str);
                         nob_temp_reset();
-                        goto defer;
+                        break;
                     }
                     change_tree_path(top_tree_layer, str_to_arr(resolved_path));
                     nob_temp_reset();
@@ -351,13 +357,13 @@ void console_execute_command(CCode* ccode, const char* buffer){
 
         case COMMAND_MAKE_DIRECTORY: {
             if(arrlen(to.tokens) <= 1){
-                goto defer;
+                break;
             }
 
             Layer* top_tree_layer = top_type_layer(ccode, LAYER_DIR_WALK);
             if(top_tree_layer == NULL){
                 message_to_console(ccode, "Cannot make directory outside tree");
-                goto defer;
+                break;
             }
 
             LayerDirWalkData* ldwd = top_tree_layer->layer_data;
@@ -385,13 +391,13 @@ void console_execute_command(CCode* ccode, const char* buffer){
 
         case COMMAND_MAKE_FILE: {
             if(arrlen(to.tokens) <= 1){
-                goto defer;
+                break;
             }
 
             Layer* top_tree_layer = top_type_layer(ccode, LAYER_DIR_WALK);
             if(top_tree_layer == NULL){
                 message_to_console(ccode, "Cannot make file outside tree");
-                goto defer;
+                break;
             }
 
             LayerDirWalkData* ldwd = top_tree_layer->layer_data;
@@ -423,7 +429,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
             int layer_count = arrlen(code_layers);
             if (layer_count < 2) {
                 message_to_console(ccode, "At least two code layers have to be opened!");
-                goto defer;
+                break;
             }
         
             int win_a_index = 0;
@@ -449,7 +455,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
         
             if (win_a_index == win_b_index) {
                 message_to_console(ccode, "Cannot split view with the same layer twice!");
-                goto defer;
+                break;
             }
         
             Layer* layer_a = code_layers[win_a_index];
@@ -461,13 +467,19 @@ void console_execute_command(CCode* ccode, const char* buffer){
             Layer* split_view = new_layer_split_view();
             if (!split_view || !make_split_view(split_view, layer_a, layer_b)) {
                 if (split_view) free_layer(split_view);
-                goto defer;
+                break;
             }
         
             push_layer_to_top(ccode, split_view);
             arrfree(code_layers);
             break;
         }
+        
+        case COMMAND_FLOATING_WINDOW: {
+            Layer* ft = new_layer_floting_tree();
+            push_layer_to_top(ccode, ft);
+            break;
+        } 
 
         default: {
             break;

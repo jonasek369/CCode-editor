@@ -21,6 +21,8 @@ Layer* new_layer_theme_selector();
 void push_layer_to_top(CCode* ccode, Layer* to_top);
 void push_layer_to_bot(CCode* ccode, Layer* to_bot);
 Layer* top_layer(CCode* ccode);
+Layer* top_fullsceen_layer(CCode* ccode);
+Layer* top_input_consuming_layer(CCode* ccode);
 void remove_layer(CCode* ccode, Layer* target);
 Layer** all_type_layers(CCode* ccode, LayerType type);
 Layer* top_type_layer(CCode* ccode, LayerType type);
@@ -47,6 +49,7 @@ void draw_ui(CCode* ccode);
 
 #include "./layers/layer_code.h"
 #include "./layers/layer_split_view.h"
+#include "./layers/layer_floating_tree.h"
 #include "./layers/layer_console.h"
 #include "./layers/layer_dir_walk.h"
 #include "./layers/layer_theme_selector.h"

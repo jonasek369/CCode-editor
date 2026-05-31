@@ -1,4 +1,3 @@
-
 // ── Syntax color pairs ────────────────────────────────────────────────────────
 
 #define COLOR_PAIR_DEFAULT   1
@@ -228,12 +227,17 @@ void destroy_syntax_highlighting(void) {
     type_map = NULL;
 }
 
+/*
+could be usefull later
+
 static int hspan_cmp(const void* a, const void* b) {
     const HSpan* x = (const HSpan*)a;
     const HSpan* y = (const HSpan*)b;
     if (x->start_row != y->start_row) return x->start_row - y->start_row;
     return x->start_col - y->start_col;
 }
+
+*/
 
 void syntax_highlighting_render(LayerCodeData* lcd) {
     if (!lcd || !lcd->query || !lcd->tree)
@@ -247,9 +251,9 @@ void syntax_highlighting_render(LayerCodeData* lcd) {
     getmaxyx(stdscr, screen_h, screen_w);
 
     int win_x = virt_win ? virt_win->x      : 0;
-    int win_y = virt_win ? virt_win->y      : 0;
+    int win_y = virt_win ? virt_win->y      : 1;
     int win_w = virt_win ? virt_win->width  : screen_w;
-    int win_h = virt_win ? virt_win->height : screen_h;
+    int win_h = virt_win ? virt_win->height : screen_h-1;
 
     int xoff = cur->xoff;
     int yoff = cur->yoff;

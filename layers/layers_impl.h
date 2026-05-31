@@ -47,6 +47,24 @@ Layer* top_layer(CCode* ccode){
 }
 
 
+Layer* top_fullsceen_layer(CCode* ccode){
+     for(int i = 0; i < arrlen(ccode->layers); i++){
+        if(ccode->layers[i]->draws_fullscreen){
+            return ccode->layers[i];
+        }
+    }
+    return NULL;
+}
+
+Layer* top_input_consuming_layer(CCode* ccode){
+     for(int i = 0; i < arrlen(ccode->layers); i++){
+        if(ccode->layers[i]->consume_input){
+            return ccode->layers[i];
+        }
+    }
+    return NULL;
+}
+
 void remove_layer(CCode* ccode, Layer* target){
     for(int i = 0; i < arrlen(ccode->layers); i++){
         if(ccode->layers[i] == target){
@@ -241,8 +259,33 @@ void free_layer(Layer* layer){
             }
             free(lsvd);
         }
+    }else if(layer->type == LAYER_FLOATING_TREE){
+        LayerFloatingTreeData* lftd = layer->layer_data;
+        if(lftd){
+            if(lftd->virtual_window){
+                free(lftd->virtual_window);
+            }
+            if(lftd->search_buffer){
+                arrfree(lftd->search_buffer);
+            }
+            if(lftd->cwd){
+                arrfree(lftd->cwd);
+            }
+            if(lftd->files){
+                for(size_t i = 0; i < arrlenu(lftd->files); i++){
+                    arrfree(lftd->files[i]);
+                }
+                arrfree(lftd->files);
+            }
+            if(lftd->filtered_files){
+                for(size_t i = 0; i < arrlenu(lftd->filtered_files); i++){
+                    arrfree(lftd->filtered_files[i]);
+                }
+                arrfree(lftd->filtered_files);
+            }
+        }
+        free(lftd);
     }
-
     
     free(layer);
 }
@@ -420,6 +463,10 @@ void draw_ui(CCode* ccode) {
         LayerCodeData* lcd = (LayerCodeData*) lsvd->splitten_layers[lsvd->focused]->layer_data;
         size_t bot_line_size = snprintf(NULL, 0, "%c%d:%d", mode, lcd->cursor->y, lcd->cursor->x);
         mvprintw(y - 1, x - bot_line_size, "%c%d:%d", mode, lcd->cursor->y, lcd->cursor->x);
+    }else if(layer_at_top->type == LAYER_FLOATING_TREE){
+        LayerFloatingTreeData* lftd = layer_at_top->layer_data;
+        size_t bot_line_size = snprintf(NULL, 0, "%c%d:%d", mode, lftd->selected + lftd->offset, 0);
+        mvprintw(y - 1, x - bot_line_size, "%c%d:%d", mode, lftd->selected + lftd->offset, 0);
     }else{
         size_t bot_line_size = snprintf(NULL, 0, "%c%d:%d", mode, 0, 0);
         mvprintw(y - 1, x - bot_line_size, "%c%d:%d", mode, 0, 0);
@@ -459,6 +506,9 @@ void draw_ui(CCode* ccode) {
         }
     
         move(virt_y, virt_x);
+    }else if(layer_at_top->type == LAYER_FLOATING_TREE){
+        LayerFloatingTreeData* lftd = layer_at_top->layer_data;
+        move(lftd->virtual_window->y, lftd->virtual_window->x + lftd->search_buffer_x);
     }else {
         assert(false && "unknown layer");
     }

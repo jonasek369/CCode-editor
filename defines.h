@@ -60,7 +60,14 @@
     #define MAX_PATH 4096
 #endif
 
-typedef enum {LAYER_CODE=0, LAYER_CONSOLE, LAYER_DIR_WALK, LAYER_THEME_SELECTOR, LAYER_SPLIT_VIEW} LayerType;
+typedef enum {
+    LAYER_CODE=0,
+    LAYER_CONSOLE,
+    LAYER_DIR_WALK,
+    LAYER_THEME_SELECTOR,
+    LAYER_SPLIT_VIEW,
+    LAYER_FLOATING_TREE
+} LayerType;
 typedef enum {TOKEN_INVALID = 0, TOKEN_COMMAND, TOKEN_STRING, TOKEN_INTEGER, TOKEN_UNKNOWN} ConsoleTokenType;
 typedef enum {
     COMMAND_INVALID = 0,
@@ -82,7 +89,8 @@ typedef enum {
     COMMAND_WRITE_CONFIG,
     COMMAND_MAKE_DIRECTORY,
     COMMAND_MAKE_FILE,
-    COMMAND_SPLIT_VIEW
+    COMMAND_SPLIT_VIEW,
+    COMMAND_FLOATING_WINDOW
 } CommandType;
 
 typedef enum {
@@ -155,6 +163,9 @@ typedef struct {
     int height;
 } VirtualWindow;
 
+static VirtualWindow default_virtual_window = {.x = 0, .y = 1, .width = 0, .height = 0};
+
+
 typedef struct {
     bool saved;
     char* filename;
@@ -178,7 +189,6 @@ typedef struct {
     CompletionWindow* completion_window;
 } LayerCodeData;
 
-
 typedef struct {
     char* console_buffer;
     int console_buffer_x;
@@ -193,13 +203,22 @@ typedef struct {
     int offset;
 } LayerDirWalkData;
 
-
 typedef struct {
     char** current_dir_files;
     int selected;
     int offset;
 } LayerThemeSelectorData;
 
+typedef struct {
+    VirtualWindow* virtual_window;
+    int selected;
+    int offset;
+    char* search_buffer;
+    int search_buffer_x;
+    char* cwd;
+    char** files;
+    char** filtered_files;
+} LayerFloatingTreeData;
 
 typedef struct Layer Layer;
 typedef struct CCode CCode;

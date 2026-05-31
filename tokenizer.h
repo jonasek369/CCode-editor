@@ -37,6 +37,7 @@ void init_commands(){
     add_command(":mkdir",  COMMAND_MAKE_DIRECTORY);
     add_command(":mkfile", COMMAND_MAKE_FILE);
     add_command(":sw",     COMMAND_SPLIT_VIEW);
+    add_command(":ft",     COMMAND_FLOATING_WINDOW);
 }
 
 void destroy_commands(){

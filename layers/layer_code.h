@@ -135,7 +135,7 @@ bool get_language_scm_query(SyntaxLanguage lang, Nob_String_Builder* out){
 
     switch(lang){
         case(LANG_C): {
-            if(!nob_read_entire_file("./tree-sitter-queries/c/highlights.scm", out)){
+            if(!nob_read_entire_file("./tree-sitter-grammar/tree-sitter-c/queries/highlights.scm", out)){
                 fprintf(stderr, "Error reading C scm file\n");
                 nob_sb_free(*out);
                 return false;
@@ -143,7 +143,7 @@ bool get_language_scm_query(SyntaxLanguage lang, Nob_String_Builder* out){
             return true;
         }
         case(LANG_PYTHON): {
-            if(!nob_read_entire_file("./tree-sitter-queries/python/highlights.scm", out)){
+            if(!nob_read_entire_file("./tree-sitter-grammar/tree-sitter-python/queries/highlights.scm", out)){
                 fprintf(stderr, "Error reading Python scm file\n");
                 nob_sb_free(*out);
                 return false;
@@ -151,13 +151,29 @@ bool get_language_scm_query(SyntaxLanguage lang, Nob_String_Builder* out){
             return true;
         }
         case(LANG_RUST): {
-            if(!nob_read_entire_file("./tree-sitter-queries/rust/highlights.scm", out)){
-                fprintf(stderr, "Error reading Python scm file\n");
+            if(!nob_read_entire_file("./tree-sitter-grammar/tree-sitter-rust/queries/highlights.scm", out)){
+                fprintf(stderr, "Error reading Rust scm file\n");
                 nob_sb_free(*out);
                 return false;
             }
             return true;
         }
+        case(LANG_C_SHARP): {
+            if(!nob_read_entire_file("./tree-sitter-grammar/tree-sitter-c-sharp/queries/highlights.scm", out)){
+                fprintf(stderr, "Error reading C# scm file\n");
+                nob_sb_free(*out);
+                return false;
+            }
+            return true;
+        }
+        case(LANG_JSON): {
+            if(!nob_read_entire_file("./tree-sitter-grammar/tree-sitter-json/queries/highlights.scm", out)){
+                fprintf(stderr, "Error reading JSON scm file\n");
+                nob_sb_free(*out);
+                return false;
+            }
+            return true;
+        } 
         default: {
             printf("No scm found for %d\n", lang);
             return false;
@@ -1089,6 +1105,11 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
         console_execute_command(ccode, ":tree");
     }
 
+    /* Temp shortcut for floating tree CTRL + P*/
+    else if(!inFindSubstrMode && chr == 16){
+        console_execute_command(ccode, ":ft");
+    }
+
     END_PROFILING("handle_keypress");
     START_PROFILING();
 
@@ -1228,7 +1249,35 @@ void layer_code_render(CCode* ccode, Layer* layer) {
         layer_code_render_completion_window(ccode, layer);
     }else{
         // fallback for raw text
+        VirtualWindow* virtual_window;
+        if(code_data->virtual_window){
+            virtual_window = code_data->virtual_window;
+        }else{
+            virtual_window = &default_virtual_window;
+        }
+        int xoff = code_data->cursor->xoff;
         
+        for(int r = 0; r < virtual_window->height; r++){
+            int br = r + code_data->cursor->yoff;
+        
+            if(br < arrlen(code_data->code_buffer) && code_data->code_buffer[br]){
+        
+                char *line = code_data->code_buffer[br];
+        
+                int len = strlen(line);
+                if(xoff > len) continue;
+        
+                mvprintw(
+                    virtual_window->y + r,
+                    virtual_window->x,
+                    "%.*s",
+                    virtual_window->width,
+                    line + xoff
+                );
+            }
+        }
+
+        layer_code_render_completion_window(ccode, layer);
     }
 }
 

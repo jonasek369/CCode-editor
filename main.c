@@ -229,6 +229,13 @@ int main(int argc, char** argv) {
         struct timespec frame_start;
     #endif
 
+    int x, y;
+    getmaxyx(stdscr, y, x);
+
+
+    default_virtual_window.width = x;
+    default_virtual_window.height = y;
+
     while(ccode.config->PrivateRunning) {
         START_PROFILING();
         #ifdef _WIN32
@@ -295,14 +302,29 @@ int main(int argc, char** argv) {
         // Console switching
         if(ch == CUSTOM_KEY_ESCAPE || ccode.config->PrivateCloseConsole){
             // if top layer has opened completion window remove it
-            Layer* top = top_type_layer(&ccode, LAYER_CODE);
-            if(top){
-                LayerCodeData* lcd = top->layer_data;
-                if(lcd->completion_window){
-                    json_free(lcd->completion_window->completion);
-                    free(lcd->completion_window);
-                    lcd->completion_window = NULL;
-                    continue;
+            if(arrlenu(ccode.layers) >= 1 && ch == CUSTOM_KEY_ESCAPE){
+                int index = top_layer(&ccode)->type == LAYER_CONSOLE ? 1 : 0;
+                switch(ccode.layers[index]->type){
+                    case(LAYER_CODE): {
+                        LayerCodeData* lcd = ccode.layers[index]->layer_data;
+                        if(lcd->completion_window){
+                            json_free(lcd->completion_window->completion);
+                            free(lcd->completion_window);
+                            lcd->completion_window = NULL;
+                            continue;
+                        }
+                        break;
+                    }
+                    case(LAYER_FLOATING_TREE): {
+                        Layer* ft = ccode.layers[index];
+                        remove_layer(&ccode, ft);
+                        free_layer(ft);
+                        continue;
+                        break;
+                    }
+                    default: {
+                        break;
+                    }
                 }
             }
 
@@ -362,7 +384,8 @@ int main(int argc, char** argv) {
                 case LAYER_CODE: 
                 case LAYER_CONSOLE: 
                 case LAYER_THEME_SELECTOR:
-                case LAYER_SPLIT_VIEW: {
+                case LAYER_SPLIT_VIEW:
+                case LAYER_FLOATING_TREE: {
                     layer->handle_keypress_function(&ccode, layer, propagated_ch, should_draw);
                     break;
                 }
