@@ -61,7 +61,6 @@ bool is_inside_virtual_window(int x, int y, VirtualWindow* w){
 void handle_mouse(CCode* ccode){
     MEVENT event;
     nc_getmouse(&event);
-    // printf("%d\n", event.bstate);
 
     Layer* current_top_layer = top_layer(ccode);
 
@@ -185,6 +184,29 @@ void handle_mouse(CCode* ccode){
                 
                     break;
                 }
+                break;
+            }
+            case LAYER_FLOATING_TREE: {
+                LayerFloatingTreeData* lftd = current_top_layer->layer_data;
+                if(event.y == lftd->virtual_window->y){
+                    if(event.x-lftd->virtual_window->x > arrlen(lftd->search_buffer)-1) break;
+                    if(event.x < lftd->virtual_window->x) break;
+
+                    lftd->search_buffer_x = event.x - lftd->virtual_window->x;
+                }
+                if(
+                    event.y > lftd->virtual_window->y &&
+                    event.y <= lftd->virtual_window->y + lftd->virtual_window->height+1
+                ){
+                    int selecting = event.y - lftd->virtual_window->y-1 + lftd->offset;
+                    if(selecting < 0 || selecting >= arrlen(lftd->filtered_files)) break;
+                    if(lftd->selected == selecting){
+                        layer_floating_tree_load_file(ccode, current_top_layer, lftd);
+                    }else{
+                        lftd->selected = selecting;
+                    }
+                }
+                break;
             }
             default: {
                 break;
@@ -196,9 +218,17 @@ void handle_mouse(CCode* ccode){
 int main(int argc, char** argv) {
     // For random file ids for LSP
     srand(time(NULL));
+    ensure_config_dir_existence();
+    char path[4096];
+    char config_path[8096];
+
+    get_config_directory(path, sizeof(path));
+    snprintf(config_path, sizeof(config_path), "%s/config.json", path);
+
+
     CCode ccode   = {0};
     ccode.layers  = NULL;
-    ccode.config  = load_config("./config.json");
+    ccode.config  = load_config(config_path);
 
     int ch;
 
@@ -215,6 +245,8 @@ int main(int argc, char** argv) {
     init_lsp_handler();
 
     init_commands();
+
+    detect_clipboard_support();
     
     handle_args(&ccode, argc, argv);
 
@@ -245,11 +277,11 @@ int main(int argc, char** argv) {
         #endif
         ch = getch();
 
-        /*
-        if(ch != -1){
-            printf("%d\n", ch);
-        }
-        */
+        
+        //if(ch != -1){
+        //    printf("%d\n", ch);
+        //}
+        
 
         if(ch == KEY_MOUSE){
             handle_mouse(&ccode);
@@ -385,7 +417,9 @@ int main(int argc, char** argv) {
                 case LAYER_CONSOLE: 
                 case LAYER_THEME_SELECTOR:
                 case LAYER_SPLIT_VIEW:
-                case LAYER_FLOATING_TREE: {
+                case LAYER_FLOATING_TREE:
+                case LAYER_FLOATING_DIALOG:
+                {
                     layer->handle_keypress_function(&ccode, layer, propagated_ch, should_draw);
                     break;
                 }

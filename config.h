@@ -1,6 +1,75 @@
 #ifndef _H_CONFIG
 #define _H_CONFIG
 
+#include <stdlib.h>
+#include <stdio.h>
+
+#ifdef __linux__
+
+#include <sys/stat.h>
+#include <sys/types.h>
+
+void get_config_directory(char *buffer, size_t size){
+    const char *xdg = getenv("XDG_CONFIG_HOME");
+
+    if (xdg) {
+        snprintf(buffer, size, "%s/ccode-editor", xdg);
+        return;
+    }
+
+    const char *home = getenv("HOME");
+
+    if (home) {
+        snprintf(buffer, size, "%s/.config/ccode-editor", home);
+        return;
+    }
+
+    buffer[0] = '\0';
+}
+
+void ensure_config_dir_existence(void){
+    char path[4096];
+
+    get_config_directory(path, sizeof(path));
+
+    if (path[0] == '\0')
+        return;
+
+    mkdir(path, 0755);
+}
+
+#endif
+
+
+#ifdef _WIN32
+
+#include <direct.h>
+
+void get_config_directory(char *buffer, size_t size){
+    const char *localappdata = getenv("LOCALAPPDATA");
+
+    if (localappdata) {
+        snprintf(buffer, size, "%s\\ccode-editor", localappdata);
+        return;
+    }
+
+    buffer[0] = '\0';
+}
+
+void ensure_config_dir_existence(void){
+    char path[4096];
+
+    get_config_directory(path, sizeof(path));
+
+    if (path[0] == '\0')
+        return;
+
+    _mkdir(path);
+}
+
+#endif
+
+
 typedef struct {
     short       id;   // ncurses color slot
     char* name;
@@ -91,6 +160,7 @@ const char *default_theme_json =
 "    ]\n"
 "}";
 
+
 typedef struct {
     bool PrivateRunning;
     bool PrivateCloseConsole;
@@ -99,6 +169,7 @@ typedef struct {
     ColorTheme* theme;
     size_t tab_size;
 } CCodeConfig;
+
 
 ColorTheme* load_theme(const char* path){
     JsonValue* json_theme = malloc(sizeof(JsonValue));
@@ -240,7 +311,13 @@ void save_config(CCodeConfig* config){
     char* out = NULL;
     json_dump(json_config, &out);
     arrput(out, (char)0);
-    bool saved = nob_write_entire_file("config.json", out, arrlen(out)-1);
+    char path[4096];
+    char config_path[8096];
+
+    get_config_directory(path, sizeof(path));
+    snprintf(config_path, sizeof(config_path), "%s/config.json", path);
+
+    bool saved = nob_write_entire_file(config_path, out, arrlen(out)-1);
     if(!saved){
         printf("failed to save config!\n");
     }

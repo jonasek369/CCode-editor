@@ -43,7 +43,7 @@
 
 #include "utils.h"
 #include "config.h"
-
+#include "clipboard.h"
 
 #ifdef __linux__
     #ifndef MAX_PATH
@@ -66,7 +66,8 @@ typedef enum {
     LAYER_DIR_WALK,
     LAYER_THEME_SELECTOR,
     LAYER_SPLIT_VIEW,
-    LAYER_FLOATING_TREE
+    LAYER_FLOATING_TREE,
+    LAYER_FLOATING_DIALOG
 } LayerType;
 typedef enum {TOKEN_INVALID = 0, TOKEN_COMMAND, TOKEN_STRING, TOKEN_INTEGER, TOKEN_UNKNOWN} ConsoleTokenType;
 typedef enum {
@@ -89,6 +90,7 @@ typedef enum {
     COMMAND_WRITE_CONFIG,
     COMMAND_MAKE_DIRECTORY,
     COMMAND_MAKE_FILE,
+    COMMAND_DELETE_FILE,
     COMMAND_SPLIT_VIEW,
     COMMAND_FLOATING_WINDOW
 } CommandType;
@@ -197,7 +199,6 @@ typedef struct {
 } LayerConsoleData;
 
 typedef struct {
-    char* current_dir_path;
     char** current_dir_files;
     int selected;
     int offset;
@@ -244,6 +245,15 @@ struct CCode{
     CCodeConfig* config;
 };
 
+typedef struct {
+    VirtualWindow* virtual_window;
+    char*          message;     /* str_to_arr string */
+    int            selected;    /* 0 = Yes, 1 = No */
+    void         (*on_yes)(CCode*, void*);
+    void         (*on_no )(CCode*, void*);
+    void*          userdata;
+} LayerFloatingDialogData;
+
 char *flatten_buffer(LayerCodeData *code){
     size_t total = 0;
 
@@ -270,6 +280,12 @@ char *flatten_buffer(LayerCodeData *code){
 #include "profiling.h"
 #include "syntax_highlighting.h"
 #include "lsp_handler.h"
+
+// declaring callbacks that needs to be defined for layers.h
+void file_remove_callback(CCode* ccode, void* data);
+void file_not_remove_callback(CCode* ccode, void* data);
+
 #include "layers.h"
+#include "callbacks.h"
 
 #endif

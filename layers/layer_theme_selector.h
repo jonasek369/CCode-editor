@@ -44,31 +44,26 @@ int layer_theme_selector_load_themes(LayerThemeSelectorData* ltsd, const char* p
     if(paths.count > 0){
         qsort(paths.items, paths.count, sizeof(char*), pstrcmp);
     }
-    char** add_to_top = NULL;
     for(size_t i = 0; i < paths.count; i++){
         if(strlen(paths.items[i]) <= 2 && (strncmp(paths.items[i], ".", 1) == 0 || strncmp(paths.items[i], "..", 2) == 0)){
             continue;
         }
         char* arr = str_to_arr(paths.items[i]);
-        if(nob_get_file_type(nob_temp_sprintf("./themes/%s", arr)) == NOB_FILE_DIRECTORY){
-            arrput(add_to_top, arr);
-        }else{
-            arrput(ltsd->current_dir_files, arr);
-        }
+        arrput(ltsd->current_dir_files, arr);
+
     }
-    if(add_to_top){
-        for(size_t i = 0; i < arrlenu(add_to_top); i++){
-            arrins(ltsd->current_dir_files, 0, add_to_top[i]);
-        }
-    }
-    arrfree(add_to_top);
     free(paths.items);
     return 0;
 }
 
 
 void layer_theme_selector_set_theme(CCode* ccode, LayerThemeSelectorData* ltsd){
-    char* theme_path = nob_temp_sprintf("./themes/%s", ltsd->current_dir_files[ltsd->selected]);
+    char path[4096];
+    char theme_path[8096];
+
+    get_config_directory(path, sizeof(path));
+    snprintf(theme_path, sizeof(theme_path), "%s/themes/%s", path, ltsd->current_dir_files[ltsd->selected]);
+
     ColorTheme* new_theme = load_theme(theme_path);
     if(new_theme){
         free_theme(ccode->config->theme);
@@ -87,7 +82,12 @@ bool layer_theme_selector_update(CCode* ccode, Layer* layer, int chr){
     LayerThemeSelectorData* ltsd = (LayerThemeSelectorData*) layer->layer_data;
 
     if(ltsd->current_dir_files == NULL){
-        if(layer_theme_selector_load_themes(ltsd, "./themes") == -1){
+        char path[4096];
+        char theme_path[8096];
+
+        get_config_directory(path, sizeof(path));
+        snprintf(theme_path, sizeof(theme_path), "%s/themes", path);
+        if(layer_theme_selector_load_themes(ltsd, theme_path) == -1){
             printf("There was error reading the directory themes");
             return false;
         }

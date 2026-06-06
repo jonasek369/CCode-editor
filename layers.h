@@ -11,7 +11,7 @@
 
 Layer* new_layer_code();
 Layer* new_layer_console();
-Layer* new_layer_dir_walk(char* dir);
+Layer* new_layer_dir_walk();
 Layer* new_layer_theme_selector();
 
 /*
@@ -40,7 +40,7 @@ void print_layer(Layer* l);
 size_t buffer_byte_offset(LayerCodeData *code, int row, int col);
 void message_to_console(CCode* ccode, const char* message);
 void console_execute_command(CCode* ccode, const char* buffer);
-void change_tree_path(Layer* layer, char* new_path);
+void refresh_tree_files(Layer* layer);
 /*
     UI
 */
@@ -50,9 +50,11 @@ void draw_ui(CCode* ccode);
 #include "./layers/layer_code.h"
 #include "./layers/layer_split_view.h"
 #include "./layers/layer_floating_tree.h"
+#include "./layers/layer_floating_dialog.h"
 #include "./layers/layer_console.h"
 #include "./layers/layer_dir_walk.h"
 #include "./layers/layer_theme_selector.h"
 #include "./layers/layers_impl.h"
+
 
 #endif

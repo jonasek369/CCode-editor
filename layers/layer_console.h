@@ -250,11 +250,14 @@ void console_execute_command(CCode* ccode, const char* buffer){
                     nob_temp_reset();
                 }
 
-                Layer* tree = new_layer_dir_walk(dir_arr);
+                if(dir_arr){
+                    nob_set_current_dir(dir_arr);
+                    arrfree(dir_arr);
+                }
+
+                Layer* tree = new_layer_dir_walk();
                 push_layer_to_top(ccode, tree);
             }else{
-                LayerDirWalkData* ldwd = top_tree_layer->layer_data;
-
                 char* dir_arr = NULL;
 
                 if(arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_STRING){
@@ -263,10 +266,10 @@ void console_execute_command(CCode* ccode, const char* buffer){
                     free(as_str);
                 }
 
-                if(dir_arr == NULL && ldwd->current_dir_path == NULL){
+                if(dir_arr == NULL){
                     const char* cwd = nob_get_current_dir_temp();
                     if(cwd == NULL){
-                        printf("Could not get cwd!\n");
+                        fprintf(stderr, "Could not get cwd!\n");
                         break;
                     }
                     dir_arr = str_to_arr(cwd);
@@ -274,7 +277,9 @@ void console_execute_command(CCode* ccode, const char* buffer){
                 }
 
                 if(dir_arr != NULL){
-                    change_tree_path(top_tree_layer, dir_arr);
+                    nob_set_current_dir(dir_arr);
+                    refresh_tree_files(top_tree_layer);
+                    arrfree(dir_arr);
                 }
 
                 push_layer_to_top(ccode, top_tree_layer);
@@ -300,25 +305,25 @@ void console_execute_command(CCode* ccode, const char* buffer){
                 break;
             }
 
-            LayerDirWalkData* ldwd = top_tree_layer->layer_data;
-
             if(to.tokens[1].type == TOKEN_STRING){
                 char* as_str = stringview_to_str(to.tokens[1].string.start, to.tokens[1].string.size);
                 if(strncmp(as_str, "..", 2) == 0){
-                    char* new_dir = nob_temp_sprintf("%s/%s", ldwd->current_dir_path, as_str);
+                    char* new_dir = nob_temp_sprintf("%s/%s", nob_get_current_dir_temp(), as_str);
                     char resolved_path[MAX_PATH];
                     if(resolve_path(new_dir, resolved_path) == NULL){
                         free(as_str);
                         nob_temp_reset();
                         break;
                     }
-                    change_tree_path(top_tree_layer, str_to_arr(resolved_path));
+                    nob_set_current_dir(resolved_path);
+                    refresh_tree_files(top_tree_layer);
                     nob_temp_reset();
                 }else {
                     if(!nob_file_exists(as_str)){
                         message_to_console(ccode, "invalid path");
                     }
-                    change_tree_path(top_tree_layer, str_to_arr(as_str));
+                    nob_set_current_dir(as_str);
+                    refresh_tree_files(top_tree_layer);
                 }
 
                 free(as_str);
@@ -366,12 +371,10 @@ void console_execute_command(CCode* ccode, const char* buffer){
                 break;
             }
 
-            LayerDirWalkData* ldwd = top_tree_layer->layer_data;
-
             if(to.tokens[1].type == TOKEN_STRING){
                 char* as_str = stringview_to_str(to.tokens[1].string.start, to.tokens[1].string.size);
 
-                char* full_path = nob_temp_sprintf("%s/%s", ldwd->current_dir_path, as_str);
+                char* full_path = nob_temp_sprintf("%s/%s", nob_get_current_dir_temp(), as_str);
 
                 bool status = nob_mkdir_if_not_exists(full_path);
                 if(!status){
@@ -383,8 +386,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
                 }
                 nob_temp_reset();
                 free(as_str);
-                char* dir = str_to_arr(ldwd->current_dir_path);
-                change_tree_path(top_tree_layer, dir);
+                refresh_tree_files(top_tree_layer);
             }
             break;
         }
@@ -400,12 +402,10 @@ void console_execute_command(CCode* ccode, const char* buffer){
                 break;
             }
 
-            LayerDirWalkData* ldwd = top_tree_layer->layer_data;
-
             if(to.tokens[1].type == TOKEN_STRING){
                 char* as_str = stringview_to_str(to.tokens[1].string.start, to.tokens[1].string.size);
 
-                char* full_path = nob_temp_sprintf("%s/%s", ldwd->current_dir_path, as_str);
+                char* full_path = nob_temp_sprintf("%s/%s", nob_get_current_dir_temp(), as_str);
 
                 bool status = nob_write_entire_file(full_path, NULL, 0);
                 if(!status){
@@ -417,8 +417,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
                 }
                 nob_temp_reset();
                 free(as_str);
-                char* dir = str_to_arr(ldwd->current_dir_path);
-                change_tree_path(top_tree_layer, dir);
+                refresh_tree_files(top_tree_layer);
             }
             break;
         }
@@ -479,7 +478,55 @@ void console_execute_command(CCode* ccode, const char* buffer){
             Layer* ft = new_layer_floting_tree();
             push_layer_to_top(ccode, ft);
             break;
-        } 
+        }
+
+        case COMMAND_DELETE_FILE: {
+            Layer* top_tree_layer = top_type_layer(ccode, LAYER_DIR_WALK);
+            if(top_tree_layer == NULL){
+                message_to_console(ccode, "Cannot delete file outside tree");
+                break;
+            }
+            LayerDirWalkData* ldwd = top_tree_layer->layer_data;
+            const char* cwd = nob_get_current_dir_temp();
+            char* as_str = NULL ;
+            if(arrlen(to.tokens) > 1 && to.tokens[1].type == TOKEN_STRING){
+                as_str = stringview_to_str(to.tokens[1].string.start, to.tokens[1].string.size);
+            }else{
+                if(ldwd->current_dir_files == NULL || ldwd->selected == 0){
+                    message_to_console(ccode, "File could not be find");
+                    nob_temp_reset();
+                    break;
+                }
+                as_str = strdup(ldwd->current_dir_files[ldwd->selected]);
+            }
+            if(as_str == NULL){
+                message_to_console(ccode, "File could not be find");
+                nob_temp_reset();
+                break;
+            }
+            char question[4096] = {0};
+            
+            const char* dir_question  = "Remove directory '%s'?";
+            const char* file_question = "Remove file '%s'?";
+            
+            Nob_File_Type ft = nob_get_file_type(nob_temp_sprintf("%s/%s", cwd, as_str));
+            
+            const char* fmt = (ft == NOB_FILE_DIRECTORY)
+                ? dir_question
+                : file_question;
+
+            snprintf(question, sizeof(question), fmt, as_str);
+
+            Layer* dlg = new_layer_floating_dialog(
+                question,
+                &file_remove_callback,
+                &file_not_remove_callback,
+                as_str
+            );
+            push_layer_to_top(ccode, dlg);
+
+            nob_temp_reset();
+        }
 
         default: {
             break;
@@ -588,3 +635,49 @@ void layer_console_handle_keypress(CCode* ccode, Layer* layer, int chr, bool sho
 }
 
 #endif // _H_LAYER_CONSOLE
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

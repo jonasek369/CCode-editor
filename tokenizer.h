@@ -38,6 +38,7 @@ void init_commands(){
     add_command(":mkfile", COMMAND_MAKE_FILE);
     add_command(":sw",     COMMAND_SPLIT_VIEW);
     add_command(":ft",     COMMAND_FLOATING_WINDOW);
+    add_command(":rm",     COMMAND_DELETE_FILE);
 }
 
 void destroy_commands(){

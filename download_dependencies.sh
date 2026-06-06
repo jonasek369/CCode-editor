@@ -98,6 +98,12 @@ wait
 echo "==> building nob"
 gcc nob.c -o nob -O2 -march=native -pipe
 
-wait
+CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+TARGET_DIR="$CONFIG_HOME/ccode-editor"
+
+mkdir -p "$TARGET_DIR"
+
+echo "==> copying themes into config dir"
+cp -r "./themes" "$TARGET_DIR/"
 
 echo "==> run ./nob to compile and start Ccode-editor"

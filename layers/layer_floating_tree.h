@@ -24,8 +24,8 @@ Layer* new_layer_floting_tree(){
    
     int x, y;
     getmaxyx(stdscr, y, x);
-    int width = x/3;
-    int height = y/4;
+    int width = x/2;
+    int height = y/2;
     lftd->selected = 0;
     lftd->offset = 0;
     lftd->virtual_window = malloc(sizeof(VirtualWindow));
@@ -57,36 +57,75 @@ void layer_floating_tree_close(CCode* ccode, Layer* layer){
 	free_layer(layer);
 }
 
-bool layer_floating_tree_load_dir(LayerFloatingTreeData* float_tree_data){
-	NOB_ASSERT(float_tree_data->cwd != NULL);
-	Nob_File_Paths paths = {0};
-    bool status = nob_read_entire_dir(float_tree_data->cwd, &paths);
-    if(!status){
+static bool layer_floating_tree_load_dir_recursive(
+    LayerFloatingTreeData* float_tree_data,
+    const char* root_dir,
+    const char* dir){
+    Nob_File_Paths paths = {0};
+
+    if (!nob_read_entire_dir(dir, &paths)) {
         return false;
     }
-    if(paths.count > 0){
+
+    if (paths.count > 0) {
         qsort(paths.items, paths.count, sizeof(char*), pstrcmp);
     }
 
-    for(size_t i = 0; i < paths.count; i++){
-    	if(strlen(paths.items[i]) <= 2 && (strncmp(paths.items[i], ".", 1) == 0 || strncmp(paths.items[i], "..", 2) == 0)){
+    for (size_t i = 0; i < paths.count; i++) {
+        const char* name = paths.items[i];
+
+        if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) {
             continue;
         }
-        char* arr = str_to_arr(paths.items[i]);
-        if(nob_get_file_type(nob_temp_sprintf("%s/%s", float_tree_data->cwd, arr)) == NOB_FILE_DIRECTORY){
-        	arrfree(arr);
-        	continue;
+
+        size_t len = strlen(dir) + 1 + strlen(name) + 1;
+        char* full_path = (char*)malloc(len);
+        snprintf(full_path, len, "%s/%s", dir, name);
+        
+        if (nob_get_file_type(full_path) == NOB_FILE_DIRECTORY) {
+            if (!layer_floating_tree_load_dir_recursive(
+                    float_tree_data,
+                    root_dir,
+                    full_path))
+            {
+                free(full_path);
+                free(paths.items);
+                return false;
+            }
+            free(full_path);
+            continue;
         }
-		char* copy = str_to_arr(paths.items[i]);
-    	arrput(float_tree_data->files, arr);
-    	arrput(float_tree_data->filtered_files, copy);
+        
+        const char* relative_path = full_path + strlen(root_dir);
+        if (*relative_path == '/') {
+            relative_path++;
+        }
+        
+        char* arr  = str_to_arr(relative_path);
+        char* copy = str_to_arr(relative_path);
+        
+        arrput(float_tree_data->files, arr);
+        arrput(float_tree_data->filtered_files, copy);
+        
+        free(full_path);
     }
+
     free(paths.items);
     return true;
 }
 
+bool layer_floating_tree_load_dir(LayerFloatingTreeData* float_tree_data){
+    NOB_ASSERT(float_tree_data->cwd != NULL);
 
-void layer_floating_tree_load_file(CCode* ccode, LayerFloatingTreeData* float_tree_data){
+    bool status = layer_floating_tree_load_dir_recursive(
+        float_tree_data,
+        float_tree_data->cwd,
+        float_tree_data->cwd);
+    nob_temp_reset();
+    return status;
+}
+
+void layer_floating_tree_load_file(CCode* ccode, Layer* layer, LayerFloatingTreeData* float_tree_data){
 	if(float_tree_data->filtered_files == NULL){
 		return;
 	}
@@ -103,6 +142,7 @@ void layer_floating_tree_load_file(CCode* ccode, LayerFloatingTreeData* float_tr
 	char* arr = str_to_arr(resolved_path);
 	read_file_to_code_layer(ccode, arr, arrlen(arr)-1);
 	arrfree(arr);
+    layer_floating_tree_close(ccode, layer);
 }
 
 
@@ -169,8 +209,7 @@ bool layer_floating_tree_update(CCode* ccode, Layer* layer, int chr){
         }
         layer_floating_tree_filter_files(float_tree_data);
     } else if(chr == CUSTOM_KEY_ENTER){
-    	layer_floating_tree_load_file(ccode, float_tree_data);
-    	layer_floating_tree_close(ccode, layer);
+    	layer_floating_tree_load_file(ccode, layer, float_tree_data);
     	return true;
     } else if(chr == CUSTOM_KEY_BACKSPACE){
         if(float_tree_data->search_buffer_x > 0 && arrlen(float_tree_data->search_buffer) > 1){

@@ -6,7 +6,7 @@ void layer_dir_walk_handle_keypress(CCode* ccode, Layer* layer, int chr, bool sh
 bool layer_dir_walk_update(CCode* ccode, Layer* layer, int chr);
 
 
-Layer* new_layer_dir_walk(char* dir){
+Layer* new_layer_dir_walk(){
     Layer* tree = malloc(sizeof(Layer));
     if(!tree){
         return NULL;
@@ -22,7 +22,6 @@ Layer* new_layer_dir_walk(char* dir){
         free(tree);
         return NULL;
     }
-    ldwd->current_dir_path = dir;
     ldwd->current_dir_files = NULL;
     ldwd->selected = 0;
     ldwd->offset = 0;
@@ -40,13 +39,11 @@ Nob_File_Type dir_walk_get_file_type(char* current_dir, char* filename){
 
 
 int load_dir(LayerDirWalkData* ldwd){
-    if(ldwd->current_dir_path == NULL){
-        return -1;
-    }
     Nob_File_Paths paths = {0};
     ldwd->selected = 0;
     ldwd->offset = 0;
-    bool status = nob_read_entire_dir(ldwd->current_dir_path, &paths);
+    char* cwd = strdup(nob_get_current_dir_temp());
+    bool status = nob_read_entire_dir(cwd, &paths);
     if(!status){
         return -1;
     }
@@ -59,12 +56,13 @@ int load_dir(LayerDirWalkData* ldwd){
             continue;
         }
         char* arr = str_to_arr(paths.items[i]);
-        if(nob_get_file_type(nob_temp_sprintf("%s/%s", ldwd->current_dir_path, arr)) == NOB_FILE_DIRECTORY){
+        if(nob_get_file_type(nob_temp_sprintf("%s/%s", cwd, arr)) == NOB_FILE_DIRECTORY){
             arrput(add_to_top, arr);
         }else{
             arrput(ldwd->current_dir_files, arr);
         }
     }
+    free(cwd);
     if(add_to_top){
         for(size_t i = 0; i < arrlenu(add_to_top); i++){
             arrins(ldwd->current_dir_files, 0, add_to_top[i]);
@@ -79,13 +77,15 @@ int load_dir(LayerDirWalkData* ldwd){
 
     arrfree(add_to_top);
     free(paths.items);
+    nob_temp_reset();
     return 0;
 }
 
 
 bool layer_dir_walk_open(CCode* ccode, Layer* layer, LayerDirWalkData* ldwd){
+    char* cwd = strdup(nob_get_current_dir_temp());
     char* dir = nob_temp_sprintf("%s/%s",
-        ldwd->current_dir_path,
+        cwd,
         ldwd->current_dir_files[ldwd->selected]);
     char resolved_path[MAX_PATH] = {0};
     if(resolve_path(dir, resolved_path) == NULL){
@@ -93,10 +93,11 @@ bool layer_dir_walk_open(CCode* ccode, Layer* layer, LayerDirWalkData* ldwd){
     }
     switch(nob_get_file_type(resolved_path)){
         case NOB_FILE_DIRECTORY: {
-            char* arr = str_to_arr(resolved_path);
-            change_tree_path(layer, arr);
+            nob_set_current_dir(resolved_path);
+            refresh_tree_files(layer);
             load_dir(ldwd);
             nob_temp_reset();
+            free(cwd);
             return true;
         }
         default: {
@@ -105,6 +106,7 @@ bool layer_dir_walk_open(CCode* ccode, Layer* layer, LayerDirWalkData* ldwd){
             arrfree(arr);
             remove_layer(ccode, layer);
             free_layer(layer);
+            free(cwd);
             return true;
         }
     }
@@ -119,7 +121,8 @@ bool layer_dir_walk_update(CCode* ccode, Layer* layer, int chr){
 
     if(ldwd->current_dir_files == NULL){
         if(load_dir(ldwd) == -1){
-            printf("There was error reading the directory %s", ldwd->current_dir_path);
+            printf("There was error reading the directory %s", nob_get_current_dir_temp());
+            nob_temp_reset();
             return false;
         }
     }
@@ -164,7 +167,7 @@ void layer_dir_walk_render(CCode* ccode, Layer* layer){
 
     LayerDirWalkData* ldwd = (LayerDirWalkData*) layer->layer_data;
 
-    mvprintw(1, 0, "Current dir: %s", ldwd->current_dir_path);
+    mvprintw(1, 0, "Current dir: %s", nob_get_current_dir_temp());
     int y, x;
     getmaxyx(stdscr, y, x);
     (void)x;
@@ -172,7 +175,9 @@ void layer_dir_walk_render(CCode* ccode, Layer* layer){
     int draw_y = 3;
     for(size_t i = ldwd->offset; i < arrlenu(ldwd->current_dir_files); i++){
         if(draw_y >= y) break;
-        Nob_File_Type ft = dir_walk_get_file_type(ldwd->current_dir_path, ldwd->current_dir_files[i]);
+        char* cwd = strdup(nob_get_current_dir_temp());
+        Nob_File_Type ft = dir_walk_get_file_type(cwd, ldwd->current_dir_files[i]);
+        free(cwd);
         if(ft == NOB_FILE_DIRECTORY){
             attron(COLOR_PAIR(COLOR_DIR));
         }else if (ft == NOB_FILE_SYMLINK){
@@ -205,6 +210,7 @@ void layer_dir_walk_render(CCode* ccode, Layer* layer){
         }
 
         draw_y++;
+        nob_temp_reset();
     }
 }
 

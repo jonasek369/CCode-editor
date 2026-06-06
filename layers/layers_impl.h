@@ -220,9 +220,6 @@ void free_layer(Layer* layer){
     }else if(layer->type == LAYER_DIR_WALK){
         LayerDirWalkData* ldwd = (LayerDirWalkData*) layer->layer_data;
         if(ldwd){
-            if(ldwd->current_dir_path){
-                arrfree(ldwd->current_dir_path);
-            }
             if(ldwd->current_dir_files){
                 for(size_t i = 0; i < arrlenu(ldwd->current_dir_files); i++){
                     arrfree(ldwd->current_dir_files[i]);
@@ -285,29 +282,35 @@ void free_layer(Layer* layer){
             }
         }
         free(lftd);
+    }else if(layer->type == LAYER_FLOATING_DIALOG){
+        LayerFloatingDialogData* lfdd = layer->layer_data;
+        if(lfdd){
+            if(lfdd->message){
+                arrfree(lfdd->message);
+            }
+            if(lfdd->virtual_window){
+                free(lfdd->virtual_window);
+            }
+            free(lfdd);
+        }
     }
     
     free(layer);
 }
 
 
-void change_tree_path(Layer* layer, char* new_path){
+void refresh_tree_files(Layer* layer){
     if(layer->type != LAYER_DIR_WALK){
         return;
     }
 
     LayerDirWalkData* ldwd = layer->layer_data;
-    if(ldwd->current_dir_path != NULL){
-        arrfree(ldwd->current_dir_path);
-    }
     if(ldwd->current_dir_files != NULL){
         for(size_t i = 0; i < arrlenu(ldwd->current_dir_files); i++){
             arrfree(ldwd->current_dir_files[i]);
         }
         arrfree(ldwd->current_dir_files);
     }
-
-    ldwd->current_dir_path = new_path;
     ldwd->current_dir_files = NULL;
 }
 
@@ -509,6 +512,8 @@ void draw_ui(CCode* ccode) {
     }else if(layer_at_top->type == LAYER_FLOATING_TREE){
         LayerFloatingTreeData* lftd = layer_at_top->layer_data;
         move(lftd->virtual_window->y, lftd->virtual_window->x + lftd->search_buffer_x);
+    }else if(layer_at_top->type == LAYER_FLOATING_DIALOG){
+
     }else {
         assert(false && "unknown layer");
     }
