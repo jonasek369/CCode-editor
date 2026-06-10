@@ -199,9 +199,9 @@ ColorTheme* load_theme(const char* path){
     for(size_t i = 0; i < arrlenu(colors->array); i++){
         JsonValue* color = colors->array[i];
         char* name = shget(color->object, "name")->string;
-        uint16_t r = (uint16_t)shget(color->object, "r")->number;
-        uint16_t g = (uint16_t)shget(color->object, "g")->number;
-        uint16_t b = (uint16_t)shget(color->object, "b")->number;
+        uint16_t r = (uint16_t)json_get_integer(shget(color->object, "r"));
+        uint16_t g = (uint16_t)json_get_integer(shget(color->object, "g"));
+        uint16_t b = (uint16_t)json_get_integer(shget(color->object, "b"));
         arrput(theme->colors, make_color(64+i, name, pack_rgb16(r, g, b)));
     }
 
@@ -213,9 +213,9 @@ ColorTheme* load_theme(const char* path){
         arrput(theme->pairs, make_pair(name, fg, bg));
     }
 
-    uint16_t r = (uint16_t)shget(background->object, "r")->number;
-    uint16_t g = (uint16_t)shget(background->object, "g")->number;
-    uint16_t b = (uint16_t)shget(background->object, "b")->number;
+    uint16_t r = (uint16_t)json_get_integer(shget(background->object, "r"));
+    uint16_t g = (uint16_t)json_get_integer(shget(background->object, "g"));
+    uint16_t b = (uint16_t)json_get_integer(shget(background->object, "b"));
     theme->background = make_color(-1, NULL, pack_rgb16(r, g, b));
     if(json_theme){
         json_free(json_theme);
@@ -242,6 +242,35 @@ CCodeConfig* make_default_config(){
     return conf;
 }
 
+void save_config(CCodeConfig* config){
+    if(!config)
+        return;
+    JsonValue* json_config = json_new_object();
+    if(config->theme->path == NULL){
+        json_add_child(json_config, "theme", json_new_null());
+    }else{
+        json_add_child(json_config, "theme", json_new_string(config->theme->path));
+    }
+    json_add_child(json_config, "profiling", json_new_bool(config->profiling));
+    json_add_child(json_config, "tab_size", json_new_integer(config->tab_size));
+    json_add_child(json_config, "close_code_layer_on_split_view_close", json_new_bool(config->close_code_layer_on_split_view_close));
+    char* out = NULL;
+    json_dump(json_config, &out, 4, 0);
+    arrput(out, (char)0);
+    char path[4096];
+    char config_path[8096];
+
+    get_config_directory(path, sizeof(path));
+    snprintf(config_path, sizeof(config_path), "%s/config.json", path);
+
+    bool saved = nob_write_entire_file(config_path, out, arrlen(out)-1);
+    if(!saved){
+        printf("failed to save config!\n");
+    }
+    arrfree(out);
+    json_free(json_config);
+}
+
 CCodeConfig* load_config(const char* path){
     if(!path){
         return NULL;
@@ -253,15 +282,26 @@ CCodeConfig* load_config(const char* path){
     if(!json_config){
         return NULL;
     }
+    json_init_object(json_config);
     if(!can_read_file(path)){
         json_free(json_config);
         free(config);
         CCodeConfig* def = make_default_config();
-        fprintf(stderr, "config.json not found making default. Use :wconf to save current settings\n");
+        save_config(def);
+        fprintf(stderr, "config.json not found making default. Use :conf to change the default one\n");
         return def;
     }
 
-    jsonFileLoad(path, json_config);
+    bool status = jsonFileLoad(path, json_config);
+    if(!status){
+        fprintf(stderr, "Found faulty json when parsing config at %s please check its syntax and try to load again\n", path);
+        fprintf(stderr, "loading default instead\n");
+        json_free(json_config);
+        free(config);
+        CCodeConfig* def = make_default_config();
+        return def;
+    }
+
     if(json_config->type != JSON_OBJECT){
         free(json_config);
         return NULL;
@@ -286,7 +326,7 @@ CCodeConfig* load_config(const char* path){
     if(!tab_size || tab_size->type != JSON_NUMBER){
         config->tab_size = 4; // defualt
     }else{
-        config->tab_size = (size_t)tab_size->number;
+        config->tab_size = (size_t)json_get_integer(tab_size);
     }
 
     JsonValue* close_code_on_sv_close = shget(json_config->object, "close_code_layer_on_split_view_close");
@@ -298,31 +338,6 @@ CCodeConfig* load_config(const char* path){
 
     json_free(json_config);
     return config;
-}
-
-void save_config(CCodeConfig* config){
-    if(!config)
-        return;
-    JsonValue* json_config = json_new_object();
-    json_add_child(json_config, "theme", json_new_string(config->theme->path));
-    json_add_child(json_config, "profiling", json_new_bool(config->profiling));
-    json_add_child(json_config, "tab_size", json_new_number(config->tab_size));
-    json_add_child(json_config, "close_code_layer_on_split_view_close", json_new_bool(config->close_code_layer_on_split_view_close));
-    char* out = NULL;
-    json_dump(json_config, &out);
-    arrput(out, (char)0);
-    char path[4096];
-    char config_path[8096];
-
-    get_config_directory(path, sizeof(path));
-    snprintf(config_path, sizeof(config_path), "%s/config.json", path);
-
-    bool saved = nob_write_entire_file(config_path, out, arrlen(out)-1);
-    if(!saved){
-        printf("failed to save config!\n");
-    }
-    arrfree(out);
-    json_free(json_config);
 }
 
 void free_color(Color* color){

@@ -25,8 +25,6 @@
 	    clock_gettime(CLOCK_MONOTONIC, &ts);
 	    return (size_t)ts.tv_sec * 1000000000ULL  + ts.tv_nsec;
 	}
-	
-	
 	#define START_PROFILING() do { \
 	    if (depth < MAX_TIME_FRAMES) \
 	        prof_stack[depth++] = current_ns(); \

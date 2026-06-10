@@ -109,6 +109,7 @@ SyntaxLanguage get_language_from_suffix(const char* filename) {
     return LANG_UNKNOWN;
 }
 
+
 const TSLanguage* get_filetype_language_parser(const char* filename, SyntaxLanguage* lang) {
     *lang = get_language_from_suffix(filename);
 
@@ -127,6 +128,7 @@ const TSLanguage* get_filetype_language_parser(const char* filename, SyntaxLangu
             return NULL;
     }
 }
+
 
 bool get_language_scm_query(SyntaxLanguage lang, Nob_String_Builder* out){
     if(lang == LANG_UNKNOWN){
@@ -239,10 +241,10 @@ void make_parser(CCode* ccode, char* filename){
     free(flatten);
 }
 
-void read_file_to_code_layer(CCode* ccode, const char* filename_start, size_t size){
+void read_file_to_code_layer(CCode* ccode, const char* filepath_start, size_t size){
     Nob_String_Builder sb = {0};
     Nob_String_Builder filename = {0};
-    nob_da_append_many(&filename, filename_start, size);
+    nob_da_append_many(&filename, filepath_start, size);
     nob_da_append(&filename, '\0');
 
     if(!can_read_file(filename.items)){
@@ -391,10 +393,7 @@ void write_code_layer_to_file(CCode* ccode){
         lcd->saved = true;
     }
 
-    if(is_lspkind_running(ccode, lang_to_lspkind[lcd->lang])){
-        send_to_lsp(ccode, get_running_lsp(ccode, lang_to_lspkind[lcd->lang]));
-    }
-
+    file_on_save_callback(ccode, (void*)top_code_layer);
     nob_sb_free(sb);
 }
 

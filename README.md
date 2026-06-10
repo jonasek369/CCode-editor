@@ -53,7 +53,7 @@ Run the following commands in your terminal:
 ### Config, Theme & Theme selector
 
 Json config and theme definition are now being loaded there is also new commands  
-:wconf (write config)  
+:conf (open config json file for changing, autoload when saved)  
 :theme (theme selector)   
 
 ![Themes](https://i.imgur.com/2SIqVjp.png)

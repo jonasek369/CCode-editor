@@ -287,13 +287,6 @@ void console_execute_command(CCode* ccode, const char* buffer){
             break;
         }
 
-        case COMMAND_SET_TAB_SIZE: {
-            if(arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_INTEGER){
-                ccode->config->tab_size = to.tokens[1].integer;
-            }
-            break;
-        }
-
         case COMMAND_TREE_CHANGE_DIR: {
             if(arrlen(to.tokens) <= 1){
                 break;
@@ -352,11 +345,6 @@ void console_execute_command(CCode* ccode, const char* buffer){
                 Layer* layer = new_layer_theme_selector();
                 push_layer_to_top(ccode, layer);
             }
-            break;
-        }
-
-        case COMMAND_WRITE_CONFIG: {
-            save_config(ccode->config);
             break;
         }
 
@@ -526,6 +514,17 @@ void console_execute_command(CCode* ccode, const char* buffer){
             push_layer_to_top(ccode, dlg);
 
             nob_temp_reset();
+            break;
+        }
+
+        case COMMAND_CONFIG: {
+            char path[4096];
+            char config_path[8096];
+
+            get_config_directory(path, sizeof(path));
+            snprintf(config_path, sizeof(config_path), "%s/config.json", path);
+            read_file_to_code_layer(ccode, config_path, strlen(config_path));
+            break;
         }
 
         default: {

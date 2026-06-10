@@ -29,16 +29,15 @@ void init_commands(){
     add_command(":c",      COMMAND_CLOSE);
     add_command(":c!",     COMMAND_FORCE_CLOSE);
     add_command(":tree",   COMMAND_TREE);
-    add_command(":ts",     COMMAND_SET_TAB_SIZE);
     add_command(":cd",     COMMAND_TREE_CHANGE_DIR);
     add_command(":prof",   COMMAND_PROFILING);
     add_command(":theme",  COMMAND_THEME);
-    add_command(":wconf",  COMMAND_WRITE_CONFIG);
     add_command(":mkdir",  COMMAND_MAKE_DIRECTORY);
     add_command(":mkfile", COMMAND_MAKE_FILE);
     add_command(":sw",     COMMAND_SPLIT_VIEW);
     add_command(":ft",     COMMAND_FLOATING_WINDOW);
     add_command(":rm",     COMMAND_DELETE_FILE);
+    add_command(":conf",   COMMAND_CONFIG);
 }
 
 void destroy_commands(){

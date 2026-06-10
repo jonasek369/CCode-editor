@@ -117,6 +117,7 @@ bool layer_theme_selector_update(CCode* ccode, Layer* layer, int chr){
     if(chr == CUSTOM_KEY_ENTER){
         remove_layer(ccode, layer);
         free_layer(layer);
+        save_config(ccode->config);
         return true;
     }
 

@@ -99,6 +99,7 @@ int get_pair_id(const char* name) {
     return -1;
 }
 
+
 Color* get_color_from_key(ColorTheme* theme, const char* key){
     if(theme == NULL || key == NULL){
         return NULL;
@@ -109,6 +110,7 @@ Color* get_color_from_key(ColorTheme* theme, const char* key){
     }
     return NULL;
 }
+
 
 void init_syntax_colors(ColorTheme* theme) {
     start_color();
@@ -137,9 +139,12 @@ void init_syntax_colors(ColorTheme* theme) {
     }
 }
 
+
 typedef struct { char* key; int value; } map_entry;
 
+
 static map_entry* type_map = NULL;
+
 
 void init_type_map(){
     // --- existing ---
@@ -206,16 +211,19 @@ void init_type_map(){
     shput(type_map, "escape",          COLOR_PAIR_DEFAULT);
 }
 
+
 int name_to_color_pair(const char* name){
     if (!name) return COLOR_PAIR_DEFAULT;
     int val = shget(type_map, name);
     return val ? val : COLOR_PAIR_DEFAULT;
 }
 
+
 static int pair_to_attrs(int pair_id){
     (void)pair_id;
     return A_NORMAL;
 }
+
 
 void init_syntax_highlighting(ColorTheme* theme) {
     init_type_map();
@@ -226,6 +234,7 @@ void destroy_syntax_highlighting(void) {
     shfree(type_map);
     type_map = NULL;
 }
+
 
 /*
 could be usefull later

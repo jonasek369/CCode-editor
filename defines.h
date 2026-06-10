@@ -61,7 +61,7 @@
 #endif
 
 typedef enum {
-    LAYER_CODE=0,
+    LAYER_CODE = 0,
     LAYER_CONSOLE,
     LAYER_DIR_WALK,
     LAYER_THEME_SELECTOR,
@@ -69,7 +69,17 @@ typedef enum {
     LAYER_FLOATING_TREE,
     LAYER_FLOATING_DIALOG
 } LayerType;
-typedef enum {TOKEN_INVALID = 0, TOKEN_COMMAND, TOKEN_STRING, TOKEN_INTEGER, TOKEN_UNKNOWN} ConsoleTokenType;
+
+
+typedef enum {
+    TOKEN_INVALID = 0,
+    TOKEN_COMMAND,
+    TOKEN_STRING,
+    TOKEN_INTEGER,
+    TOKEN_UNKNOWN
+} ConsoleTokenType;
+
+
 typedef enum {
     COMMAND_INVALID = 0,
     COMMAND_OPEN,
@@ -83,16 +93,15 @@ typedef enum {
     COMMAND_CLOSE,
     COMMAND_FORCE_CLOSE,
     COMMAND_TREE,
-    COMMAND_SET_TAB_SIZE,
     COMMAND_TREE_CHANGE_DIR,
     COMMAND_PROFILING,
     COMMAND_THEME,
-    COMMAND_WRITE_CONFIG,
     COMMAND_MAKE_DIRECTORY,
     COMMAND_MAKE_FILE,
     COMMAND_DELETE_FILE,
     COMMAND_SPLIT_VIEW,
-    COMMAND_FLOATING_WINDOW
+    COMMAND_FLOATING_WINDOW,
+    COMMAND_CONFIG
 } CommandType;
 
 typedef enum {
@@ -103,6 +112,7 @@ typedef enum {
     LANG_C_SHARP,
     LANG_RUST
 } SyntaxLanguage;
+
 
 static const bool is_whitespace[256] = {
   [' '] = 1, ['\t'] = 1, ['\n'] = 1, ['\r'] = 1
@@ -247,8 +257,8 @@ struct CCode{
 
 typedef struct {
     VirtualWindow* virtual_window;
-    char*          message;     /* str_to_arr string */
-    int            selected;    /* 0 = Yes, 1 = No */
+    char*          message;     // stb_ds array string
+    int            selected;    // 0 = Yes, 1 = No
     void         (*on_yes)(CCode*, void*);
     void         (*on_no )(CCode*, void*);
     void*          userdata;
@@ -284,6 +294,7 @@ char *flatten_buffer(LayerCodeData *code){
 // declaring callbacks that needs to be defined for layers.h
 void file_remove_callback(CCode* ccode, void* data);
 void file_not_remove_callback(CCode* ccode, void* data);
+void file_on_save_callback(CCode* ccode, void* data);
 
 #include "layers.h"
 #include "callbacks.h"
