@@ -39,7 +39,7 @@ int main(int argc, char **argv)
     Nob_Cmd cmd = {0};
     // Build the NOB script for build_grammar if it isnt already build
     if(!nob_file_exists("./"grammar_file_name)){
-        nob_cmd_append(&cmd, "gcc", "build_grammar.c", "-o", grammar_file_name);
+        nob_cmd_append(&cmd, "cc", "build_grammar.c", "-o", grammar_file_name);
         if (!nob_cmd_run_sync_and_reset(&cmd)) return 1;
     }
 
@@ -49,7 +49,7 @@ int main(int argc, char **argv)
 
     // Build Ccode-editor
     nob_cmd_append(&cmd,
-        "gcc", "-D_DEFAULT_SOURCE", "-m64", "-std=c11", "-g",
+        "cc", "-D_DEFAULT_SOURCE", "-m64", "-std=c11", "-g",
         "-I", incl,
         "-L", lib,
         "-I", "./tree-sitter/lib/include",

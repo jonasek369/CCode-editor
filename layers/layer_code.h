@@ -376,7 +376,7 @@ void change_filename(CCode* ccode, const char* new_filename, size_t size){
 }
 
 
-void write_code_layer_to_file(CCode* ccode){
+void write_code_layer_to_file(CCode* ccode, bool from_dialog){
     Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
     if(top_code_layer == NULL){
         return;
@@ -387,6 +387,14 @@ void write_code_layer_to_file(CCode* ccode){
     for(int line_n = 0; line_n < arrlen(lcd->code_buffer); line_n++){
         char* line = lcd->code_buffer[line_n];
         nob_sb_append_cstr(&sb, line);
+    }
+
+    if(!from_dialog){
+        bool should_save = file_before_save_callback(ccode, (void*)top_code_layer);
+        if(!should_save){
+            nob_sb_free(sb);
+            return;
+        }
     }
 
     if(nob_write_entire_file(lcd->filename, sb.items, sb.count)){
@@ -755,7 +763,7 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
     }
 
     if(chr == CUSTOM_CTL_S){
-        write_code_layer_to_file(ccode);
+        write_code_layer_to_file(ccode, false);
     }
     // 9 is for TAB
     if(chr == 9){
@@ -961,6 +969,9 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
     }
     else if(!inFindSubstrMode && chr == CTL_PGDN){
         code_data->cursor->y += (y-2)*2;
+        if(code_data->cursor->y > arrlen(code_data->code_buffer)){
+            code_data->cursor->y = arrlen(code_data->code_buffer)-1;
+        }
     }
     else if (!inFindSubstrMode && chr == CTL_UP) {
         if (code_data->cursor->yoff > 0) {

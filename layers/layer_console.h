@@ -116,7 +116,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
         }
 
         case COMMAND_WRITE: {
-            write_code_layer_to_file(ccode);
+            write_code_layer_to_file(ccode, false);
             break;
         }
 
@@ -162,7 +162,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
         case COMMAND_SAVE: {
             if (arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_STRING) {
                 change_filename(ccode, to.tokens[1].string.start, to.tokens[1].string.size);
-                write_code_layer_to_file(ccode);
+                write_code_layer_to_file(ccode, false);
             }
             break;
         }
@@ -524,6 +524,9 @@ void console_execute_command(CCode* ccode, const char* buffer){
             get_config_directory(path, sizeof(path));
             snprintf(config_path, sizeof(config_path), "%s/config.json", path);
             read_file_to_code_layer(ccode, config_path, strlen(config_path));
+            break;
+        }
+        case COMMAND_HELP: {
             break;
         }
 

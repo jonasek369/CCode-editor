@@ -30,5 +30,11 @@ remove_if_exists "parser.h"
 
 # Built binaries
 remove_if_exists "nob"
+remove_if_exists "main"
+remove_if_exists "nob.old"
+remove_if_exists "build_grammar"
+remove_if_exists "build_grammar.old"
+
+remove_if_exists "compile_flags.txt"
 
 echo "==> Cleanup complete."

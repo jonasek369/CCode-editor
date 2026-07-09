@@ -38,6 +38,7 @@ void init_commands(){
     add_command(":ft",     COMMAND_FLOATING_WINDOW);
     add_command(":rm",     COMMAND_DELETE_FILE);
     add_command(":conf",   COMMAND_CONFIG);
+    add_command(":help",   COMMAND_HELP);
 }
 
 void destroy_commands(){

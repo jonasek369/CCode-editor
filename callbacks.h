@@ -2,35 +2,73 @@
 #define _H_CALLBACKS
 
 void file_remove_callback(CCode* ccode, void* data){
-	char* filename = (char*)data;
-	if(!filename) return;
-	char* cwd = strdup(nob_get_current_dir_temp());
-	char* file_path = nob_temp_sprintf("%s/%s", cwd, filename);
+    char* filename = (char*)data;
+    if(!filename) return;
+    char* cwd = strdup(nob_get_current_dir_temp());
+    char* file_path = nob_temp_sprintf("%s/%s", cwd, filename);
 
-	nob_delete_file(file_path);
+    nob_delete_file(file_path);
 
-	for(size_t i = 0; i < arrlenu(ccode->layers); i++){
-		if(ccode->layers[i]->type == LAYER_DIR_WALK) refresh_tree_files(ccode->layers[i]);
-	}
+    for(size_t i = 0; i < arrlenu(ccode->layers); i++){
+        if(ccode->layers[i]->type == LAYER_DIR_WALK) refresh_tree_files(ccode->layers[i]);
+    }
 
-	free(cwd);
-	free(filename);
-	nob_temp_reset();
+    free(cwd);
+    free(filename);
+    nob_temp_reset();
 }
 
 void file_not_remove_callback(CCode* ccode, void* data){
-	(void) ccode;
-	char* filename = (char*)data;
-	if(!filename) return;
-	free(filename);
+    (void) ccode;
+    char* filename = (char*)data;
+    if(!filename) return;
+    free(filename);
+}
+
+void config_save_callback(CCode* ccode, void* data){
+    (void) data;
+    write_code_layer_to_file(ccode, true);
+}
+
+void config_cleanup_callback(CCode* ccode, void* data){
+    (void) ccode;
+    (void) data;
+    return;
+}
+
+
+bool file_before_save_callback(CCode* ccode, void* data){
+    if(!data) return true;
+    LayerCodeData* lcd = ((Layer*)data)->layer_data;
+    
+    char path[4096];
+    char config_path[8096];
+
+    get_config_directory(path, sizeof(path));
+    snprintf(config_path, sizeof(config_path), "%s/config.json", path);
+    if(strncmp(config_path, lcd->filename, strlen(config_path)) == 0){
+        char question[4096] = {0};
+
+        snprintf(question, sizeof(question), "Are you sure you want to save config.json? If the file contains invalid syntax, the editor will fallback to default");
+
+        Layer* dlg = new_layer_floating_dialog(
+            question,
+            &config_save_callback,
+            &config_cleanup_callback,
+            NULL
+        );
+        push_layer_to_top(ccode, dlg);
+        return false;
+    }
+    return true;
 }
 
 
 void file_on_save_callback(CCode* ccode, void* data){
-	if(!data) return;
-	LayerCodeData* lcd = ((Layer*)data)->layer_data;
+    if(!data) return;
+    LayerCodeData* lcd = ((Layer*)data)->layer_data;
 
-	if(is_lspkind_running(ccode, lang_to_lspkind[lcd->lang])){
+    if(is_lspkind_running(ccode, lang_to_lspkind[lcd->lang])){
         send_to_lsp(ccode, get_running_lsp(ccode, lang_to_lspkind[lcd->lang]));
     }
 
@@ -40,7 +78,7 @@ void file_on_save_callback(CCode* ccode, void* data){
     get_config_directory(path, sizeof(path));
     snprintf(config_path, sizeof(config_path), "%s/config.json", path);
     if(strncmp(config_path, lcd->filename, strlen(config_path)) == 0){
-		if(ccode->config->theme){
+        if(ccode->config->theme){
             free_theme(ccode->config->theme);
         }
         free(ccode->config);

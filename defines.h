@@ -23,8 +23,6 @@
 #include <tree_sitter/api.h>
 
 #include "curses.h"
-#include "curspriv.h"
-
 
 #define STB_DS_IMPLEMENTATION
 #include "stb_ds.h"
@@ -101,7 +99,8 @@ typedef enum {
     COMMAND_DELETE_FILE,
     COMMAND_SPLIT_VIEW,
     COMMAND_FLOATING_WINDOW,
-    COMMAND_CONFIG
+    COMMAND_CONFIG,
+    COMMAND_HELP
 } CommandType;
 
 typedef enum {
@@ -295,6 +294,7 @@ char *flatten_buffer(LayerCodeData *code){
 void file_remove_callback(CCode* ccode, void* data);
 void file_not_remove_callback(CCode* ccode, void* data);
 void file_on_save_callback(CCode* ccode, void* data);
+bool file_before_save_callback(CCode* ccode, void* data);
 
 #include "layers.h"
 #include "callbacks.h"

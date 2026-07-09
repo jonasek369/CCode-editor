@@ -89,7 +89,7 @@ void handle_mouse(CCode* ccode){
                 if(!lcd || !lcd->cursor) break;
             
                 int target_y = lcd->cursor->yoff + event.y - 1;
-            
+
                 if(target_y < 0 || target_y >= arrlen(lcd->code_buffer))
                     break;
             
