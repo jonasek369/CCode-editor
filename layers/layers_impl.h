@@ -207,6 +207,10 @@ void free_layer(Layer* layer){
                 arrfree(lcd->ranges);
                 lcd->ranges = NULL;
             }
+            if(lcd->finding_substr){
+                free(lcd->finding_substr->substr);
+                free(lcd->finding_substr);
+            }
             free(lcd);
         }
     }else if(layer->type == LAYER_CONSOLE){
@@ -519,6 +523,13 @@ void draw_ui(CCode* ccode) {
     }
 defer:
     arrfree(code_layers);
+}
+
+Layer* layer_split_view_get_active(Layer* split_view){
+    if(split_view == NULL || split_view->layer_data == NULL) return NULL;
+    LayerSplitViewData* lsvd = split_view->layer_data;
+    if(lsvd->splitten_layers == NULL || lsvd->focused == -1) return NULL;
+    return lsvd->splitten_layers[lsvd->focused];
 }
 
 #endif // _H_LAYERS_IMPL

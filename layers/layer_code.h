@@ -551,7 +551,12 @@ void find_jump(CCode* ccode, char *finding, int32_t size, int32_t nth_occurence)
         return;
     }
     Layer* layer = top_type_layer(ccode, LAYER_CODE);
-    if (!layer) return;
+    if (!layer) {
+        Layer* top_fs_layer = top_fullsceen_layer(ccode);
+        if(layer->type == LAYER_SPLIT_VIEW){
+            layer = layer_split_view_get_active(top_fs_layer);
+        }
+    };
     LayerCodeData* lcd = (LayerCodeData*) layer->layer_data;
     if (!lcd || !lcd->cursor) return;
 
@@ -568,6 +573,9 @@ void find_jump(CCode* ccode, char *finding, int32_t size, int32_t nth_occurence)
         fss->substr = substr;
         fss->at_nth_occurence = nth_occurence;
         lcd->finding_substr = fss;
+    }else{
+        free(lcd->finding_substr->substr);
+        lcd->finding_substr->substr = substr;
     }
 
     int32_t first_x = 0;

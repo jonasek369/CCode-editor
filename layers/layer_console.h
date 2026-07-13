@@ -173,16 +173,17 @@ void console_execute_command(CCode* ccode, const char* buffer){
                 message_to_console(ccode, "no available layer to look for string");
                 break;
             }
-            if(top_fs_layer->type != LAYER_CODE || top_fs_layer->type == LAYER_SPLIT_VIEW){ 
+            if(top_fs_layer->type != LAYER_CODE && top_fs_layer->type != LAYER_SPLIT_VIEW){ 
                 message_to_console(ccode, "cannot find string in this layer");
                 break;
             }
 
-            if (arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_STRING) {
-                int32_t nth_occurence = 1;
-                if(arrlen(to.tokens) >= 3 && to.tokens[2].type == TOKEN_INTEGER){
-                    nth_occurence = to.tokens[2].integer;
-                }
+            int32_t nth_occurence = 1;
+            if(arrlen(to.tokens) >= 3 && to.tokens[2].type == TOKEN_INTEGER){
+                nth_occurence = to.tokens[2].integer;
+            }
+
+            if (top_fs_layer->type == LAYER_CODE && arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_STRING) {
                 Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
                 if(top_code_layer){
                     LayerCodeData* lcd = top_code_layer->layer_data;
@@ -193,8 +194,21 @@ void console_execute_command(CCode* ccode, const char* buffer){
                     }
                 }
                 find_jump(ccode, to.tokens[1].string.start, to.tokens[1].string.size, nth_occurence);
+                break;
+            }else if(top_fs_layer->type == LAYER_SPLIT_VIEW && arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_STRING){
+                Layer* active_code_layer = layer_split_view_get_active(top_fs_layer);
+                if(active_code_layer){
+                    LayerCodeData* lcd = active_code_layer->layer_data;
+                    if(lcd->finding_substr != NULL){
+                        free(lcd->finding_substr->substr);
+                        free(lcd->finding_substr);
+                        lcd->finding_substr = NULL;
+                    }
+                }
+                find_jump(ccode, to.tokens[1].string.start, to.tokens[1].string.size, nth_occurence);
             }
             break;
+
         }
 
         case COMMAND_CLOSE: {
@@ -603,6 +617,42 @@ bool layer_console_update(CCode* ccode, Layer* layer, int chr){
 }
 
 
+void layer_console_type_hint(CCode* ccode, Layer* layer){
+    (void) ccode;
+    int y, x;
+    getmaxyx(stdscr, y, x);
+    LayerConsoleData* console_data = (LayerConsoleData*) layer->layer_data;
+
+    int target = y-1;
+    if(arrlen(console_data->console_buffer) <= 1) return;
+    bool has_params = false;
+    for(int i = arrlen(console_data->console_buffer) - 2; i >= 0; i--){
+        if(console_data->console_buffer[i] == ' '){
+            has_params = true;
+            break;
+        }
+    }
+    if(has_params) return;
+
+    CommandMap* match = NULL;
+
+    for(size_t i = 0; i < shlen(commands); i++){
+        CommandMap t = commands[i];
+        if(strncmp(t.key, console_data->console_buffer, arrlen(console_data->console_buffer)-1) == 0){
+            match = &commands[i];
+            break;
+        }
+    }
+    if(!match) return;
+
+    attron(A_REVERSE | COLOR_PAIR(6));
+    for(size_t i = arrlenu(console_data->console_buffer)-1; i < strlen(match->key); i++){
+        mvaddch(target, i, match->key[i]);
+    }
+    attroff(A_REVERSE | COLOR_PAIR(6));
+}
+
+
 void layer_console_render(CCode* ccode, Layer* layer){
     if(!ccode || !layer || layer->type != LAYER_CONSOLE || layer->layer_data == NULL){
         return;
@@ -620,6 +670,7 @@ void layer_console_render(CCode* ccode, Layer* layer){
     attron(A_REVERSE);
     mvprintw(y-1, 0, "%s", top_line);
     attroff(A_REVERSE);
+    layer_console_type_hint(ccode, layer);
 }
 
 

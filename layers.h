@@ -46,6 +46,7 @@ void refresh_tree_files(Layer* layer);
 */
 
 void draw_ui(CCode* ccode);
+Layer* layer_split_view_get_active(Layer* split_view);
 
 #include "./layers/layer_code.h"
 #include "./layers/layer_split_view.h"

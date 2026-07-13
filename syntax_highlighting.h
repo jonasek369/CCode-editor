@@ -387,6 +387,17 @@ void syntax_highlighting_render(LayerCodeData* lcd) {
     END_PROFILING("render");
 #undef MVADDCH
 
+    if(lcd->finding_substr != NULL){
+        move(win_y + (cur->y - yoff), win_x + (cur->x - xoff));
+        attron(A_BLINK);
+        char* str = lcd->finding_substr->substr;
+        while(*str != 0){
+            addch(*str);
+            str++;
+        }
+        attroff(A_BLINK);
+    }
+
     move(win_y + (cur->y - yoff), win_x + (cur->x - xoff));
     END_PROFILING("syntax_highlighting_render");
     arrfree(spans);

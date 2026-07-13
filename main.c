@@ -243,7 +243,6 @@ int main(int argc, char** argv) {
 
     init_syntax_highlighting(ccode.config->theme);
     init_lsp_handler();
-
     init_commands();
 
     detect_clipboard_support();
