@@ -563,6 +563,64 @@ defer:
 }
 
 
+CommandMap* layer_console_get_type_hint(CCode* ccode, Layer* layer){
+    CommandMap* match = NULL;
+
+    LayerConsoleData* console_data = (LayerConsoleData*) layer->layer_data;
+
+    for(size_t i = 0; i < shlen(commands); i++){
+        CommandMap t = commands[i];
+        if(strncmp(t.key, console_data->console_buffer, arrlen(console_data->console_buffer)-1) == 0){
+            match = &commands[i];
+            break;
+        }
+    }
+    return match;
+}
+
+
+bool layer_console_has_params(CCode* ccode, Layer* layer){
+    LayerConsoleData* console_data = (LayerConsoleData*) layer->layer_data;
+
+    bool has_params = false;
+    for(int i = arrlen(console_data->console_buffer) - 2; i >= 0; i--){
+        if(console_data->console_buffer[i] == ' '){
+            has_params = true;
+            break;
+        }
+    }
+    return has_params;
+}
+
+void layer_console_draw_type_hint(CCode* ccode, Layer* layer){
+    (void) ccode;
+    //START_PROFILING();
+    int y, x;
+    getmaxyx(stdscr, y, x);
+    (void) x;
+
+    LayerConsoleData* console_data = (LayerConsoleData*) layer->layer_data;
+
+    int target = y-1;
+    if(arrlen(console_data->console_buffer) <= 1) return;
+
+    bool has_params = layer_console_has_params(ccode, layer);
+    if(has_params) return;
+
+
+    CommandMap* match = layer_console_get_type_hint(ccode, layer);
+    if(!match) return;
+    
+
+    attron(A_REVERSE | COLOR_PAIR(6));
+    for(size_t i = arrlenu(console_data->console_buffer)-1; i < strlen(match->key); i++){
+        mvaddch(target, i, match->key[i]);
+    }
+    attroff(A_REVERSE | COLOR_PAIR(6));
+    //END_PROFILING("console_type_hinting");
+    //prof_pop_print_ms();
+}
+
 bool layer_console_update(CCode* ccode, Layer* layer, int chr){
     if(!ccode || !layer || layer->type != LAYER_CONSOLE || layer->layer_data == NULL){
         return false;
@@ -571,6 +629,7 @@ bool layer_console_update(CCode* ccode, Layer* layer, int chr){
     int y, x;
     (void)y;
     getmaxyx(stdscr, y, x);
+
     if((chr >= 0 && chr <= 255) && isprint(chr)){
         int line_len = arrlen(console_data->console_buffer);
 
@@ -611,45 +670,39 @@ bool layer_console_update(CCode* ccode, Layer* layer, int chr){
         if(console_data->console_buffer_x < arrlen(console_data->console_buffer)-1){
             console_data->console_buffer_x++;
         }
+    } else if(chr == CUSTOM_KEY_TAB){
+        // typehint autocomplete
+        if(arrlen(console_data->console_buffer) <= 1) return true;
+
+        bool has_params = layer_console_has_params(ccode, layer);
+        if(has_params) return true;
+
+        CommandMap* match = layer_console_get_type_hint(ccode, layer);
+        if(!match) return true;
+
+        int line_len = arrlen(console_data->console_buffer);
+
+        if(console_data->console_buffer_x > line_len - 1){
+            console_data->console_buffer_x = line_len - 1;
+        }
+
+        if(line_len > 0){
+            (void) arrpop(console_data->console_buffer);
+        }
+
+        if(console_data->console_buffer_x != arrlenu(console_data->console_buffer)){
+            arrput(console_data->console_buffer, '\0');
+            return true;
+        }
+
+        for(size_t i = arrlenu(console_data->console_buffer); i < strlen(match->key); i++){
+            arrput(console_data->console_buffer, match->key[i]);
+            console_data->console_buffer_x++;
+        }
+        arrput(console_data->console_buffer, '\0');
     }
 
     return true;
-}
-
-
-void layer_console_type_hint(CCode* ccode, Layer* layer){
-    (void) ccode;
-    int y, x;
-    getmaxyx(stdscr, y, x);
-    LayerConsoleData* console_data = (LayerConsoleData*) layer->layer_data;
-
-    int target = y-1;
-    if(arrlen(console_data->console_buffer) <= 1) return;
-    bool has_params = false;
-    for(int i = arrlen(console_data->console_buffer) - 2; i >= 0; i--){
-        if(console_data->console_buffer[i] == ' '){
-            has_params = true;
-            break;
-        }
-    }
-    if(has_params) return;
-
-    CommandMap* match = NULL;
-
-    for(size_t i = 0; i < shlen(commands); i++){
-        CommandMap t = commands[i];
-        if(strncmp(t.key, console_data->console_buffer, arrlen(console_data->console_buffer)-1) == 0){
-            match = &commands[i];
-            break;
-        }
-    }
-    if(!match) return;
-
-    attron(A_REVERSE | COLOR_PAIR(6));
-    for(size_t i = arrlenu(console_data->console_buffer)-1; i < strlen(match->key); i++){
-        mvaddch(target, i, match->key[i]);
-    }
-    attroff(A_REVERSE | COLOR_PAIR(6));
 }
 
 
@@ -670,7 +723,7 @@ void layer_console_render(CCode* ccode, Layer* layer){
     attron(A_REVERSE);
     mvprintw(y-1, 0, "%s", top_line);
     attroff(A_REVERSE);
-    layer_console_type_hint(ccode, layer);
+    layer_console_draw_type_hint(ccode, layer);
 }
 
 
@@ -688,49 +741,3 @@ void layer_console_handle_keypress(CCode* ccode, Layer* layer, int chr, bool sho
 }
 
 #endif // _H_LAYER_CONSOLE
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -26,6 +26,11 @@
 
 #define COLOR_PAIR_COMPLETION 20
 
+// ── Completion color pairs ────────────────────────────────────────────────────
+
+#define COLOR_PAIR_CONSOLE_TYPE_HINT 30
+
+
 typedef struct {
     int32_t start_row, start_col;
     int32_t end_row,   end_col;

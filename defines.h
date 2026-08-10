@@ -6,6 +6,7 @@
 #define CUSTOM_KEY_ESCAPE 27
 #define CUSTOM_CTL_F 6
 #define CUSTOM_CTL_S 19
+#define CUSTOM_KEY_TAB 9
 
 #define LIMIT_FPS 0
 #define FPS 240

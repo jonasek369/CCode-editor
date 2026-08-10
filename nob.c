@@ -78,8 +78,15 @@ int main(int argc, char **argv)
     generate_compile_flags(&cmd);
     if (!nob_cmd_run_sync_and_reset(&cmd)) return 1;
 
-    // Runs Ccode-editor
-    nob_cmd_append(&cmd, "./"output_file_name, "main.c");
-    if (!nob_cmd_run_sync_and_reset(&cmd)) return 1;
+    if(argc >= 2 && strncmp(argv[1], "-valgrind", 9) == 0){
+        // Runs valgrind to check for leaks
+        nob_cmd_append(&cmd, "valgrind", "--leak-check=full", "./"output_file_name);
+        if (!nob_cmd_run_sync_and_reset(&cmd)) return 1;
+    }if(argc >= 2 && strncmp(argv[1], "-autostart", 10) == 0){
+        // Runs Ccode-editor
+        nob_cmd_append(&cmd, "./"output_file_name, "main.c");
+        if (!nob_cmd_run_sync_and_reset(&cmd)) return 1;
+    }
+
     return 0;
 }

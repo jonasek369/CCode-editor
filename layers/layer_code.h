@@ -1138,7 +1138,7 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
     else if(!inFindSubstrMode && chr == 3){
 
     }
-    /* Temp shortcut for floating tree CTRL + V*/
+    /* Temp shortcut for CTRL + V*/
     else if(!inFindSubstrMode && chr == 22){
         char* clipboard_content = get_clipboard_content();
         if(!clipboard_content){
