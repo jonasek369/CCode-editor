@@ -82,9 +82,9 @@ char* resolve_path(const char *path, char *out){
     }
 #endif
 
-int32_t atoin(const char *str, int n) {
-    int32_t result = 0;
-    int32_t sign = 1;
+int64_t atoint64(const char *str, int n) {
+    int64_t result = 0;
+    int64_t sign = 1;
     int i = 0;
 
     if(str[0] != '\0' && str[0] == '-'){

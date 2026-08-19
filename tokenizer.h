@@ -126,7 +126,7 @@ void parse_number(TokenizerState* ts, Token* out){
         ts->index++;
     }
     out->type = TOKEN_INTEGER;
-    out->integer = atoin(ts->source+start, ts->index-start);
+    out->integer = atoint64(ts->source+start, ts->index-start);
 }
 
 int next_token(TokenizerState* ts, Token* out){

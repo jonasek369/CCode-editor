@@ -335,8 +335,9 @@ int main(int argc, char** argv) {
         // Console switching
         if(ch == CUSTOM_KEY_ESCAPE || ccode.config->PrivateCloseConsole){
             // if top layer has opened completion window remove it
-            if(arrlenu(ccode.layers) >= 1 && ch == CUSTOM_KEY_ESCAPE){
+            if(arrlenu(ccode.layers) > 1 && ch == CUSTOM_KEY_ESCAPE){
                 int index = top_layer(&ccode)->type == LAYER_CONSOLE ? 1 : 0;
+                printf("index = %d len = %ld\n", index, arrlen(ccode.layers));
                 switch(ccode.layers[index]->type){
                     case(LAYER_CODE): {
                         LayerCodeData* lcd = ccode.layers[index]->layer_data;

@@ -33,8 +33,7 @@ void generate_compile_flags(Nob_Cmd* cmd){
 }
 
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv){
     NOB_GO_REBUILD_URSELF(argc, argv);
     Nob_Cmd cmd = {0};
     // Build the NOB script for build_grammar if it isnt already build
@@ -79,10 +78,15 @@ int main(int argc, char **argv)
     if (!nob_cmd_run_sync_and_reset(&cmd)) return 1;
 
     if(argc >= 2 && strncmp(argv[1], "-valgrind", 9) == 0){
-        // Runs valgrind to check for leaks
+        // Runs valgrind to check for memory leaks
         nob_cmd_append(&cmd, "valgrind", "--leak-check=full", "./"output_file_name);
         if (!nob_cmd_run_sync_and_reset(&cmd)) return 1;
-    }if(argc >= 2 && strncmp(argv[1], "-autostart", 10) == 0){
+    }
+    else if(argc >= 2 && strncmp(argv[1], "-callgrind", 10) == 0){
+        nob_cmd_append(&cmd, "valgrind", "--tool=callgrind", "--dump-instr=yes", "./"output_file_name);
+        if (!nob_cmd_run_sync_and_reset(&cmd)) return 1;
+    }
+    else if(argc >= 2 && strncmp(argv[1], "-autostart", 10) == 0){
         // Runs Ccode-editor
         nob_cmd_append(&cmd, "./"output_file_name, "main.c");
         if (!nob_cmd_run_sync_and_reset(&cmd)) return 1;

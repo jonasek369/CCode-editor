@@ -126,9 +126,9 @@ typedef struct {
     union {
         struct {
             char* start;
-            int32_t size;
+            int64_t size;
         } string;
-        int32_t integer;
+        int64_t integer;
     };
 } Token;
 

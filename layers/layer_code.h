@@ -296,6 +296,7 @@ void read_file_to_code_layer(CCode* ccode, const char* filepath_start, size_t si
         }
     }
     if (line != NULL) {
+        arrput(line, '\n');
         arrput(line, '\0');
         arrput(lcd->code_buffer, line);
     }
@@ -447,8 +448,8 @@ bool do_completion(CCode* ccode){
         lcd->cursor->x = line_len - 1;
     }
 
-    (void)arrpop(line); // \0
-    (void)arrpop(line); // \n
+    assert(arrpop(line) == '\0');
+    assert(arrpop(line) == '\n');
 
     size_t start   = range->start_character;
     size_t end     = range->end_character;
@@ -460,11 +461,17 @@ bool do_completion(CCode* ccode){
 
     char* new_line = NULL;
 
+    int64_t cursor_start = -1;
+
     for(size_t k = 0; k < start; k++){
         arrput(new_line, line[k]);
     }
     for(size_t k = 0; k < new_len; k++){
         arrput(new_line, new_text->string[k]);
+        // TODO: bit of hacky but enough for now (later make this into a mode that iterate through indecies of the function params)
+        if(new_text->string[k] == '$' && (k+1 < new_len) && new_text->string[k+1] == '{'){
+            cursor_start = arrlen(new_line)-1;
+        }
     }
     for(int k = (int)end; k < cur_len; k++){
         arrput(new_line, line[k]);
@@ -504,6 +511,11 @@ bool do_completion(CCode* ccode){
     if(is_lspkind_running(ccode, lang_to_lspkind[lcd->lang])){
         send_to_lsp(ccode, get_running_lsp(ccode, lang_to_lspkind[lcd->lang]));
     }
+
+    if(cursor_start != -1){
+        lcd->cursor->x = cursor_start;
+    }
+
 
     return true;
 }
@@ -1158,13 +1170,30 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
         arrfree(clipboard_content);
     }
 
+    else if(!inFindSubstrMode && chr == KEY_DC){
+        // TODO: Make this the expected behaviour
+        char* line = code_data->code_buffer[code_data->cursor->y];
+        printf("%d:%ld\n", code_data->cursor->x, arrlen(line));
+        if(code_data->cursor->x == arrlen(line)-2 && code_data->cursor->x == 0){
+            layer_code_update(ccode, layer, CUSTOM_KEY_BACKSPACE);
+            return true;
+        }
+        if(code_data->cursor->x+1 >= arrlen(line)-1){
+            return true;
+        }
+
+        code_data->cursor->x++;
+        layer_code_update(ccode, layer, CUSTOM_KEY_BACKSPACE);
+    }
+
     END_PROFILING("handle_keypress");
     START_PROFILING();
 
     bool is_file_edit = isprint(chr) ||
                         chr == CUSTOM_KEY_BACKSPACE ||
                         chr == CUSTOM_KEY_ENTER ||
-                        chr == CTL_BKSP;
+                        chr == CTL_BKSP         ||
+                        chr == KEY_DC;
 
     bool is_printable = isprint(chr);
 
@@ -1297,6 +1326,7 @@ void layer_code_render(CCode* ccode, Layer* layer) {
         END_PROFILING("rendering");
         layer_code_render_completion_window(ccode, layer);
     }else{
+        START_PROFILING();
         // fallback for raw text
         VirtualWindow* virtual_window;
         if(code_data->virtual_window){
@@ -1327,6 +1357,7 @@ void layer_code_render(CCode* ccode, Layer* layer) {
         }
 
         layer_code_render_completion_window(ccode, layer);
+        END_PROFILING("rendering");
     }
 }
 

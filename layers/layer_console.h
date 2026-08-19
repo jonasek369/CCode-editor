@@ -100,7 +100,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
                 LayerCodeData* lcd = top_code_layer->layer_data;
                 if (!lcd->cursor) break;
 
-                lcd->cursor->y = to.tokens[1].integer > arrlen(lcd->code_buffer) ? arrlen(lcd->code_buffer) : to.tokens[1].integer;
+                lcd->cursor->y = to.tokens[1].integer > arrlen(lcd->code_buffer)-1 ? arrlen(lcd->code_buffer)-1 : to.tokens[1].integer;
                 if (arrlen(to.tokens) >= 3 && to.tokens[2].type == TOKEN_INTEGER && to.tokens[2].integer >= 0) {
                     lcd->cursor->x = to.tokens[2].integer;
                 }
@@ -552,9 +552,9 @@ void console_execute_command(CCode* ccode, const char* buffer){
     printf("Tokenization output:\n");
     for(size_t i = 0; i < arrlenu(to.tokens); i++ ){
         if(to.tokens[i].type == TOKEN_STRING || to.tokens[i].type == TOKEN_COMMAND){
-            printf("  %d (%.*s)\n", to.tokens[i].type, to.tokens[i].string.size, to.tokens[i].string.start);
+            printf("  %u (%.*s)\n", to.tokens[i].type, (int)to.tokens[i].string.size, to.tokens[i].string.start);
         }else if(to.tokens[i].type == TOKEN_INTEGER){
-            printf("  %d N=%d\n", to.tokens[i].type, to.tokens[i].integer);
+            printf("  %d N=%ld\n", to.tokens[i].type, to.tokens[i].integer);
         }
     }
 defer:
@@ -563,10 +563,10 @@ defer:
 }
 
 
-CommandMap* layer_console_get_type_hint(CCode* ccode, Layer* layer){
+CommandMap* layer_console_get_type_hint(Layer* layer){
     CommandMap* match = NULL;
 
-    LayerConsoleData* console_data = (LayerConsoleData*) layer->layer_data;
+    LayerConsoleData* console_data = layer->layer_data;
 
     for(size_t i = 0; i < shlen(commands); i++){
         CommandMap t = commands[i];
@@ -579,7 +579,7 @@ CommandMap* layer_console_get_type_hint(CCode* ccode, Layer* layer){
 }
 
 
-bool layer_console_has_params(CCode* ccode, Layer* layer){
+bool layer_console_has_params(Layer* layer){
     LayerConsoleData* console_data = (LayerConsoleData*) layer->layer_data;
 
     bool has_params = false;
@@ -604,11 +604,11 @@ void layer_console_draw_type_hint(CCode* ccode, Layer* layer){
     int target = y-1;
     if(arrlen(console_data->console_buffer) <= 1) return;
 
-    bool has_params = layer_console_has_params(ccode, layer);
+    bool has_params = layer_console_has_params(layer);
     if(has_params) return;
 
 
-    CommandMap* match = layer_console_get_type_hint(ccode, layer);
+    CommandMap* match = layer_console_get_type_hint(layer);
     if(!match) return;
     
 
@@ -674,10 +674,10 @@ bool layer_console_update(CCode* ccode, Layer* layer, int chr){
         // typehint autocomplete
         if(arrlen(console_data->console_buffer) <= 1) return true;
 
-        bool has_params = layer_console_has_params(ccode, layer);
+        bool has_params = layer_console_has_params(layer);
         if(has_params) return true;
 
-        CommandMap* match = layer_console_get_type_hint(ccode, layer);
+        CommandMap* match = layer_console_get_type_hint(layer);
         if(!match) return true;
 
         int line_len = arrlen(console_data->console_buffer);

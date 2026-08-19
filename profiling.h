@@ -44,7 +44,7 @@
 
     static void prof_pop_print_ms() {
         prof_timeframe frame = prof_frames[--prof_frames_size];
-        printf("PROF:%s: %f ms\n", frame.name, frame.elapsed_ns / 1000000.0);
+        printf("PROF:%s: %f ms\n", frame.name, frame.elapsed_ns / 1000000.0f);
     }
 
     static void prof_pop_print_ns() {
@@ -121,7 +121,7 @@
     }
 #else
     #define START_PROFILING()
-    #define END_PROFILING(label)
+    #define END_PROFILING(label) 
     
     static void prof_pop_print() {}
     static void prof_pop_print_ns() {}
