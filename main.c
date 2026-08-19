@@ -218,6 +218,12 @@ void handle_mouse(CCode* ccode){
 
 
 int main(int argc, char** argv) {
+    // Unused in release build,
+    // otherwise used for section profiling
+    (void) prof_pop_print_ns;
+    (void) prof_pop_print_ms;
+
+
     // For random file ids for LSP
     srand(time(NULL));
     ensure_config_dir_existence();

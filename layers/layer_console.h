@@ -570,7 +570,13 @@ CommandMap* layer_console_get_type_hint(Layer* layer){
 
     for(size_t i = 0; i < shlen(commands); i++){
         CommandMap t = commands[i];
-        if(strncmp(t.key, console_data->console_buffer, arrlen(console_data->console_buffer)-1) == 0){
+        size_t buff_len = arrlen(console_data->console_buffer);
+        
+        if (buff_len == 0) {
+            continue;
+        }
+
+        if(strncmp(t.key, console_data->console_buffer, buff_len-1) == 0){
             match = &commands[i];
             break;
         }
