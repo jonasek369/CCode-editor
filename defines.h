@@ -163,6 +163,14 @@ typedef struct {
 } FindingSubstr;
 
 typedef struct {
+    size_t* index_char_positions;
+    size_t* indecies_size;
+    int64_t chars_offseted;
+    size_t at_index;
+    size_t total_len;
+} CompletionFunctionParams;
+
+typedef struct {
     JsonValue* completion;
     size_t selected;
     size_t items_count;
@@ -184,6 +192,7 @@ typedef struct {
     char** code_buffer;
     Cursor* cursor;
     FindingSubstr* finding_substr;
+    CompletionFunctionParams* completion_function_params;
     VirtualWindow* virtual_window;
 
     // tree sitter

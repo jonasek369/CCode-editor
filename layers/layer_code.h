@@ -77,6 +77,7 @@ Layer* new_layer_code(){
     lcd->diagnostics = NULL;
     lcd->ranges = NULL;
     lcd->completion_window = NULL;
+    lcd->completion_function_params = NULL;
 
     return code;
 }
@@ -461,18 +462,35 @@ bool do_completion(CCode* ccode){
 
     char* new_line = NULL;
 
-    int64_t cursor_start = -1;
-
     for(size_t k = 0; k < start; k++){
         arrput(new_line, line[k]);
     }
     for(size_t k = 0; k < new_len; k++){
         arrput(new_line, new_text->string[k]);
-        // TODO: bit of hacky but enough for now (later make this into a mode that iterate through indecies of the function params)
-        if(new_text->string[k] == '$' && (k+1 < new_len) && new_text->string[k+1] == '{'){
-            cursor_start = arrlen(new_line)-1;
+    }
+
+    size_t completion_string_len = strlen(new_text->string);
+    CompletionFunctionParams* cfp = malloc(sizeof(CompletionFunctionParams));
+    cfp->index_char_positions = NULL;
+    cfp->chars_offseted = 0;
+    cfp->at_index = 0;
+
+    for(size_t i = 0; i < completion_string_len; i++){
+        if(new_text->string[i] == '$' && i+1 < completion_string_len && new_text->string[i+1] == '{'){
+            size_t start = i;
+            while(i < completion_string_len && new_text->string[i] != '}'){
+                i++;
+            }
+            arrput(cfp->index_char_positions, start);
+            arrput(cfp->indecies_size, i-start+1);
         }
     }
+
+    if(cfp->index_char_positions == NULL){
+        free(cfp);
+        cfp = NULL;
+    }
+
     for(int k = (int)end; k < cur_len; k++){
         arrput(new_line, line[k]);
     }
@@ -507,15 +525,36 @@ bool do_completion(CCode* ccode){
     json_free(lcd->completion_window->completion);
     free(lcd->completion_window);
     lcd->completion_window = NULL;
-
+    lcd->completion_function_params = cfp;
     if(is_lspkind_running(ccode, lang_to_lspkind[lcd->lang])){
         send_to_lsp(ccode, get_running_lsp(ccode, lang_to_lspkind[lcd->lang]));
     }
 
-    if(cursor_start != -1){
-        lcd->cursor->x = cursor_start;
+    if(cfp != NULL && cfp->index_char_positions != NULL){
+        size_t len = arrlenu(cfp->index_char_positions);
+        if(len == 0){
+            return true;
+        }
+        lcd->cursor->x = cfp->index_char_positions[0];
+        if(len > 1){
+            size_t chars = cfp->indecies_size[0];
+            lcd->cursor->x = cfp->index_char_positions[1]-2;
+            for(size_t i = 0; i < chars; i++){
+                layer_code_update(ccode, top_code_layer, CUSTOM_KEY_BACKSPACE);
+            }
+        }else{
+            // if the function has only one parameter we just move it to that and free completion_function_params
+            size_t chars =  cfp->indecies_size[0];
+            lcd->cursor->x = completion_string_len-1;
+            for(size_t i = 0; i < chars; i++){
+                layer_code_update(ccode, top_code_layer, CUSTOM_KEY_BACKSPACE);
+            }
+            arrfree(lcd->completion_function_params->index_char_positions);
+            arrfree(lcd->completion_function_params->indecies_size);
+            free(lcd->completion_function_params);
+            lcd->completion_function_params = NULL;
+        }
     }
-
 
     return true;
 }
@@ -678,6 +717,9 @@ void layer_code_add_character(int chr, LayerCodeData* code_data, bool reparse){
     }
 
     code_data->cursor->x++;
+    if(code_data->completion_function_params != NULL){
+        code_data->completion_function_params->chars_offseted++;
+    }
 }
 
 
@@ -746,6 +788,8 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
 
     bool inFindSubstrMode = code_data->finding_substr != NULL;
 
+    bool isCursorLocked = inFindSubstrMode || code_data->completion_function_params != NULL;
+
     if(code_data->code_buffer == NULL){
         char* line = NULL;
         arrput(line, '\0');
@@ -787,7 +831,36 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
     }
     // 9 is for TAB
     if(chr == 9){
-        if(code_data->completion_window){
+        if(code_data->completion_function_params){
+            CompletionFunctionParams* cfp = code_data->completion_function_params;
+            size_t total = arrlenu(cfp->index_char_positions);
+    
+            if(cfp->at_index + 1 >= total){
+                assert(0);
+            }
+    
+            cfp->at_index++;
+    
+            uint64_t chars_to_delete = cfp->indecies_size[cfp->at_index];
+    
+            int64_t end_of_placeholder_orig =
+                (int64_t)cfp->index_char_positions[cfp->at_index] +
+                (int64_t)cfp->indecies_size[cfp->at_index];
+    
+            code_data->cursor->x = (size_t)(end_of_placeholder_orig + cfp->chars_offseted);
+    
+            for(uint64_t i = 0; i < chars_to_delete; i++){
+                layer_code_update(ccode, layer, CUSTOM_KEY_BACKSPACE);
+            }
+            if(cfp->at_index + 1 >= total){
+                arrfree(cfp->index_char_positions);
+                arrfree(cfp->indecies_size);
+                free(cfp);
+                code_data->completion_function_params = NULL;
+            }
+            chr = -1;
+        }
+        else if(code_data->completion_window){
             if(do_completion(ccode)){
                 chr = -1;
             }
@@ -904,6 +977,10 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
             TS_REPARSE(code_data);
         }
 
+        if(code_data->completion_function_params != NULL){
+            code_data->completion_function_params->chars_offseted--;
+        }
+
         code_data->saved = false;
     }
 
@@ -912,11 +989,11 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
             chr = -1;
         }
     }
-    else if(chr == CUSTOM_KEY_ENTER && !code_data->completion_window){
+    else if(code_data->completion_function_params == NULL && chr == CUSTOM_KEY_ENTER && !code_data->completion_window){
         layer_code_handle_enter(code_data);
     }
 
-    else if(!inFindSubstrMode && (chr == KEY_DOWN || chr == KEY_UP) && code_data->completion_window){
+    else if(!isCursorLocked && (chr == KEY_DOWN || chr == KEY_UP) && code_data->completion_window){
         if(chr == KEY_DOWN && code_data->completion_window->selected < code_data->completion_window->items_count){
             code_data->completion_window->selected++;
             chr = -1;
@@ -926,7 +1003,7 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
             chr = -1;
         }
     }
-    else if(!inFindSubstrMode && chr >= KEY_DOWN && chr <= KEY_RIGHT){
+    else if(!isCursorLocked && chr >= KEY_DOWN && chr <= KEY_RIGHT){
         switch(chr){
             case KEY_DOWN: {
                 if(arrlen(code_data->code_buffer) <= code_data->cursor->y+1){
@@ -981,24 +1058,24 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
             }
         }
     }
-    else if(!inFindSubstrMode && chr == CTL_PGUP){
+    else if(!isCursorLocked && chr == CTL_PGUP){
         code_data->cursor->y -= (y-2)*2;
         if(code_data->cursor->y < 0){
             code_data->cursor->y = 0;
         }
     }
-    else if(!inFindSubstrMode && chr == CTL_PGDN){
+    else if(!isCursorLocked && chr == CTL_PGDN){
         code_data->cursor->y += (y-2)*2;
         if(code_data->cursor->y > arrlen(code_data->code_buffer)){
             code_data->cursor->y = arrlen(code_data->code_buffer)-1;
         }
     }
-    else if (!inFindSubstrMode && chr == CTL_UP) {
+    else if (!isCursorLocked && chr == CTL_UP) {
         if (code_data->cursor->yoff > 0) {
             code_data->cursor->yoff--;
         }
     }
-    else if (!inFindSubstrMode && chr == CTL_DOWN) {
+    else if (!isCursorLocked && chr == CTL_DOWN) {
         int screen_rows = y-1;
         int buffer_size = arrlen(code_data->code_buffer);
         int max_scroll = buffer_size - screen_rows;
@@ -1007,7 +1084,7 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
             code_data->cursor->yoff++;
         }
     }
-    else if (!inFindSubstrMode && chr == CTL_RIGHT){
+    else if (!isCursorLocked && chr == CTL_RIGHT){
         int x = code_data->cursor->x;
         char *line = code_data->code_buffer[code_data->cursor->y];
         int len = arrlen(line)-2;
@@ -1031,7 +1108,7 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
 
         LABEL(carried_to_next_line)
     }
-    else if(!inFindSubstrMode && chr == CTL_LEFT){
+    else if(!isCursorLocked && chr == CTL_LEFT){
         int x = code_data->cursor->x;
         char *line = code_data->code_buffer[code_data->cursor->y];
 
@@ -1055,7 +1132,7 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
 
         LABEL(carried_to_previous_line)
     }
-    else if(!inFindSubstrMode && chr == CTL_BKSP){
+    else if(!isCursorLocked && chr == CTL_BKSP){
         int x = code_data->cursor->x;
         char *line = code_data->code_buffer[code_data->cursor->y];
 
@@ -1130,28 +1207,28 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
     }
 
     /* For debug CTRL + G */
-    else if (!inFindSubstrMode && chr == 7){
+    else if (!isCursorLocked && chr == 7){
         for(size_t i = 0; i < arrlenu(code_data->code_buffer[code_data->cursor->y]); i++){
             printf("%d ", code_data->code_buffer[code_data->cursor->y][i]);
         }
         printf("\n");
     }
     /* Temp shortcut for tree CTRL + T*/
-    else if(!inFindSubstrMode && chr == 20) {
+    else if(!isCursorLocked && chr == 20) {
         console_execute_command(ccode, ":tree");
     }
 
     /* Temp shortcut for floating tree CTRL + P*/
-    else if(!inFindSubstrMode && chr == 16){
+    else if(!isCursorLocked && chr == 16){
         console_execute_command(ccode, ":ft");
     }
 
     /* Temp shortcut for floating tree CTRL + C*/
-    else if(!inFindSubstrMode && chr == 3){
+    else if(!isCursorLocked && chr == 3){
 
     }
     /* Temp shortcut for CTRL + V*/
-    else if(!inFindSubstrMode && chr == 22){
+    else if(!isCursorLocked && chr == 22){
         char* clipboard_content = get_clipboard_content();
         if(!clipboard_content){
             return true;
@@ -1170,7 +1247,7 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
         arrfree(clipboard_content);
     }
 
-    else if(!inFindSubstrMode && chr == KEY_DC){
+    else if(!isCursorLocked && chr == KEY_DC){
         // TODO: Make this the expected behaviour
         char* line = code_data->code_buffer[code_data->cursor->y];
         printf("%d:%ld\n", code_data->cursor->x, arrlen(line));

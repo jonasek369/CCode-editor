@@ -92,7 +92,14 @@ void handle_mouse(CCode* ccode){
 
                 if(target_y < 0 || target_y >= arrlen(lcd->code_buffer))
                     break;
-            
+
+                if(lcd->completion_function_params){
+                    arrfree(lcd->completion_function_params->index_char_positions);
+                    arrfree(lcd->completion_function_params->indecies_size);
+                    free(lcd->completion_function_params);
+                    lcd->completion_function_params = NULL;
+                }
+
                 lcd->cursor->y = target_y;
             
                 char* line = lcd->code_buffer[target_y];
