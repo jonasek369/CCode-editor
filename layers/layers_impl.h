@@ -389,13 +389,14 @@ void draw_ui(CCode* ccode) {
 
         for (int i = 0; i < num_layers; i++) {
             LayerCodeData* lcd = lsvd->splitten_layers[i]->layer_data;
+            VirtualWindow* virt_win = lsvd->virtual_windows[i];
             const char* file_name = lcd->filename;
             if (strlen(lcd->filename) > 16){
                 file_name = nob_path_name(lcd->filename);
             }
 
-            char label[32];
-            snprintf(label, sizeof(label), "[%d] %s%s", i+1, file_name, lcd->saved ? "" : "*");
+            char* label = malloc((virt_win->width+1)*sizeof(char));
+            snprintf(label, (virt_win->width+1)*sizeof(char), "[%d] %s%s", i+1, file_name, lcd->saved ? "" : "*");
 
             int label_len = strlen(label);
             if (label_len > cells_per_layer - 1) {
@@ -406,18 +407,30 @@ void draw_ui(CCode* ccode) {
                 top_line[size++] = label[j];
             }
 
-            while (size % cells_per_layer != 0 && size < (size_t)x) {
+            while(label_len < virt_win->width){
                 top_line[size++] = ' ';
+                label_len++;
             }
+            free(label);
         }
         if (size > (size_t)x) size = x;
         top_line[size] = '\0';
 
         move(0, 0);
-        
+        int range_start = 0;
+        int range_end = 0;
+
+        if(lsvd->focused == 0){
+            range_start = 0;
+            range_end = lsvd->virtual_windows[0]->width;
+        }else{
+            range_start = lsvd->virtual_windows[0]->width;
+            range_end = range_start + lsvd->virtual_windows[1]->width;
+        }
+
+
         for(int i = 0; i < size; i++) {
-            if(lsvd->focused * cells_per_layer <= i &&
-                i < (lsvd->focused + 1) * cells_per_layer) {
+            if(i >= range_start && i < range_end) {
                 attron(A_REVERSE);
             } else {
                 attroff(A_REVERSE);
@@ -429,34 +442,39 @@ void draw_ui(CCode* ccode) {
         attroff(A_REVERSE);
     }
 
-    char mode = 'I';
+    const char* mode = "I";
 
     if(top_code_layer != NULL && ((LayerCodeData*) top_code_layer->layer_data)->finding_substr != NULL){
-        mode = 'J';
+        mode = "J";
     }
 
     if(layer_at_top->type == LAYER_CONSOLE){
-        mode = 'C';
+        mode = "C";
     }else if(layer_at_top->type == LAYER_DIR_WALK){
-        mode = 'T';
+        mode = "T";
+    }else if(layer_at_top->type == LAYER_CODE){
+        LayerCodeData* lcd = layer_at_top->layer_data;
+        if(lcd->completion_function_params != NULL){
+            mode = "CFP";
+        }
     }
 
     if(layer_at_top->type == LAYER_CONSOLE){
         LayerConsoleData* lcd = layer_at_top->layer_data;
-        size_t bot_line_size = snprintf(NULL, 0, "%c%d:%d", mode, 0, lcd->console_buffer_x);
-        mvprintw(y - 1, x - bot_line_size, "%c%d:%d", mode, 0, lcd->console_buffer_x);
+        size_t bot_line_size = snprintf(NULL, 0, "%s%d:%d", mode, 0, lcd->console_buffer_x);
+        mvprintw(y - 1, x - bot_line_size, "%s%d:%d", mode, 0, lcd->console_buffer_x);
     }else if(layer_at_top->type == LAYER_CODE){
         LayerCodeData* lcd = layer_at_top->layer_data;
-        size_t bot_line_size = snprintf(NULL, 0, "%c%d:%d", mode, lcd->cursor->y, lcd->cursor->x);
-        mvprintw(y - 1, x - bot_line_size, "%c%d:%d", mode, lcd->cursor->y, lcd->cursor->x);
+        size_t bot_line_size = snprintf(NULL, 0, "%s%d:%d", mode, lcd->cursor->y, lcd->cursor->x);
+        mvprintw(y - 1, x - bot_line_size, "%s%d:%d", mode, lcd->cursor->y, lcd->cursor->x);
     }else if(layer_at_top->type == LAYER_DIR_WALK){
         LayerDirWalkData* ldwd = layer_at_top->layer_data;
-        size_t bot_line_size = snprintf(NULL, 0, "%c%d:%d", mode, ldwd->selected + ldwd->offset, 0);
-        mvprintw(y - 1, x - bot_line_size, "%c%d:%d", mode, ldwd->selected + ldwd->offset, 0);
+        size_t bot_line_size = snprintf(NULL, 0, "%s%d:%d", mode, ldwd->selected + ldwd->offset, 0);
+        mvprintw(y - 1, x - bot_line_size, "%s%d:%d", mode, ldwd->selected + ldwd->offset, 0);
     }else if(layer_at_top->type == LAYER_THEME_SELECTOR){
         LayerThemeSelectorData* ltsd = layer_at_top->layer_data;
-        size_t bot_line_size = snprintf(NULL, 0, "%c%d:%d", mode, ltsd->selected + ltsd->offset, 0);
-        mvprintw(y - 1, x - bot_line_size, "%c%d:%d", mode, ltsd->selected + ltsd->offset, 0);
+        size_t bot_line_size = snprintf(NULL, 0, "%s%d:%d", mode, ltsd->selected + ltsd->offset, 0);
+        mvprintw(y - 1, x - bot_line_size, "%s%d:%d", mode, ltsd->selected + ltsd->offset, 0);
     }else if(layer_at_top->type == LAYER_SPLIT_VIEW){
         LayerSplitViewData* lsvd = layer_at_top->layer_data;
     
@@ -468,15 +486,15 @@ void draw_ui(CCode* ccode) {
         }
     
         LayerCodeData* lcd = (LayerCodeData*) lsvd->splitten_layers[lsvd->focused]->layer_data;
-        size_t bot_line_size = snprintf(NULL, 0, "%c%d:%d", mode, lcd->cursor->y, lcd->cursor->x);
-        mvprintw(y - 1, x - bot_line_size, "%c%d:%d", mode, lcd->cursor->y, lcd->cursor->x);
+        size_t bot_line_size = snprintf(NULL, 0, "%s%d:%d", mode, lcd->cursor->y, lcd->cursor->x);
+        mvprintw(y - 1, x - bot_line_size, "%s%d:%d", mode, lcd->cursor->y, lcd->cursor->x);
     }else if(layer_at_top->type == LAYER_FLOATING_TREE){
         LayerFloatingTreeData* lftd = layer_at_top->layer_data;
-        size_t bot_line_size = snprintf(NULL, 0, "%c%d:%d", mode, lftd->selected + lftd->offset, 0);
-        mvprintw(y - 1, x - bot_line_size, "%c%d:%d", mode, lftd->selected + lftd->offset, 0);
+        size_t bot_line_size = snprintf(NULL, 0, "%s%d:%d", mode, lftd->selected + lftd->offset, 0);
+        mvprintw(y - 1, x - bot_line_size, "%s%d:%d", mode, lftd->selected + lftd->offset, 0);
     }else{
-        size_t bot_line_size = snprintf(NULL, 0, "%c%d:%d", mode, 0, 0);
-        mvprintw(y - 1, x - bot_line_size, "%c%d:%d", mode, 0, 0);
+        size_t bot_line_size = snprintf(NULL, 0, "%s%d:%d", mode, 0, 0);
+        mvprintw(y - 1, x - bot_line_size, "%s%d:%d", mode, 0, 0);
     }
 
     if(layer_at_top->type == LAYER_CODE){

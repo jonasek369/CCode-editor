@@ -375,20 +375,37 @@ int main(int argc, char** argv) {
                 }
             }
 
+
+            Layer* current_top_layer = top_layer(&ccode);
             Layer* top_console = top_type_layer(&ccode, LAYER_CONSOLE);
-        
-            if(!top_console && !ccode.config->PrivateCloseConsole){
-                Layer* new_layer = new_layer_console();
-                push_layer_to_top(&ccode, new_layer);
-            } else if(top_console){
-                int index = contains_layer(&ccode, top_console);
-                if(index != -1){
-                    free_layer(ccode.layers[index]);
-                    arrdel(ccode.layers, index);
+
+            bool removed_cfp = false;
+
+            if(current_top_layer && current_top_layer->type == LAYER_CODE){
+                LayerCodeData* code_data = current_top_layer->layer_data;
+                if(code_data->completion_function_params != NULL){
+                    arrfree(code_data->completion_function_params->index_char_positions);
+                    arrfree(code_data->completion_function_params->indecies_size);
+                    free(code_data->completion_function_params);
+                    code_data->completion_function_params = NULL;
+                    removed_cfp = true;
                 }
-        
-                if(ccode.config->PrivateCloseConsole){
-                    ccode.config->PrivateCloseConsole = false;
+            }
+            // If we removed CFP we do not want to open the console that keypress
+            if(!removed_cfp){
+                if(!top_console && !ccode.config->PrivateCloseConsole){
+                    Layer* new_layer = new_layer_console();
+                    push_layer_to_top(&ccode, new_layer);
+                } else if(top_console){
+                    int index = contains_layer(&ccode, top_console);
+                    if(index != -1){
+                        free_layer(ccode.layers[index]);
+                        arrdel(ccode.layers, index);
+                    }
+            
+                    if(ccode.config->PrivateCloseConsole){
+                        ccode.config->PrivateCloseConsole = false;
+                    }
                 }
             }
         }

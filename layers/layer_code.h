@@ -420,6 +420,9 @@ bool do_completion(CCode* ccode){
     if(!lcd->completion_window->completion || lcd->completion_window->completion->type == JSON_NULL){
         return false;
     }
+    if(lcd->completion_function_params != NULL){
+        return false;
+    }
     JsonValue* result = shget(lcd->completion_window->completion->object, "result");
     JsonValue* items = shget(result->object, "items");
     if(items == NULL || items->type != JSON_ARRAY){
@@ -1223,7 +1226,7 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
         console_execute_command(ccode, ":ft");
     }
 
-    /* Temp shortcut for floating tree CTRL + C*/
+    /* Temp shortcut for CTRL + C*/
     else if(!isCursorLocked && chr == 3){
 
     }

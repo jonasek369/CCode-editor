@@ -109,6 +109,62 @@ void layer_split_view_render(CCode* ccode, Layer* layer){
     }
 }
 
+void layer_split_view_resize(LayerSplitViewData* lsvd, int direction){
+	if(!lsvd || !lsvd->virtual_windows){
+		return;
+	}
+
+	int focused_index = lsvd->focused;
+
+	assert(focused_index == 0 || focused_index == 1);
+
+	int other_index = 1 - focused_index;
+
+	VirtualWindow* focused_vw = lsvd->virtual_windows[focused_index];
+	VirtualWindow* other_vw = lsvd->virtual_windows[other_index];
+
+	assert(focused_vw != NULL && other_vw != NULL);
+
+	const int amount = 1;
+
+    if(focused_vw->x < other_vw->x){
+        // focused window is on the left
+        if(direction < 0){
+        	// move bound left
+            if(focused_vw->width > amount){
+                focused_vw->width -= amount;
+                other_vw->x -= amount;
+                other_vw->width += amount;
+            }
+        }else{
+        	// move bound right
+            if(other_vw->width > amount){
+                focused_vw->width += amount;
+                other_vw->x += amount;
+                other_vw->width -= amount;
+            }
+        }
+    }else{
+    	// focused window is on the right
+        if(direction < 0){
+        	// move bound left
+            if(other_vw->width > amount){
+                other_vw->width -= amount;
+                focused_vw->x -= amount;
+                focused_vw->width += amount;
+            }
+        }else{
+        	// move bound right
+            if(focused_vw->width > amount){
+                other_vw->width += amount;
+                focused_vw->x += amount;
+                focused_vw->width -= amount;
+            }
+        }
+    }
+}	
+
+
 bool layer_split_view_update(CCode* ccode, Layer* layer, int chr){
     if(!ccode || !layer || layer->type != LAYER_SPLIT_VIEW || layer->layer_data == NULL){
         return false;
@@ -120,12 +176,17 @@ bool layer_split_view_update(CCode* ccode, Layer* layer, int chr){
     	return false;
     }
 
-    if (lsvd->focused > arrlen(lsvd->splitten_layers)){
+    if(lsvd->focused > arrlen(lsvd->splitten_layers)){
     	lsvd->focused = 0;
     }
 
-    if (chr == CTL_TAB){
+    if(chr == CTL_TAB){
     	lsvd->focused = (int)(!lsvd->focused);
+    	chr = -1;
+    }
+
+    if(chr == KEY_SLEFT || chr == KEY_SRIGHT){
+    	layer_split_view_resize(lsvd, chr == KEY_SLEFT ? -1 : 1);
     	chr = -1;
     }
 
