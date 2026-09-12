@@ -60,7 +60,7 @@ bool is_inside_virtual_window(int x, int y, VirtualWindow* w){
 // XCurses*cols:   320
 void handle_mouse(CCode* ccode){
     MEVENT event;
-    nc_getmouse(&event);
+    nc_getmouse(&event);    
 
     Layer* current_top_layer = top_layer(ccode);
 
@@ -234,13 +234,26 @@ int main(int argc, char** argv) {
     // For random file ids for LSP
     srand(time(NULL));
     ensure_config_dir_existence();
-    char path[4096];
-    char config_path[8096];
+    char path[MAX_PATH];
+    char config_path[MAX_PATH + 192];
+
 
     get_config_directory(path, sizeof(path));
     snprintf(config_path, sizeof(config_path), "%s/config.json", path);
 
-
+    #ifdef __linux__
+        char themes_path[MAX_PATH + 192];
+        snprintf(themes_path, sizeof(themes_path), "%s/themes", path);
+        if(!nob_file_exists(themes_path)){
+            nob_copy_directory_recursively("/usr/share/ccode-editor/themes", themes_path);
+        }
+        char queries_path[MAX_PATH + 192];
+        snprintf(queries_path, sizeof(queries_path), "%s/scm_queries", path);
+        if(!nob_file_exists(queries_path)){
+            nob_copy_directory_recursively("/usr/share/ccode-editor/scm_queries", queries_path);
+        }
+    #endif
+        
     CCode ccode   = {0};
     ccode.layers  = NULL;
     ccode.config  = load_config(config_path);

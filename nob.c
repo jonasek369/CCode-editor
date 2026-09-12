@@ -1,7 +1,7 @@
 #define NOB_IMPLEMENTATION
 #include "nob.h"
 
-#define OPTIMISATION       0
+#define OPTIMISATION       1
 #define COMPILE_PROFILING  1
 
 
@@ -15,7 +15,6 @@
     #define grammar_file_name "build_grammar"
     #define output_file_name "main"
 #endif
-
 
 
 void generate_compile_flags(Nob_Cmd* cmd){
