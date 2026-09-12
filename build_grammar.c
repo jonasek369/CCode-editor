@@ -37,6 +37,7 @@ int main(int argc, char **argv)
                 "-c",
                 "-O3",
                 "-march=native",
+                "-flto=auto",
                 "-fPIC",
                 "-I", "./tree-sitter/lib/include",
                 files[i].src,

@@ -241,6 +241,9 @@ void free_layer(Layer* layer){
                 }
                 arrfree(ltsd->current_dir_files);
             }
+            if(ltsd->theme_dir_path){
+                arrfree(ltsd->theme_dir_path);
+            }
             free(ltsd);
         }
     }else if(layer->type == LAYER_SPLIT_VIEW){

@@ -22,6 +22,17 @@ Layer* new_layer_theme_selector(){
         return NULL;
     }
     ltsd->current_dir_files = NULL;
+
+    char path[MAX_PATH];
+    char theme_path[MAX_PATH + 128];
+
+    get_config_directory(path, sizeof(path));
+    snprintf(theme_path, sizeof(theme_path), "%s/themes/", path);
+
+    char* theme_dir = str_to_arr(theme_path);
+    assert(theme_dir != NULL);
+
+    ltsd->theme_dir_path = theme_dir;
     ltsd->selected = 0;
     ltsd->offset = 0;
 
@@ -50,7 +61,6 @@ int layer_theme_selector_load_themes(LayerThemeSelectorData* ltsd, const char* p
         }
         char* arr = str_to_arr(paths.items[i]);
         arrput(ltsd->current_dir_files, arr);
-
     }
     free(paths.items);
     return 0;
@@ -58,17 +68,27 @@ int layer_theme_selector_load_themes(LayerThemeSelectorData* ltsd, const char* p
 
 
 void layer_theme_selector_set_theme(CCode* ccode, LayerThemeSelectorData* ltsd){
-    char path[4096];
-    char theme_path[8096];
+    char theme_path[MAX_PATH];
 
-    get_config_directory(path, sizeof(path));
-    snprintf(theme_path, sizeof(theme_path), "%s/themes/%s", path, ltsd->current_dir_files[ltsd->selected]);
+    snprintf(theme_path, sizeof(theme_path), "%s%s", ltsd->theme_dir_path, ltsd->current_dir_files[ltsd->selected]);
 
     ColorTheme* new_theme = load_theme(theme_path);
     if(new_theme){
         free_theme(ccode->config->theme);
         ccode->config->theme = new_theme;
         init_syntax_colors(ccode->config->theme);
+    }else{
+        char question[4096] = {0};
+
+        snprintf(question, sizeof(question), "File %s seems to be invalid check its syntax!", ltsd->current_dir_files[ltsd->selected]);
+
+        Layer* dlg = new_layer_floating_dialog(
+            question,
+            NULL,
+            NULL,
+            NULL
+        );
+        push_layer_to_top(ccode, dlg);
     }
     nob_temp_reset();
 }
@@ -82,12 +102,7 @@ bool layer_theme_selector_update(CCode* ccode, Layer* layer, int chr){
     LayerThemeSelectorData* ltsd = (LayerThemeSelectorData*) layer->layer_data;
 
     if(ltsd->current_dir_files == NULL){
-        char path[4096];
-        char theme_path[8096];
-
-        get_config_directory(path, sizeof(path));
-        snprintf(theme_path, sizeof(theme_path), "%s/themes", path);
-        if(layer_theme_selector_load_themes(ltsd, theme_path) == -1){
+        if(layer_theme_selector_load_themes(ltsd, ltsd->theme_dir_path) == -1){
             printf("There was error reading the directory themes");
             return false;
         }
@@ -146,7 +161,7 @@ void layer_theme_selector_render(CCode* ccode, Layer* layer){
     int draw_y = 1;
     for(size_t i = ltsd->offset; i < arrlenu(ltsd->current_dir_files); i++){
         if(draw_y >= y) break;
-        Nob_File_Type ft = dir_walk_get_file_type("./themes/", ltsd->current_dir_files[i]);
+        Nob_File_Type ft = dir_walk_get_file_type(ltsd->theme_dir_path, ltsd->current_dir_files[i]);
         if(ft == NOB_FILE_DIRECTORY){
             attron(COLOR_PAIR(COLOR_DIR));
         }else if (ft == NOB_FILE_SYMLINK){

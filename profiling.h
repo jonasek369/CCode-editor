@@ -27,19 +27,19 @@
         clock_gettime(CLOCK_MONOTONIC, &ts);
         return (size_t)ts.tv_sec * 1000000000ULL  + ts.tv_nsec;
     }
-    #define START_PROFILING() do { \
-        if (depth < MAX_TIME_FRAMES) \
+    #define START_PROFILING() do {              \
+        if (depth < MAX_TIME_FRAMES)            \
             prof_stack[depth++] = current_ns(); \
     } while(0)
     
-    #define END_PROFILING(label) do { \
-        if (depth > 0 && prof_frames_size < MAX_TIME_FRAMES) { \
-            prof_timeframe tf; \
-            tf.name = (label); \
+    #define END_PROFILING(label) do {                           \
+        if (depth > 0 && prof_frames_size < MAX_TIME_FRAMES) {  \
+            prof_timeframe tf;                                  \
+            tf.name = (label);                                  \
             tf.elapsed_ns = current_ns() - prof_stack[--depth]; \
-            tf.depth = depth; \
-            prof_frames[prof_frames_size++] = tf; \
-        } \
+            tf.depth = depth;                                   \
+            prof_frames[prof_frames_size++] = tf;               \
+        }                                                       \
     } while(0)
 
     static void prof_pop_print_ms() {

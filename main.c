@@ -230,7 +230,7 @@ int main(int argc, char** argv) {
     (void) prof_pop_print_ns;
     (void) prof_pop_print_ms;
 
-
+    
     // For random file ids for LSP
     srand(time(NULL));
     ensure_config_dir_existence();
@@ -296,11 +296,9 @@ int main(int argc, char** argv) {
         //    printf("%d\n", ch);
         //}
         
-
         if(ch == KEY_MOUSE){
             handle_mouse(&ccode);
         }
-
 
         // handle LSPs if some are active
         if(ccode.lsp_ctxs){

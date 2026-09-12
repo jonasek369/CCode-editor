@@ -135,53 +135,47 @@ bool get_language_scm_query(SyntaxLanguage lang, Nob_String_Builder* out){
     if(lang == LANG_UNKNOWN){
         return false;
     }
+    char config_path[MAX_PATH] = {0};
+    char scm_query_dir_path[8096] = {0};
+
+    get_config_directory(config_path, sizeof(config_path));
+
+    snprintf(scm_query_dir_path, sizeof(scm_query_dir_path), "%s/scm_queries/", config_path);
+
+    char scm_query_file[8196] = {0};
 
     switch(lang){
         case(LANG_C): {
-            if(!nob_read_entire_file("./tree-sitter-grammar/tree-sitter-c/queries/highlights.scm", out)){
-                fprintf(stderr, "Error reading C scm file\n");
-                nob_sb_free(*out);
-                return false;
-            }
-            return true;
+            snprintf(scm_query_file, sizeof(scm_query_file), "%s/tree-sitter-c.scm", scm_query_dir_path);
+            break;
         }
         case(LANG_PYTHON): {
-            if(!nob_read_entire_file("./tree-sitter-grammar/tree-sitter-python/queries/highlights.scm", out)){
-                fprintf(stderr, "Error reading Python scm file\n");
-                nob_sb_free(*out);
-                return false;
-            }
-            return true;
+            snprintf(scm_query_file, sizeof(scm_query_file), "%s/tree-sitter-python.scm", scm_query_dir_path);
+            break;
         }
         case(LANG_RUST): {
-            if(!nob_read_entire_file("./tree-sitter-grammar/tree-sitter-rust/queries/highlights.scm", out)){
-                fprintf(stderr, "Error reading Rust scm file\n");
-                nob_sb_free(*out);
-                return false;
-            }
-            return true;
+            snprintf(scm_query_file, sizeof(scm_query_file), "%s/tree-sitter-rust.scm", scm_query_dir_path);
+            break;
         }
         case(LANG_C_SHARP): {
-            if(!nob_read_entire_file("./tree-sitter-grammar/tree-sitter-c-sharp/queries/highlights.scm", out)){
-                fprintf(stderr, "Error reading C# scm file\n");
-                nob_sb_free(*out);
-                return false;
-            }
-            return true;
+            snprintf(scm_query_file, sizeof(scm_query_file), "%s/tree-sitter-c-sharp.scm", scm_query_dir_path);
+            break;
         }
         case(LANG_JSON): {
-            if(!nob_read_entire_file("./tree-sitter-grammar/tree-sitter-json/queries/highlights.scm", out)){
-                fprintf(stderr, "Error reading JSON scm file\n");
-                nob_sb_free(*out);
-                return false;
-            }
-            return true;
+            snprintf(scm_query_file, sizeof(scm_query_file), "%s/tree-sitter-json.scm", scm_query_dir_path);
+            break;
         } 
         default: {
             printf("No scm found for %d\n", lang);
             return false;
-        } 
+        }
     }
+    if(!nob_read_entire_file(scm_query_file, out)){
+        fprintf(stderr, "Error reading (language: %d) scm file\n", lang);
+        nob_sb_free(*out);
+        return false;
+    }
+    return true; 
 }
 
 
@@ -296,6 +290,7 @@ void read_file_to_code_layer(CCode* ccode, const char* filepath_start, size_t si
             arrput(line, *c);
         }
     }
+    // if last line does not have newline well add one
     if (line != NULL) {
         arrput(line, '\n');
         arrput(line, '\0');

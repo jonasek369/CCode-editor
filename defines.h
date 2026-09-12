@@ -225,6 +225,7 @@ typedef struct {
 
 typedef struct {
     char** current_dir_files;
+    char* theme_dir_path; // stb_ds array
     int selected;
     int offset;
 } LayerThemeSelectorData;

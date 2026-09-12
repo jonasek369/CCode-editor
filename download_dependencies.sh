@@ -98,6 +98,7 @@ wait
 echo "==> building nob"
 gcc nob.c -o nob -O2 -march=native -pipe
 
+
 CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 TARGET_DIR="$CONFIG_HOME/ccode-editor"
 
@@ -105,5 +106,17 @@ mkdir -p "$TARGET_DIR"
 
 echo "==> copying themes into config dir"
 cp -r "./themes" "$TARGET_DIR/"
+
+
+# TODO: Implement this functionality to the windows powershell script
+echo "==> copying SCM files into config dir"
+
+mkdir -p "$TARGET_DIR/scm_queries"
+
+# copy scm file to config dir so we have absolute path for them
+for entry in "${languages[@]}"; do
+    repo_dir="${entry##* }"
+    cp "./tree-sitter-grammar/$repo_dir/queries/highlights.scm" "$TARGET_DIR/scm_queries/$repo_dir.scm"
+done
 
 echo "==> run ./nob to compile and start Ccode-editor"

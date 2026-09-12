@@ -59,7 +59,7 @@ int main(int argc, char **argv){
         #endif
         "-o", output_file_name, "main.c", "./tiny_queue/tiny_queue.c",
     #if(OPTIMISATION == 1)
-        "-O3", "-march=native",
+        "-O3", "-march=native", "-flto=auto",
     #endif
     #if(COMPILE_PROFILING == 1)
         "-DCOMPILE_PROFILING=1",
