@@ -24,6 +24,7 @@ void init_commands(){
     add_command(":sys",    COMMAND_SYS);
     add_command(":s",      COMMAND_SAVE);
     add_command(":w",      COMMAND_WRITE);
+    add_command(":wq",     COMMAND_WRITE_QUIT);
     add_command(":ft",     COMMAND_FLOATING_WINDOW);
     add_command(":f",      COMMAND_FIND);
     add_command(":c!",     COMMAND_FORCE_CLOSE);

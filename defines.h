@@ -86,6 +86,7 @@ typedef enum {
     COMMAND_GOTO,
     COMMAND_SAVE,
     COMMAND_WRITE,
+    COMMAND_WRITE_QUIT,
     COMMAND_CHANGE_NAME,
     COMMAND_SYS,
     COMMAND_FIND,
@@ -191,6 +192,7 @@ typedef struct {
     char* filename;
     char** code_buffer;
     Cursor* cursor;
+    Cursor* select_end;
     FindingSubstr* finding_substr;
     CompletionFunctionParams* completion_function_params;
     VirtualWindow* virtual_window;

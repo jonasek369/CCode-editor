@@ -47,6 +47,7 @@ Layer* new_layer_code(){
         free(lcd);
         return NULL;
     }
+    lcd->select_end = NULL;
     lcd->cursor->x = 0;
     lcd->cursor->y = 0;
     lcd->cursor->xoff = 0;
@@ -771,6 +772,239 @@ void layer_code_handle_enter(LayerCodeData* code_data){
     TS_REPARSE(code_data);
 }
 
+
+void layer_code_get_shift_move(int key, int* key_eq){
+    switch(key){
+        case(KEY_SUP):{
+            *key_eq = KEY_UP;
+            break;
+        }
+        case(KEY_SDOWN):{
+            *key_eq = KEY_DOWN;
+            break;
+        }
+        case(KEY_SLEFT):{
+            *key_eq = KEY_LEFT;
+            break;
+        }
+        case(KEY_SRIGHT):{
+            *key_eq = KEY_RIGHT;
+            break;
+        }
+        default: {
+            *key_eq = 0;
+            break;
+        }
+    }
+}
+
+
+void layer_code_move_cursor(LayerCodeData* code_data, int chr, Cursor* cursor){
+    switch(chr){
+        case KEY_DOWN: {
+            if(arrlen(code_data->code_buffer) <= cursor->y+1){
+                break;
+            }
+            char* new_line = code_data->code_buffer[cursor->y+1];
+            int length = arrlen(new_line)-2;
+            if(length < cursor->x){
+                cursor->x = length >= 0 ? length : 0;
+            }
+            cursor->y++;
+            break;
+        }
+        case KEY_UP: {
+            if(cursor->y == 0){
+                break;
+            }
+            char* new_line = code_data->code_buffer[cursor->y-1];
+            int length = arrlen(new_line)-2;
+            if(length < cursor->x){
+                cursor->x = length >= 0 ? length : 0;
+            }
+            cursor->y--;
+            break;
+        }
+        case KEY_LEFT: {
+            if(cursor->x != 0){
+                cursor->x--;
+                break;
+            }
+            if(cursor->y == 0){
+                break;
+            }
+            char* new_line = code_data->code_buffer[cursor->y-1];
+            int length = arrlen(new_line)-2;
+            cursor->x = length >= 0 ? length : 0;
+            cursor->y--;
+            break;
+        }
+        case KEY_RIGHT: {
+            char* current_line = code_data->code_buffer[cursor->y];
+            if(cursor->x < arrlen(current_line)-2){
+                cursor->x++;
+                break;
+            }
+            if(arrlen(code_data->code_buffer) <= cursor->y+1){
+                break;
+            }
+            cursor->y++;
+            cursor->x = 0;
+            break;
+        }
+    }
+}
+
+void copy_to_stb_array(char** buff, char* text, size_t length){
+    for(size_t i = 0; i < length; i++){
+        arrput(*buff, text[i]);
+    }
+}
+
+
+char* layer_code_selection_to_buffer(LayerCodeData* lcd){
+    if(lcd->select_end == NULL){
+        return NULL;
+    }
+    char* out_buffer = NULL;
+
+    Cursor* first_cursor = lcd->cursor;
+    Cursor* second_cursor = lcd->select_end;
+    if(first_cursor->y > lcd->select_end->y){
+        first_cursor = lcd->select_end;
+        second_cursor = lcd->cursor;
+    }
+    int y_diffrence = second_cursor->y - first_cursor->y;
+    if(y_diffrence >= 2){
+        copy_to_stb_array(
+            &out_buffer,
+            lcd->code_buffer[first_cursor->y] + first_cursor->x,
+            arrlen(lcd->code_buffer[first_cursor->y])-first_cursor->x-1
+        );
+        for(int64_t i = 1; i < y_diffrence; i++){
+            copy_to_stb_array(
+                &out_buffer,
+                lcd->code_buffer[first_cursor->y + i],
+                arrlen(lcd->code_buffer[first_cursor->y + i])-1
+            );
+        }
+        copy_to_stb_array(
+            &out_buffer,
+            lcd->code_buffer[second_cursor->y],
+            second_cursor->x
+        );
+        arrput(out_buffer, (char)0);
+    }else if(y_diffrence == 1){
+        copy_to_stb_array(
+            &out_buffer,
+            lcd->code_buffer[first_cursor->y] + first_cursor->x,
+            arrlen(lcd->code_buffer[first_cursor->y])-first_cursor->x-1
+        );
+        copy_to_stb_array(
+            &out_buffer,
+            lcd->code_buffer[second_cursor->y],
+            second_cursor->x
+        );
+        arrput(out_buffer, (char)0);
+    }else{
+        int smallest = first_cursor->x;
+        int highest = first_cursor->x;
+        if(smallest > second_cursor->x){
+            smallest = second_cursor->x;
+        }
+        if(highest < second_cursor->x){
+            highest = second_cursor->x;
+        }
+        copy_to_stb_array(
+            &out_buffer,
+            lcd->code_buffer[second_cursor->y] + smallest,
+            highest - smallest
+        );
+        arrput(out_buffer, (char)0);
+    }
+
+    printf("%s\n", out_buffer);
+    return out_buffer;
+}
+
+
+
+void layer_code_draw_text_selection(LayerCodeData* lcd){
+    if(lcd->select_end == NULL){
+        return;
+    }
+    VirtualWindow* virt_win = lcd->virtual_window;
+
+    int win_x = virt_win ? virt_win->x      : 0;
+    int win_y = virt_win ? virt_win->y      : 1;
+
+    Cursor* first_cursor = lcd->cursor;
+    Cursor* second_cursor = lcd->select_end;
+    if(first_cursor->y > lcd->select_end->y){
+        first_cursor = lcd->select_end;
+        second_cursor = lcd->cursor;
+    }
+    int y_diffrence = second_cursor->y - first_cursor->y;
+    attron(A_BLINK);
+    if(y_diffrence >= 2){
+        mvprintw(
+            first_cursor->y + win_y - lcd->cursor->yoff,
+            first_cursor->x + win_x - lcd->cursor->xoff,
+            "%.*s",
+            arrlen(lcd->code_buffer[first_cursor->y])-first_cursor->x,
+            lcd->code_buffer[first_cursor->y] + first_cursor->x
+        );
+        for(int64_t i = 1; i < y_diffrence; i++){
+            mvprintw(
+                first_cursor->y + win_y + i  - lcd->cursor->yoff,
+                win_x  - lcd->cursor->xoff,
+                "%s",
+                lcd->code_buffer[first_cursor->y + i]
+            );
+        }
+        mvprintw(
+            second_cursor->y + win_y - lcd->cursor->yoff,
+            win_x - lcd->cursor->xoff,
+            "%.*s",
+            second_cursor->x,
+            lcd->code_buffer[second_cursor->y]
+        );
+    }else if (y_diffrence == 1){
+        mvprintw(
+            first_cursor->y + win_y  - lcd->cursor->yoff,
+            first_cursor->x + win_x  - lcd->cursor->xoff,
+            "%.*s",
+            arrlen(lcd->code_buffer[first_cursor->y])-first_cursor->x,
+            lcd->code_buffer[first_cursor->y] + first_cursor->x
+        );
+        mvprintw(
+            second_cursor->y + win_y  - lcd->cursor->yoff,
+            win_x  - lcd->cursor->xoff,
+            "%.*s",
+            second_cursor->x,
+            lcd->code_buffer[second_cursor->y]
+        );
+    }else{
+        int smallest = first_cursor->x;
+        int highest = first_cursor->x;
+        if(smallest > second_cursor->x){
+            smallest = second_cursor->x;
+        }
+        if(highest < second_cursor->x){
+            highest = second_cursor->x;
+        }
+        mvprintw(
+            second_cursor->y+win_y - lcd->cursor->yoff,
+            smallest + win_x - lcd->cursor->xoff,
+            "%.*s",
+            highest - smallest,
+            lcd->code_buffer[second_cursor->y] + smallest
+        );
+    }
+    attroff(A_BLINK);
+}
+
+
 bool layer_code_update(CCode* ccode, Layer* layer, int chr){
     if(!ccode || !layer || layer->type != LAYER_CODE || layer->layer_data == NULL){
         return false;
@@ -786,7 +1020,14 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
 
     bool inFindSubstrMode = code_data->finding_substr != NULL;
 
-    bool isCursorLocked = inFindSubstrMode || code_data->completion_function_params != NULL;
+    bool isCursorLocked = inFindSubstrMode            ||
+        code_data->completion_function_params != NULL ||
+        (code_data->select_end != NULL && !(chr == KEY_DOWN || chr == KEY_UP));
+
+    if((chr >= KEY_DOWN && chr <= KEY_RIGHT) && code_data->select_end){
+        free(code_data->select_end);
+        code_data->select_end = NULL;
+    }
 
     if(code_data->code_buffer == NULL){
         char* line = NULL;
@@ -806,6 +1047,20 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
 
     if(code_data->cursor->y >= arrlen(code_data->code_buffer)){
         return false;
+    }
+
+    if(chr == KEY_SUP || chr == KEY_SDOWN || chr == KEY_SRIGHT || chr == KEY_SLEFT){
+        int key_eq;
+        layer_code_get_shift_move(chr, &key_eq);
+
+        if(code_data->select_end == NULL){
+            Cursor* c = malloc(sizeof(Cursor));
+            memcpy(c, code_data->cursor, sizeof(Cursor));
+            layer_code_move_cursor(code_data, key_eq, c);
+            code_data->select_end = c;
+        }else{
+            layer_code_move_cursor(code_data, key_eq, code_data->select_end);
+        }
     }
 
     if(chr == CUSTOM_CTL_F){
@@ -1002,59 +1257,7 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
         }
     }
     else if(!isCursorLocked && chr >= KEY_DOWN && chr <= KEY_RIGHT){
-        switch(chr){
-            case KEY_DOWN: {
-                if(arrlen(code_data->code_buffer) <= code_data->cursor->y+1){
-                    break;
-                }
-                char* new_line = code_data->code_buffer[code_data->cursor->y+1];
-                int length = arrlen(new_line)-2;
-                if(length < code_data->cursor->x){
-                    code_data->cursor->x = length >= 0 ? length : 0;
-                }
-                code_data->cursor->y++;
-                break;
-            }
-            case KEY_UP: {
-                if(code_data->cursor->y == 0){
-                    break;
-                }
-                char* new_line = code_data->code_buffer[code_data->cursor->y-1];
-                int length = arrlen(new_line)-2;
-                if(length < code_data->cursor->x){
-                    code_data->cursor->x = length >= 0 ? length : 0;
-                }
-                code_data->cursor->y--;
-                break;
-            }
-            case KEY_LEFT: {
-                if(code_data->cursor->x != 0){
-                    code_data->cursor->x--;
-                    break;
-                }
-                if(code_data->cursor->y == 0){
-                    break;
-                }
-                char* new_line = code_data->code_buffer[code_data->cursor->y-1];
-                int length = arrlen(new_line)-2;
-                code_data->cursor->x = length >= 0 ? length : 0;
-                code_data->cursor->y--;
-                break;
-            }
-            case KEY_RIGHT: {
-                char* current_line = code_data->code_buffer[code_data->cursor->y];
-                if(code_data->cursor->x < arrlen(current_line)-2){
-                    code_data->cursor->x++;
-                    break;
-                }
-                if(arrlen(code_data->code_buffer) <= code_data->cursor->y+1){
-                    break;
-                }
-                code_data->cursor->y++;
-                code_data->cursor->x = 0;
-                break;
-            }
-        }
+        layer_code_move_cursor(code_data, chr, code_data->cursor);
     }
     else if(!isCursorLocked && chr == CTL_PGUP){
         code_data->cursor->y -= (y-2)*2;
@@ -1222,8 +1425,14 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
     }
 
     /* Temp shortcut for CTRL + C*/
-    else if(!isCursorLocked && chr == 3){
-
+    else if(chr == 3){
+        char* copied_data = layer_code_selection_to_buffer(code_data);
+        if(copied_data != NULL){
+            free(code_data->select_end);
+            code_data->select_end = NULL;
+        }
+        set_clipboard_content(copied_data);
+        arrfree(copied_data);
     }
     /* Temp shortcut for CTRL + V*/
     else if(!isCursorLocked && chr == 22){
@@ -1246,9 +1455,7 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
     }
 
     else if(!isCursorLocked && chr == KEY_DC){
-        // TODO: Make this the expected behaviour
         char* line = code_data->code_buffer[code_data->cursor->y];
-        printf("%d:%ld\n", code_data->cursor->x, arrlen(line));
         if(code_data->cursor->x == arrlen(line)-2 && code_data->cursor->x == 0){
             layer_code_update(ccode, layer, CUSTOM_KEY_BACKSPACE);
             return true;
@@ -1434,6 +1641,8 @@ void layer_code_render(CCode* ccode, Layer* layer) {
         layer_code_render_completion_window(ccode, layer);
         END_PROFILING("rendering");
     }
+
+    layer_code_draw_text_selection(code_data);
 }
 
 

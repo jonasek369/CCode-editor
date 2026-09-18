@@ -87,6 +87,12 @@ void console_execute_command(CCode* ccode, const char* buffer){
             break;
         }
 
+        case COMMAND_WRITE_QUIT: {
+            write_code_layer_to_file(ccode, false);
+            ccode->config->PrivateRunning = false;
+            break;
+        } 
+
         case COMMAND_OPEN: {
             if (arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_STRING) {
                 read_file_to_code_layer(ccode, to.tokens[1].string.start, to.tokens[1].string.size);

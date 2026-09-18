@@ -1,7 +1,7 @@
 #define NOB_IMPLEMENTATION
 #include "nob.h"
 
-#define OPTIMISATION       1
+#define OPTIMISATION       0
 #define COMPILE_PROFILING  1
 
 
@@ -52,10 +52,10 @@ int main(int argc, char **argv){
         "-L", lib,
         "-I", "./tree-sitter/lib/include",
         "-L", "./tree-sitter",
-        #ifndef _WIN32
+    #ifndef _WIN32
         "-Wl,-rpath=./PDCurses/x11",
         "-Wl,-rpath=./tree-sitter",
-        #endif
+    #endif
         "-o", output_file_name, "main.c", "./tiny_queue/tiny_queue.c",
     #if(OPTIMISATION == 1)
         "-O3", "-march=native", "-flto=auto",

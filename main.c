@@ -305,9 +305,9 @@ int main(int argc, char** argv) {
         ch = getch();
 
         
-        //if(ch != -1){
-        //    printf("%d\n", ch);
-        //}
+        // if(ch != -1){
+        //     printf("%d\n", ch);
+        // }
         
         if(ch == KEY_MOUSE){
             handle_mouse(&ccode);
