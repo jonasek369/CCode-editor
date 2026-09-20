@@ -109,6 +109,7 @@ void handle_publishDiagnostics(CCode* ccode, JsonValue* message){
 	JsonValue* params = NULL;
 	JsonValue* uri = NULL;
 	JsonValue* version = NULL;
+ 
 
 	TYPE_CHECK_FIELD(message, params, JSON_OBJECT);
 	TYPE_CHECK_FIELD(params, uri, JSON_STRING);

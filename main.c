@@ -56,17 +56,62 @@ bool is_inside_virtual_window(int x, int y, VirtualWindow* w){
     );
 }
 
-// XCurses*lines:  78
-// XCurses*cols:   320
 void handle_mouse(CCode* ccode){
     MEVENT event;
-    nc_getmouse(&event);    
+    nc_getmouse(&event);
 
     Layer* current_top_layer = top_layer(ccode);
 
     if(!current_top_layer){
         return;
     }
+
+    if(current_top_layer->type == LAYER_CODE && event.bstate & BUTTON1_PRESSED){
+        // Creates the base of selection
+        LayerCodeData* lcd = current_top_layer->layer_data;
+        if(!lcd && lcd->select_end){
+            return;
+        }
+        lcd->select_end = malloc(sizeof(Cursor));
+        int target_y = lcd->cursor->yoff + event.y - 1;
+
+        if(target_y < 0 || target_y >= arrlen(lcd->code_buffer))
+            return;
+
+        lcd->select_end->y = target_y;
+            
+        char* line = lcd->code_buffer[target_y];
+        int len = arrlen(line)-2;
+            
+        int target_x = lcd->cursor->xoff + event.x;
+            
+        if(target_x > len) target_x = len;
+        if(target_x < 0) target_x = 0;
+            
+        lcd->select_end->x = target_x;
+    }else if(current_top_layer->type == LAYER_CODE && event.bstate & BUTTON1_RELEASED){
+        // Creates the end of selection
+        LayerCodeData* lcd = current_top_layer->layer_data;
+        if(!lcd && !lcd->select_end){
+            return;
+        }
+        int target_y = lcd->cursor->yoff + event.y - 1;
+
+        if(target_y < 0 || target_y >= arrlen(lcd->code_buffer))
+            return;
+
+        lcd->cursor->y = target_y;
+            
+        char* line = lcd->code_buffer[target_y];
+        int len = arrlen(line)-2;
+            
+        int target_x = lcd->cursor->xoff + event.x;
+            
+        if(target_x > len) target_x = len;
+        if(target_x < 0) target_x = 0;
+            
+        lcd->cursor->x = target_x;
+    }   
 
     // scroll up
     if(event.bstate & BUTTON4_PRESSED){
@@ -111,7 +156,12 @@ void handle_mouse(CCode* ccode){
                 if(target_x < 0) target_x = 0;
             
                 lcd->cursor->x = target_x;
-            
+                
+                if(lcd->select_end){
+                    free(lcd->select_end);
+                    lcd->select_end = NULL;
+                }
+
                 break;
             }
             case LAYER_DIR_WALK: {
@@ -265,7 +315,7 @@ int main(int argc, char** argv) {
     keypad(stdscr, TRUE);
     nodelay(stdscr, TRUE);
     noecho();
-    mousemask(ALL_MOUSE_EVENTS | REPORT_MOUSE_POSITION, NULL);
+    mousemask(ALL_MOUSE_EVENTS, NULL);
 
     move(1, 0);
 
@@ -311,6 +361,14 @@ int main(int argc, char** argv) {
         
         if(ch == KEY_MOUSE){
             handle_mouse(&ccode);
+            // we dont redraw on mouse event because
+            // mouse event can be mouse move and if user
+            // has mouse with poll rate high enough editor starts
+            // to lag behind
+
+            // reset the profiler depth
+            depth--;
+            continue;
         }
 
         // handle LSPs if some are active

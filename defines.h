@@ -8,8 +8,8 @@
 #define CUSTOM_CTL_S 19
 #define CUSTOM_KEY_TAB 9
 
-#define LIMIT_FPS 0
-#define FPS 240
+#define LIMIT_FPS 0 
+#define FPS 32
 #define FRAME_NS (1000000000L / FPS)
 
 #include <stdbool.h>

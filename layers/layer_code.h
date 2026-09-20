@@ -893,7 +893,6 @@ char* layer_code_selection_to_buffer(LayerCodeData* lcd){
             lcd->code_buffer[second_cursor->y],
             second_cursor->x
         );
-        arrput(out_buffer, (char)0);
     }else if(y_diffrence == 1){
         copy_to_stb_array(
             &out_buffer,
@@ -905,7 +904,6 @@ char* layer_code_selection_to_buffer(LayerCodeData* lcd){
             lcd->code_buffer[second_cursor->y],
             second_cursor->x
         );
-        arrput(out_buffer, (char)0);
     }else{
         int smallest = first_cursor->x;
         int highest = first_cursor->x;
@@ -920,10 +918,8 @@ char* layer_code_selection_to_buffer(LayerCodeData* lcd){
             lcd->code_buffer[second_cursor->y] + smallest,
             highest - smallest
         );
-        arrput(out_buffer, (char)0);
     }
-
-    printf("%s\n", out_buffer);
+    arrput(out_buffer, (char)0);
     return out_buffer;
 }
 

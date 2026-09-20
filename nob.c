@@ -65,7 +65,7 @@ int main(int argc, char **argv){
     #endif
         "./tree-sitter/libtree-sitter.a",
         "./build/libtslangs.a",
-    #ifdef _WIN32 
+    #ifdef _WIN32
         "-lpdcurses", "-lwinmm",
     #else
         "-lXCurses",
