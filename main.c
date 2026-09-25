@@ -341,7 +341,6 @@ int main(int argc, char** argv) {
     int x, y;
     getmaxyx(stdscr, y, x);
 
-
     default_virtual_window.width = x;
     default_virtual_window.height = y;
 
@@ -353,6 +352,10 @@ int main(int argc, char** argv) {
             clock_gettime(CLOCK_MONOTONIC, &frame_start);
         #endif
         ch = getch();
+
+        if(ch == -1){
+            __asm__ volatile("pause");
+        }
 
         
         // if(ch != -1){
@@ -366,7 +369,7 @@ int main(int argc, char** argv) {
             // has mouse with poll rate high enough editor starts
             // to lag behind
 
-            // reset the profiler depth
+            // reset the profiler depth because were skipping the frame
             depth--;
             continue;
         }
@@ -419,7 +422,6 @@ int main(int argc, char** argv) {
             // if top layer has opened completion window remove it
             if(arrlenu(ccode.layers) > 1 && ch == CUSTOM_KEY_ESCAPE){
                 int index = top_layer(&ccode)->type == LAYER_CONSOLE ? 1 : 0;
-                printf("index = %d len = %ld\n", index, arrlen(ccode.layers));
                 switch(ccode.layers[index]->type){
                     case(LAYER_CODE): {
                         LayerCodeData* lcd = ccode.layers[index]->layer_data;

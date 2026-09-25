@@ -1000,6 +1000,45 @@ void layer_code_draw_text_selection(LayerCodeData* lcd){
     attroff(A_BLINK);
 }
 
+int64_t layer_code_get_selection_delete_size(LayerCodeData* lcd){
+    // TODO: Make sure this is right.
+    // FIXME: Crash happends when there is select and enter is pressed
+    if(lcd->select_end == NULL){
+        return -1;
+    }
+    Cursor* first_cursor = lcd->cursor;
+    Cursor* second_cursor = lcd->select_end;
+    if(first_cursor->y > lcd->select_end->y){
+        first_cursor = lcd->select_end;
+        second_cursor = lcd->cursor;
+    }
+    int y_diffrence = second_cursor->y - first_cursor->y;
+    uint64_t chars = 0;
+    if(y_diffrence >= 2){
+        chars += arrlen(lcd->code_buffer[first_cursor->y])-first_cursor->x-1;
+        for(int64_t i = 1; i < y_diffrence; i++){
+            chars += arrlen(lcd->code_buffer[first_cursor->y + i]) - 1;
+        }
+        chars += second_cursor->x;
+    }else if (y_diffrence == 1){
+        chars += arrlen(lcd->code_buffer[first_cursor->y])-first_cursor->x-1;
+        chars += second_cursor->x;
+    }else{
+        int smallest = first_cursor->x;
+        int highest = first_cursor->x;
+        if(smallest > second_cursor->x){
+            smallest = second_cursor->x;
+        }
+        if(highest < second_cursor->x){
+            highest = second_cursor->x;
+        }
+        chars += highest - smallest;
+    }
+    return chars;
+}
+
+
+static bool layer_code_reparse_enabled = true;
 
 bool layer_code_update(CCode* ccode, Layer* layer, int chr){
     if(!ccode || !layer || layer->type != LAYER_CODE || layer->layer_data == NULL){
@@ -1147,10 +1186,47 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
     }
 
     if((chr >= 0 && chr <= 255) && isprint(chr)){
+        if(code_data->select_end != NULL){
+            layer_code_update(ccode, layer, CUSTOM_KEY_BACKSPACE);
+        }
         layer_code_add_character(chr, code_data, true);
     }
 
     else if(chr == CUSTOM_KEY_BACKSPACE){
+        if(code_data->select_end != NULL){
+            int64_t to_delete = layer_code_get_selection_delete_size(code_data);
+            Cursor* last = code_data->cursor;
+            if(last->y == code_data->select_end->y){
+                if(last->x < code_data->select_end->x){
+                    last = code_data->select_end;
+                }
+            }
+            else if(last->y < code_data->select_end->y){
+                last = code_data->select_end;
+            }
+            if(last == code_data->select_end){
+                last->xoff = code_data->cursor->xoff;
+                last->yoff = code_data->cursor->yoff;
+                free(code_data->cursor);
+                code_data->cursor = code_data->select_end;
+                code_data->select_end = NULL;
+                for(int64_t i = 0; i < to_delete; i++){
+                    layer_code_reparse_enabled = false;
+                    layer_code_update(ccode, layer, CUSTOM_KEY_BACKSPACE);
+                    layer_code_reparse_enabled = true;
+                }
+            }else{
+                free(code_data->select_end);
+                code_data->select_end = NULL;
+                for(int64_t i = 0; i < to_delete; i++){
+                    layer_code_reparse_enabled = false;
+                    layer_code_update(ccode, layer, CUSTOM_KEY_BACKSPACE);
+                    layer_code_reparse_enabled = true;
+                }
+            }
+            return false;
+        }
+
         char* line = code_data->code_buffer[code_data->cursor->y];
         int line_len = arrlen(line);
 
@@ -1222,7 +1298,7 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
             code_data->cursor->y--;
         }
 
-        if(do_parse){
+        if(do_parse && layer_code_reparse_enabled){
             TS_REPARSE(code_data);
         }
 
@@ -1239,6 +1315,9 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
         }
     }
     else if(code_data->completion_function_params == NULL && chr == CUSTOM_KEY_ENTER && !code_data->completion_window){
+        if(code_data->select_end != NULL){
+            layer_code_update(ccode, layer, CUSTOM_KEY_BACKSPACE);;
+        }
         layer_code_handle_enter(code_data);
     }
 
@@ -1329,7 +1408,12 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
 
         LABEL(carried_to_previous_line)
     }
-    else if(!isCursorLocked && chr == CTL_BKSP){
+    // TODO: Remove movement lock check for unintented behaviour
+    else if(chr == CTL_BKSP){
+        if(code_data->select_end != NULL){
+            layer_code_update(ccode, layer, CUSTOM_KEY_BACKSPACE);
+            return false;
+        }
         int x = code_data->cursor->x;
         char *line = code_data->code_buffer[code_data->cursor->y];
 
