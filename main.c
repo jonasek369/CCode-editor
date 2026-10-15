@@ -66,17 +66,29 @@ void handle_mouse(CCode* ccode){
         return;
     }
 
-    if(current_top_layer->type == LAYER_CODE && event.bstate & BUTTON1_PRESSED){
-        // Creates the base of selection
-        LayerCodeData* lcd = current_top_layer->layer_data;
+    if(
+        event.bstate & BUTTON1_PRESSED &&
+        (current_top_layer->type == LAYER_CODE || current_top_layer->type == LAYER_SPLIT_VIEW)
+    ){
+        // Create the base of selection
+        LayerCodeData* lcd = NULL;
+        if(current_top_layer->type == LAYER_SPLIT_VIEW){
+            LayerSplitViewData* lsvd = current_top_layer->layer_data;
+            lcd = lsvd->splitten_layers[lsvd->focused]->layer_data; 
+        }else {
+            lcd = current_top_layer->layer_data;
+        }        
         if(!lcd && lcd->select_end){
             return;
         }
         lcd->select_end = malloc(sizeof(Cursor));
         int target_y = lcd->cursor->yoff + event.y - 1;
 
-        if(target_y < 0 || target_y >= arrlen(lcd->code_buffer))
+        if(target_y < 0 || target_y >= arrlen(lcd->code_buffer)){
+            free(lcd->select_end);
+            lcd->select_end = NULL;
             return;
+        }
 
         lcd->select_end->y = target_y;
             
@@ -89,9 +101,18 @@ void handle_mouse(CCode* ccode){
         if(target_x < 0) target_x = 0;
             
         lcd->select_end->x = target_x;
-    }else if(current_top_layer->type == LAYER_CODE && event.bstate & BUTTON1_RELEASED){
+    }else if(
+        event.bstate & BUTTON1_RELEASED &&
+        (current_top_layer->type == LAYER_CODE || current_top_layer->type == LAYER_SPLIT_VIEW)
+    ){
         // Creates the end of selection
-        LayerCodeData* lcd = current_top_layer->layer_data;
+        LayerCodeData* lcd = NULL;
+        if(current_top_layer->type == LAYER_SPLIT_VIEW){
+            LayerSplitViewData* lsvd = current_top_layer->layer_data;
+            lcd = lsvd->splitten_layers[lsvd->focused]->layer_data; 
+        }else {
+            lcd = current_top_layer->layer_data;
+        }  
         if(!lcd && !lcd->select_end){
             return;
         }
@@ -329,6 +350,7 @@ int main(int argc, char** argv) {
 
     if(ccode.layers == NULL){
         arrpush(ccode.layers, new_layer_code());
+        layer_code_make_welcome_screen(ccode.layers[0]);
     }
 
     #ifdef _WIN32
@@ -346,21 +368,18 @@ int main(int argc, char** argv) {
 
     while(ccode.config->PrivateRunning) {
         START_PROFILING();
+
         #ifdef _WIN32
             QueryPerformanceCounter(&frame_start);
         #else
             clock_gettime(CLOCK_MONOTONIC, &frame_start);
         #endif
+
         ch = getch();
-
-        if(ch == -1){
-            __asm__ volatile("pause");
-        }
-
         
         // if(ch != -1){
         //     printf("%d\n", ch);
-        // }
+        // }    
         
         if(ch == KEY_MOUSE){
             handle_mouse(&ccode);

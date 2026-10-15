@@ -41,6 +41,7 @@ Layer* new_layer_code(){
         free(code);
         return NULL;
     }
+    lcd->allow_diagnostics = true; 
     lcd->cursor = malloc(sizeof(Cursor));
     if(!lcd->cursor){
         free(code);
@@ -81,6 +82,84 @@ Layer* new_layer_code(){
     lcd->completion_function_params = NULL;
 
     return code;
+}
+
+
+static char* layer_code_center_text_in_buffer(const char* buffer, int w){
+    size_t buffer_len = strlen(buffer);
+    char* centered_text = NULL;
+    int offset = w-buffer_len;
+
+    for(size_t i = 0; i < offset/2; i++){
+        arrput(centered_text, ' ');
+    }
+    while(*buffer){
+        arrput(centered_text, *buffer);
+        buffer++;
+    }
+    for(size_t i = 0; i < offset/2-1; i++){
+        arrput(centered_text, ' ');
+    }
+    arrput(centered_text, '\n');
+    arrput(centered_text, '\0');
+    return centered_text;
+}
+
+static char* layer_code_left_allign_text_in_buffer(const char* buffer, int left_pad, int w){
+    size_t buffer_len = strlen(buffer);
+    char* left_allign = NULL;
+    int rem = w-buffer_len-left_pad;
+    for(size_t i = 0; i < left_pad; i++){
+        arrput(left_allign, ' ');
+    }
+    while(*buffer){
+        arrput(left_allign, *buffer);
+        buffer++;
+    }
+    for(size_t i = 0; i < rem-1; i++){
+        arrput(left_allign, ' ');
+    }
+    arrput(left_allign, '\n');
+    arrput(left_allign, '\0');
+    return left_allign;
+}
+
+
+
+void layer_code_make_welcome_screen(Layer* layer){
+    if(!layer || !layer->layer_data){
+        return;
+    }
+    LayerCodeData* lcd = layer->layer_data;
+
+    int width = 0;
+    int height = 0;
+
+    if(lcd->virtual_window != NULL){
+        width = lcd->virtual_window->width;
+        height = lcd->virtual_window->height;
+    }else{
+        getmaxyx(stdscr, height, width);
+    }
+
+    assert(width != 0 && height != 0 && "windows width and height cant be 0");
+
+    arrput(lcd->code_buffer, layer_code_center_text_in_buffer("Welcome to CCode editor", width));
+    arrput(lcd->code_buffer, layer_code_center_text_in_buffer("Code editor made in C with LSP support and syntax syntax highlighting", width));
+    arrput(lcd->code_buffer, layer_code_center_text_in_buffer("github.com/jonasek369/CCode-editor", width));
+    arrput(lcd->code_buffer, layer_code_center_text_in_buffer("press ESC to open console", width));
+    arrput(lcd->code_buffer, layer_code_center_text_in_buffer("", width));
+    arrput(lcd->code_buffer, layer_code_center_text_in_buffer("", width));
+
+    arrput(lcd->code_buffer, layer_code_left_allign_text_in_buffer("available console commands:", 0, width));
+    char* spaces = "            ";
+    for(size_t i = 0; i < shlenu(commands); i++){
+        CommandMap cm = commands[i];
+        char* info = commands_info[i];
+        char* concat = nob_temp_sprintf("%s %.*s %s", cm.key, LONGEST_COMMAND-(int)strlen(cm.key), spaces, info);
+        arrput(lcd->code_buffer, layer_code_left_allign_text_in_buffer(concat, 4, width));
+        nob_temp_reset();
+    }
 }
 
 
@@ -347,8 +426,8 @@ void get_completion(CCode* ccode, LSPContext* ctx){
     LayerCodeData* lcd = (LayerCodeData*) top_code_layer->layer_data;
     Cursor* cursor = lcd->cursor;
 
-    unsigned int line = cursor->y;
-    unsigned int character = cursor->x;
+    uint64_t line = cursor->y;
+    uint64_t character = cursor->x;
 
     JsonValue* params = make_completion_params(lcd->uri, line, character);
     JsonValue* message = make_completion_request(json_new_string("completion"), params);
@@ -1002,7 +1081,6 @@ void layer_code_draw_text_selection(LayerCodeData* lcd){
 
 int64_t layer_code_get_selection_delete_size(LayerCodeData* lcd){
     // TODO: Make sure this is right.
-    // FIXME: Crash happends when there is select and enter is pressed
     if(lcd->select_end == NULL){
         return -1;
     }
@@ -1408,7 +1486,7 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
 
         LABEL(carried_to_previous_line)
     }
-    // TODO: Remove movement lock check for unintented behaviour
+
     else if(chr == CTL_BKSP){
         if(code_data->select_end != NULL){
             layer_code_update(ccode, layer, CUSTOM_KEY_BACKSPACE);
@@ -1508,11 +1586,9 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
     else if(chr == 3){
         char* copied_data = layer_code_selection_to_buffer(code_data);
         if(copied_data != NULL){
-            free(code_data->select_end);
-            code_data->select_end = NULL;
+            set_clipboard_content(copied_data);
+            arrfree(copied_data);
         }
-        set_clipboard_content(copied_data);
-        arrfree(copied_data);
     }
     /* Temp shortcut for CTRL + V*/
     else if(!isCursorLocked && chr == 22){
@@ -1532,6 +1608,16 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
             layer_code_add_character(c, code_data, reparse);
         }
         arrfree(clipboard_content);
+    }
+
+    /* Temp shortcut for CTRL + X*/
+    else if(chr == 24){
+        char* copied_data = layer_code_selection_to_buffer(code_data);
+        if(copied_data != NULL){
+            set_clipboard_content(copied_data);
+            arrfree(copied_data);
+            layer_code_update(ccode, layer, CUSTOM_KEY_BACKSPACE);
+        }
     }
 
     else if(!isCursorLocked && chr == KEY_DC){
@@ -1563,6 +1649,12 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
     bool lsp_running = is_lspkind_running(ccode, lsp_kind);
 
     if(is_file_edit && lsp_running){
+        // when the code buffer was modified we will remove the diagnostics
+        // of the old buffer
+        if(code_data->diagnostics != NULL){
+            json_free(code_data->diagnostics);
+            code_data->diagnostics = NULL;
+        }
         send_to_lsp(ccode, get_running_lsp(ccode, lsp_kind));
     }
 

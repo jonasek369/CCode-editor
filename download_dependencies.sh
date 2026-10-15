@@ -120,3 +120,7 @@ for entry in "${languages[@]}"; do
 done
 
 echo "==> run ./nob to compile and start Ccode-editor"
+
+wait 
+
+./nob

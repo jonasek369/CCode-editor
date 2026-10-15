@@ -70,7 +70,7 @@ int get_diagnostic_color(JsonValue* diagnostic) {
         printf("Diagnostic does not have severity!\n");
         return -1;
     }
-    switch ((int)severity->number) {
+    switch (json_get_integer(severity)) {
         case 1: return COLOR_PAIR_ERROR;
         case 2: return COLOR_PAIR_WARNING;
         case 3: return COLOR_PAIR_INFORMATION;
@@ -389,6 +389,43 @@ void syntax_highlighting_render(LayerCodeData* lcd) {
             MVADDCH(br, c, ch, COLOR_PAIR_DEFAULT, A_NORMAL);
         }
     }
+
+    if(lcd->diagnostics && lcd->allow_diagnostics){
+        JsonValue* params    = shget(lcd->diagnostics->object, "params");
+        JsonValue* diags     = shget(params->object, "diagnostics");
+        size_t     diags_len = arrlenu(diags->array);
+
+        for(size_t i = 0; i < diags_len; i++){
+            LSPRange* range = lcd->ranges[i];
+            if (!range) {
+                lcd->ranges[i] = get_range(diags->array[i]);
+                range = lcd->ranges[i];
+            }
+            if(range->start_line >= lcd->cursor->yoff &&
+               range->end_line <= win_h + lcd->cursor->yoff){
+                int diagnostic_color_pair = get_diagnostic_color(diags->array[i]);
+                attron(COLOR_PAIR(diagnostic_color_pair) | A_UNDERLINE);
+                int64_t diag_line_len = range->end_line - range->start_line;
+                if(diag_line_len == 0){
+                    char* starting_pos = lcd->code_buffer[range->start_line] + range->start_character;
+                    mvprintw(
+                        range->start_line - lcd->cursor->yoff + win_y,
+                        range->start_character - lcd->cursor->xoff + win_x,
+                        "%.*s",
+                        range->end_character - range->start_character,
+                        starting_pos
+                    );
+                }else{
+                    // TODO: Could not find a code that triggers this path yet
+                    // TODO: when i do and i can test it ill fix it
+                    json_print(diags->array[i], 4, 0);
+                    assert(false && "Multiline warning/error from LSP please create a github issue and provide this json and file that triggered this error");
+                }
+                attroff(COLOR_PAIR(diagnostic_color_pair) | A_UNDERLINE);
+            }
+        }
+    }
+
     END_PROFILING("render");
 #undef MVADDCH
 

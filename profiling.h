@@ -121,9 +121,11 @@
     }
 #else
     #define START_PROFILING()
-    #define END_PROFILING(label) 
+    #define END_PROFILING(label)
+
+    static size_t depth = 0;
     
-    static void prof_pop_print() {}
+    static void prof_pop_print_ms() {}
     static void prof_pop_print_ns() {}
 
     static void prof_print(WINDOW* win) {}

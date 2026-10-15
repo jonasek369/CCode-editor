@@ -71,9 +71,9 @@ JsonValue* make_ccode_initialize_params(const char* root_uri) {
     json_add_child(completion, "completionItem", completionItem);
 
     json_add_child(textDocument, "completion", completion);
+    json_add_child(textDocument, "versionSupport", json_new_bool(true));
 
     json_add_child(capabilities, "textDocument", textDocument);
-    json_add_child(params, "capabilities", capabilities);
 
     JsonValue* clientInfo = json_new_object();
     json_add_child(clientInfo, "name", json_new_string("C-LSP-Client"));
@@ -86,6 +86,7 @@ JsonValue* make_ccode_initialize_params(const char* root_uri) {
 //method: textDocument/publishDiagnostics
 void handle_publishDiagnostics(CCode* ccode, JsonValue* message){
 	Layer* top_code_layer = NULL;
+	printf("recieve handle of diagnostics\n");
 	for(int i = 0; i < arrlen(ccode->layers); i++){
         if(ccode->layers[i]->type == LAYER_CODE || ccode->layers[i]->type == LAYER_SPLIT_VIEW){
         	top_code_layer = ccode->layers[i];
@@ -109,14 +110,13 @@ void handle_publishDiagnostics(CCode* ccode, JsonValue* message){
 	JsonValue* params = NULL;
 	JsonValue* uri = NULL;
 	JsonValue* version = NULL;
- 
 
 	TYPE_CHECK_FIELD(message, params, JSON_OBJECT);
 	TYPE_CHECK_FIELD(params, uri, JSON_STRING);
 	version = shget(params->object, "version");
 	// pylsp dose not return version
 	if(version){
-		int version_int = (int)version->number;
+		int version_int = json_get_integer(version);
 
 		if(strcmp(lcd->uri, uri->string) == 0 && lcd->version == version_int){
 			if(lcd->diagnostics != NULL){
@@ -131,6 +131,7 @@ void handle_publishDiagnostics(CCode* ccode, JsonValue* message){
 				lcd->ranges = NULL;
 			}
 			lcd->diagnostics = message;
+			printf("setting diagnostics!\n");
 			JsonValue* params = shget(lcd->diagnostics->object, "params");
             JsonValue* diags  = shget(params->object, "diagnostics");
 			arrsetlen(lcd->ranges, arrlenu(diags->array));

@@ -102,7 +102,7 @@ typedef enum {
     COMMAND_SPLIT_VIEW,
     COMMAND_FLOATING_WINDOW,
     COMMAND_CONFIG,
-    COMMAND_HELP
+    COMMAND_DIAGNOSTICS
 } CommandType;
 
 typedef enum {
@@ -188,6 +188,7 @@ static VirtualWindow default_virtual_window = {.x = 0, .y = 1, .width = 0, .heig
 
 
 typedef struct {
+    bool allow_diagnostics;
     bool saved;
     char* filename;
     char** code_buffer;

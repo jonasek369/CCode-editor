@@ -1,9 +1,15 @@
 #define NOB_IMPLEMENTATION
 #include "nob.h"
 
-#define OPTIMISATION       1
-#define COMPILE_PROFILING  1
+#define RELEASE 0
 
+#if(RELEASE == 1)
+    #define OPTIMISATION       1
+    #define COMPILE_PROFILING  0
+#else
+    #define OPTIMISATION       0
+    #define COMPILE_PROFILING  1
+#endif
 
 #define incl "./PDCurses"
 #ifdef _WIN32

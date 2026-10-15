@@ -9,8 +9,34 @@ typedef struct {
     CommandType value;
 } CommandMap;
 
-static CommandMap* commands = NULL;
+// used for the welcome screen
+#define LONGEST_COMMAND 7
 
+static CommandMap* commands = NULL;
+static char* commands_info[COMMAND_DIAGNOSTICS + 1] = {
+    "<path>             | Opens a file",
+    "                   | Quits the application",
+    "<line> <character> | Jumps to line and character (optional)",
+    "<command>          | Executes a system command",
+    "                   | Saves the current focused file",
+    "<path>             | Writes the current file to a path",
+    "                   | Saves the current file and quits",
+    "                   | Opens a floating window",
+    "<substr>           | Finds text in the current file",
+    "                   | Force-closes the current file",
+    "                   | Closes the current file",
+    "<name>             | Changes the current file name",
+    "                   | Opens the file tree",
+    "<path>             | Changes the file tree directory",
+    "                   | Toggles the display of profiling information",
+    "                   | Opens theme picker",
+    "<filename>         | Creates a new file in tree",
+    "<dirname>          | Creates a new directory in tree",
+    "                   | Splits two code layers into left and right side",
+    "<path>             | Deletes a file in tree",
+    "                   | Opens the configuration file",
+    "                   | Toggle of diagnostics in focused file"
+};
 
 void add_command(const char* command, CommandType type){
     char* key = strdup(command);
@@ -39,7 +65,7 @@ void init_commands(){
     add_command(":sw",     COMMAND_SPLIT_VIEW);
     add_command(":rm",     COMMAND_DELETE_FILE);
     add_command(":conf",   COMMAND_CONFIG);
-    add_command(":help",   COMMAND_HELP);
+    add_command(":diag",   COMMAND_DIAGNOSTICS);
 }
 
 void destroy_commands(){

@@ -546,7 +546,25 @@ void console_execute_command(CCode* ccode, const char* buffer){
             read_file_to_code_layer(ccode, config_path, strlen(config_path));
             break;
         }
-        case COMMAND_HELP: {
+
+        case COMMAND_DIAGNOSTICS: {
+            Layer* first_code_layer = NULL;
+            for(int i = arrlen(ccode->layers) - 1; i >= 0; i--){
+                if(ccode->layers[i]->type == LAYER_CODE){
+                    first_code_layer = ccode->layers[i];
+                }else if(ccode->layers[i]->type == LAYER_SPLIT_VIEW){
+                    LayerSplitViewData* lsvd = ccode->layers[i]->layer_data;
+                    first_code_layer = lsvd->splitten_layers[lsvd->focused];
+                    // Always true for now (planned feature to make other layers splitable)
+                    assert(first_code_layer->type == LAYER_CODE);
+                }
+            }
+            if(!first_code_layer){
+                break;
+            }
+            LayerCodeData* lcd= first_code_layer->layer_data;
+            lcd->allow_diagnostics = !lcd->allow_diagnostics;
+
             break;
         }
 
