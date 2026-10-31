@@ -379,62 +379,11 @@ void read_file_to_code_layer(CCode* ccode, const char* filepath_start, size_t si
     lcd->saved = true;
     push_layer_to_top(ccode, file_layer);
     make_parser(ccode, filename.items);
-    // TODO: register and check with lsp_start
     file_on_open_callback(ccode, (void*)file_layer);
-    /*LSPKind lsp_kind = lang_to_lspkind[lcd->lang];
-    if(lsp_kind != LSPKIND_UNKNOWN && is_lspkind_installed(lsp_kind) && is_lspkind_running(ccode, lsp_kind) == false){
-        LSPContext* ctx = start_lsp(lsp_kind, make_ccode_initialize_params(lcd->uri));
-        arrput(ccode->lsp_ctxs, ctx);
-        printf("Started LSP %s\n", lsp_kind_cstr[lsp_kind]);
-    }
-    if(is_lspkind_running(ccode, lsp_kind)){
-        LSPContext* ctx = get_running_lsp(ccode, lsp_kind);
-        char* flatten = flatten_buffer(lcd);
-        char* escaped = json_escape(flatten);
-        JsonValue* params = make_didOpen_params(lcd->uri, lsp_to_cstr_lang[lsp_kind], 1, escaped);
-        JsonValue* message = make_didOpen_notification(params);
-        tiny_queue_push(ctx->sender_queue, message);
-        free(flatten);
-        free(escaped);
-    }*/
     nob_sb_free(sb);
     nob_sb_free(filename);
 }
 
-
-void send_to_lsp(CCode* ccode, LSPContext* ctx){
-    Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
-    if(top_code_layer == NULL){
-        return;
-    }
-    LayerCodeData* lcd = (LayerCodeData*) top_code_layer->layer_data;
-
-    char* flatten = flatten_buffer(lcd);
-    char* escaped = json_escape(flatten);
-
-    JsonValue* params = make_didChange_params(lcd->uri, ++(lcd->version), escaped);
-    JsonValue* message = make_didChange_notification(params);
-    tiny_queue_push(ctx->sender_queue, message);
-    free(flatten);
-    free(escaped);
-}
-
-
-void get_completion(CCode* ccode, LSPContext* ctx){
-    Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
-    if(top_code_layer == NULL){
-        return;
-    }
-    LayerCodeData* lcd = (LayerCodeData*) top_code_layer->layer_data;
-    Cursor* cursor = lcd->cursor;
-
-    uint64_t line = cursor->y;
-    uint64_t character = cursor->x;
-
-    JsonValue* params = make_completion_params(lcd->uri, line, character);
-    JsonValue* message = make_completion_request(json_new_string("completion"), params);
-    tiny_queue_push(ctx->sender_queue, message);
-}
 
 
 void change_filename(CCode* ccode, const char* new_filename, size_t size){
