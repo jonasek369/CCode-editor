@@ -324,10 +324,11 @@ int main(int argc, char** argv) {
             nob_copy_directory_recursively("/usr/share/ccode-editor/scm_queries", queries_path);
         }
     #endif
-        
+    printf("%s\n", config_path);
     CCode ccode   = {0};
     ccode.layers  = NULL;
     ccode.config  = load_config(config_path);
+    register_lsp_from_config(&ccode);
 
     int ch;
 

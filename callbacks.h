@@ -76,23 +76,31 @@ void file_on_save_callback(CCode* ccode, void* data){
     get_config_directory(path, sizeof(path));
     snprintf(config_path, sizeof(config_path), "%s/config.json", path);
     if(strncmp(config_path, lcd->filename, strlen(config_path)) == 0){
-        if(ccode->config->theme){
-            free_theme(ccode->config->theme);
-        }
-        free(ccode->config);
+        free_config(ccode->config);
         ccode->config = load_config(config_path);
         init_syntax_colors(ccode->config->theme);
+        register_lsp_from_config(ccode);
     }
 }
 
-const char* get_suffix(const char *filename){
-    if (filename == NULL)
-        return NULL;
+const char *get_suffix(const char *path){
+    if(path == NULL)
+        return "";
+
+    const char *filename = strrchr(path, '/');
+
+    #ifdef _WIN32
+    const char *backslash = strrchr(path, '\\');
+    if(backslash && (!filename || backslash > filename))
+        filename = backslash;
+    #endif
+
+    filename = filename ? filename + 1 : path;
 
     const char *dot = strrchr(filename, '.');
 
-    if (dot == NULL || dot == filename)
-        return NULL;
+    if(dot == NULL || dot == filename)
+        return "";
 
     return dot + 1;
 }
@@ -103,11 +111,20 @@ void file_on_open_callback(CCode* ccode, void* data){
     LayerCodeData* lcd = code_layer->layer_data;
     const char* suffix = get_suffix(lcd->filename);
     LSPID matching_lsp = shget(lsp_file_suffix_register, suffix);
-    if(matching_lsp < 0) return;
+    if(matching_lsp < 1) return;
     char* language_id = hmget(lsp_language_id_register, matching_lsp);
+    if(ccode->lsp_ctxs){
+        for(size_t i = 0; i < arrlenu(ccode->lsp_ctxs); i++){
+            LSPContext* ctx = ccode->lsp_ctxs[i];
+            if(ctx->kind == matching_lsp){
+                // lsp is already running exit
+                return;
+            }
+        }
+    }
     LSPContext* ctx = start_lsp(matching_lsp, make_ccode_initialize_params(lcd->uri));
     arrput(ccode->lsp_ctxs, ctx);
-    printf("Started LSP\n");
+    printf("Started LSP %d\n", matching_lsp);
     char* flatten = flatten_buffer(lcd);
     char* escaped = json_escape(flatten);
     JsonValue* params = make_didOpen_params(lcd->uri, language_id, 1, escaped);
@@ -123,7 +140,7 @@ void file_on_change_callback(CCode* ccode, void* data){
     LayerCodeData* lcd = code_layer->layer_data;
     const char* suffix = get_suffix(lcd->filename);
     LSPID matching_lsp = shget(lsp_file_suffix_register, suffix);
-    if(matching_lsp < 0) return;
+    if(matching_lsp < 1) return;
     if(ccode->lsp_ctxs){
         for(size_t i = 0; i < arrlenu(ccode->lsp_ctxs); i++){
             LSPContext* ctx = ccode->lsp_ctxs[i];
@@ -177,7 +194,7 @@ void file_on_close_callback(CCode* ccode, void* data){
     LayerCodeData* lcd = code_layer->layer_data;
     const char* suffix = get_suffix(lcd->filename);
     LSPID matching_lsp = shget(lsp_file_suffix_register, suffix);
-    if(matching_lsp < 0) return;
+    if(matching_lsp < 1) return;
 
     bool running = false;
     if(ccode->lsp_ctxs){

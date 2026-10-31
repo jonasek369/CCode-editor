@@ -160,6 +160,13 @@ const char *default_theme_json =
 "    ]\n"
 "}";
 
+typedef struct {
+    char* name;
+    char* cmd;
+    char* lsp_language_id;
+    char** file_suffixes;
+} ConfigLSP;
+
 
 typedef struct {
     bool PrivateRunning;
@@ -168,6 +175,7 @@ typedef struct {
     bool close_code_layer_on_split_view_close;
     ColorTheme* theme;
     size_t tab_size;
+    ConfigLSP** lsps;
 } CCodeConfig;
 
 
@@ -239,7 +247,22 @@ CCodeConfig* make_default_config(){
     conf->theme = load_theme(NULL);
     conf->tab_size = 4;
     conf->close_code_layer_on_split_view_close = false;
+    conf->lsps = NULL;
     return conf;
+}
+
+
+static JsonValue* config_lsp_to_json(ConfigLSP* clsp){
+    JsonValue* obj = json_new_object();
+    json_add_child(obj, "name", json_new_string(clsp->name));
+    json_add_child(obj, "cmd", json_new_string(clsp->cmd));
+    JsonValue* suffixes = json_new_array();
+    for(size_t i = 0; i < arrlenu(clsp->file_suffixes); i++){
+        json_add_child(suffixes, NULL, json_new_string(clsp->file_suffixes[i]));
+    }
+    json_add_child(obj, "file_suffixes", suffixes);
+    json_add_child(obj, "lsp_language_id", json_new_string(clsp->lsp_language_id));
+    return obj;
 }
 
 void save_config(CCodeConfig* config){
@@ -254,6 +277,12 @@ void save_config(CCodeConfig* config){
     json_add_child(json_config, "profiling", json_new_bool(config->profiling));
     json_add_child(json_config, "tab_size", json_new_integer(config->tab_size));
     json_add_child(json_config, "close_code_layer_on_split_view_close", json_new_bool(config->close_code_layer_on_split_view_close));
+    JsonValue* lsps = json_new_array();
+    for(size_t i = 0; i < arrlenu(config->lsps); i++){
+        json_add_child(lsps, NULL, config_lsp_to_json(config->lsps[i]));
+    }
+    json_add_child(json_config, "lsps", lsps);
+
     char* out = NULL;
     json_dump(json_config, &out, 4, 0);
     arrput(out, (char)0);
@@ -278,6 +307,7 @@ CCodeConfig* load_config(const char* path){
     CCodeConfig* config = malloc(sizeof(CCodeConfig));
     config->PrivateRunning = true;
     config->PrivateCloseConsole = false;
+    config->lsps = NULL;
     JsonValue* json_config = malloc(sizeof(JsonValue));
     if(!json_config){
         return NULL;
@@ -336,6 +366,77 @@ CCodeConfig* load_config(const char* path){
         config->close_code_layer_on_split_view_close = close_code_on_sv_close->boolean;
     }
 
+
+    JsonValue* lsps = shget(json_config->object, "lsps");
+    if(!lsps || lsps->type != JSON_ARRAY){
+        printf("LSP are empty\n");
+        config->lsps = NULL; // defualt
+    }else{
+        for(size_t i = 0; i < arrlenu(lsps->array); i++){
+            ConfigLSP* clsp = malloc(sizeof(ConfigLSP));
+            JsonValue* json_definition = lsps->array[i];
+            if(json_definition->type != JSON_OBJECT){
+                printf("LSP definition in config is not an object! Skipping\n");
+                free(clsp);
+                continue;
+            }
+            // name
+            JsonValue* name = shget(json_definition->object, "name");
+            if(!name || name->type != JSON_STRING){
+                printf("LSP definition does not contain name or it isnt string! Skipping\n");
+                free(clsp);
+                continue;
+            }else{
+                clsp->name = strdup(name->string);
+            }
+            // cmd
+            JsonValue* cmd = shget(json_definition->object, "cmd");
+            if(!cmd || cmd->type != JSON_STRING){
+                printf("LSP definition does not contain cmd or it isnt string! Skipping\n");
+                free(clsp->name);
+                free(clsp);
+                continue;
+            }else{
+                clsp->cmd = strdup(cmd->string);
+            }
+            // lsp_language_id
+            JsonValue* lsp_language_id = shget(json_definition->object, "lsp_language_id");
+            if(!lsp_language_id || lsp_language_id->type != JSON_STRING){
+                printf("LSP definition does not contain lsp_language_id or it isnt string! Skipping\n");
+                free(clsp->name);
+                free(clsp->cmd);
+                free(clsp);
+                continue;
+            }else{
+                clsp->lsp_language_id = strdup(lsp_language_id->string);
+            }
+            // file suffixes
+            JsonValue* file_suffixes_json = shget(json_definition->object, "file_suffixes");
+            if(!file_suffixes_json || file_suffixes_json->type != JSON_ARRAY){
+                printf("LSP definition does not contain file_suffixes or it isnt array! Skipping\n");
+                free(clsp->cmd);
+                free(clsp->name);
+                free(clsp->lsp_language_id);
+                free(clsp);
+                continue;
+            }else{
+                char** file_suffixes = NULL;
+                for(size_t i = 0; i < arrlenu(file_suffixes_json->array); i++){
+                    JsonValue* suffix = file_suffixes_json->array[i];
+                    if(suffix->type != JSON_STRING){
+                        printf("WARN: LSP Suffixes contains something other than string\n");
+                        continue;
+                    }else{
+                        arrput(file_suffixes, strdup(suffix->string));
+                    }
+                }
+                clsp->file_suffixes = file_suffixes;
+            }
+            arrput(config->lsps, clsp);
+        }
+    }
+
+
     json_free(json_config);
     return config;
 }
@@ -380,6 +481,33 @@ void free_theme(ColorTheme* theme){
     free(theme);
 }
 
-
+void free_config(CCodeConfig* cfg){
+    if(!cfg) return;
+    if(cfg->theme){
+        free_theme(cfg->theme);
+    }
+    if(cfg->lsps){
+        for(size_t i = 0; i < arrlenu(cfg->lsps); i++){
+            ConfigLSP* lsp = cfg->lsps[i];
+            if(lsp->name){
+                free(lsp->name);
+            }
+            if(lsp->cmd){
+                free(lsp->cmd);
+            }
+            if(lsp->lsp_language_id){
+                free(lsp->lsp_language_id);
+            } 
+            if(lsp->file_suffixes){
+                for(size_t j = 0; j < arrlenu(lsp->file_suffixes); j++){
+                    free(lsp->file_suffixes[j]);
+                }
+                arrfree(lsp->file_suffixes);
+            }
+        }
+        arrfree(cfg->lsps);
+    }
+    free(cfg);
+}
 
 #endif

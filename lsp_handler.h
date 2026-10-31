@@ -221,26 +221,46 @@ void init_lsp_handler(){
 	shput(lsp_method_handler, "textDocument/publishDiagnostics", handle_publishDiagnostics);
 
 	shput(lsp_id_handler, "completion", handle_completion);
+}
 
-	// TODO: Make LSPs register from json
+void register_lsp_from_config(CCode* ccode){
+	CCodeConfig* config = ccode->config;
 
-	// Register CLANGD
-	LSPID clangdid = register_lsp("clangd", "clangd");
-	if(clangdid > -1){
-		shput(lsp_file_suffix_register, "h", clangdid);
-		shput(lsp_file_suffix_register, "c", clangdid);
-		hmput(lsp_language_id_register, clangdid, "c");
-	}else{
-		printf("Could not register CLANGD\n");
+	if(!config->lsps) return;
+	printf("loading lsps\n");
+
+	if(lsp_file_suffix_register){
+		shfree(lsp_file_suffix_register);
+		lsp_file_suffix_register = NULL;
+	}
+	if(lsp_language_id_register){
+		hmfree(lsp_language_id_register);
+		lsp_language_id_register = NULL;
 	}
 
-	// Register PYLSP
-	LSPID pylsp = register_lsp("pylsp", "pylsp");
-	if(pylsp > -1){
-		shput(lsp_file_suffix_register, "py", pylsp);
-		hmput(lsp_language_id_register, pylsp, "python");
-	}else{
-		printf("Could not register PYLSP\n");
+	clear_lsp_registry();
+
+	// Stop all lps when reloading
+    if(ccode->lsp_ctxs){
+        for(size_t i = 0; i < arrlenu(ccode->lsp_ctxs); i++){
+            destroy_lsp(ccode->lsp_ctxs[i]);
+        }
+        arrfree(ccode->lsp_ctxs);
+        ccode->lsp_ctxs = NULL;
+    }
+
+	for(size_t i = 0; i < arrlenu(config->lsps); i++){
+		ConfigLSP* clsp = config->lsps[i];
+		LSPID lsp_id = register_lsp(clsp->name, clsp->cmd);
+		if(lsp_id > -1){
+			for(size_t j = 0; j < arrlenu(clsp->file_suffixes); j++){
+				shput(lsp_file_suffix_register, clsp->file_suffixes[j], lsp_id);
+			}
+			hmput(lsp_language_id_register, lsp_id, clsp->lsp_language_id);
+			printf("Registered lsp %s as %d\n", clsp->name, lsp_id);
+		}else{
+			printf("Could not register %s\n", clsp->name);
+		}
 	}
 }
 
