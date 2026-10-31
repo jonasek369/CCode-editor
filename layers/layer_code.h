@@ -379,7 +379,9 @@ void read_file_to_code_layer(CCode* ccode, const char* filepath_start, size_t si
     lcd->saved = true;
     push_layer_to_top(ccode, file_layer);
     make_parser(ccode, filename.items);
-    LSPKind lsp_kind = lang_to_lspkind[lcd->lang];
+    // TODO: register and check with lsp_start
+    file_on_open_callback(ccode, (void*)file_layer);
+    /*LSPKind lsp_kind = lang_to_lspkind[lcd->lang];
     if(lsp_kind != LSPKIND_UNKNOWN && is_lspkind_installed(lsp_kind) && is_lspkind_running(ccode, lsp_kind) == false){
         LSPContext* ctx = start_lsp(lsp_kind, make_ccode_initialize_params(lcd->uri));
         arrput(ccode->lsp_ctxs, ctx);
@@ -394,7 +396,7 @@ void read_file_to_code_layer(CCode* ccode, const char* filepath_start, size_t si
         tiny_queue_push(ctx->sender_queue, message);
         free(flatten);
         free(escaped);
-    }
+    }*/
     nob_sb_free(sb);
     nob_sb_free(filename);
 }
@@ -513,6 +515,7 @@ bool do_completion(CCode* ccode){
     if(to_add == NULL || to_add->type != JSON_OBJECT){
         return false;
     }
+    // FIXME: Pylsp returns just the text to add
     JsonValue* text_edit = shget(to_add->object, "textEdit");
     if(text_edit == NULL || text_edit->type != JSON_OBJECT){
         return false;
@@ -604,9 +607,7 @@ bool do_completion(CCode* ccode){
     free(lcd->completion_window);
     lcd->completion_window = NULL;
     lcd->completion_function_params = cfp;
-    if(is_lspkind_running(ccode, lang_to_lspkind[lcd->lang])){
-        send_to_lsp(ccode, get_running_lsp(ccode, lang_to_lspkind[lcd->lang]));
-    }
+    file_on_change_callback(ccode, top_code_layer);
 
     if(cfp != NULL && cfp->index_char_positions != NULL){
         size_t len = arrlenu(cfp->index_char_positions);
@@ -648,27 +649,7 @@ void close_code_layer(CCode* ccode, bool forced){
         message_to_console(ccode, "Cannot close unsaved file save it or use ':c!' to force close");
         return;
     }else{
-        LSPKind kind = lang_to_lspkind[lcd->lang];
-        if(is_lspkind_running(ccode, kind)){
-            size_t same_langs = 0;
-            Layer** code_layers = all_type_layers(ccode, LAYER_CODE);
-            for(size_t i = 0; i < arrlenu(code_layers); i++){
-                if(to_close == code_layers[i]) continue;
-                if(lcd->lang == ((LayerCodeData*)code_layers[i]->layer_data)->lang) same_langs++;
-            }
-            if(same_langs == 0){
-                size_t at_index = 0;
-                for(size_t i = 0; i < arrlenu(ccode->lsp_ctxs); i++){
-                    if(ccode->lsp_ctxs[i]->kind == kind){
-                        at_index = i;
-                        break;
-                    }
-                }
-                destroy_lsp(ccode->lsp_ctxs[at_index]);
-                arrdel(ccode->lsp_ctxs, at_index);
-            }
-            arrfree(code_layers);
-        }
+        file_on_close_callback(ccode, (void*) to_close);
         free_layer(to_close);
         remove_layer(ccode, to_close);
     }
@@ -1645,17 +1626,9 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
 
     bool is_printable = isprint(chr);
 
-    LSPKind lsp_kind = lang_to_lspkind[code_data->lang];
-    bool lsp_running = is_lspkind_running(ccode, lsp_kind);
 
-    if(is_file_edit && lsp_running){
-        // when the code buffer was modified we will remove the diagnostics
-        // of the old buffer
-        if(code_data->diagnostics != NULL){
-            json_free(code_data->diagnostics);
-            code_data->diagnostics = NULL;
-        }
-        send_to_lsp(ccode, get_running_lsp(ccode, lsp_kind));
+    if(is_file_edit){
+        file_on_change_callback(ccode, layer);
     }
 
     if(code_data->completion_window){
@@ -1667,11 +1640,10 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
         }
     }
 
-    if(is_printable && lsp_running){
-        LSPContext* ctx = get_running_lsp(ccode, lsp_kind);
-        get_completion(ccode, ctx);
-    }
 
+    if(is_printable){
+        file_on_type_callback(ccode, layer);
+    }
     
     int screen_y = code_data->cursor->y - code_data->cursor->yoff;
     if(screen_y < 0){

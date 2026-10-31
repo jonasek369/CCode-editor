@@ -6,23 +6,20 @@ typedef struct {
 } LSPResponseHandlerMap;
 
 typedef struct {
-	SyntaxLanguage key;
-	LSPKind value;
-} LangToLSP;
+    char* key;
+    LSPID value;
+} LSPFileSuffix;
+
+typedef struct {
+	LSPID key;
+	char* value;
+} LSPLanguageid;
 
 static LSPResponseHandlerMap* lsp_method_handler = NULL;
 static LSPResponseHandlerMap* lsp_id_handler = NULL;
-static LSPKind lang_to_lspkind[64];
-static char* lsp_to_cstr_lang[64] = {
-    [LSPKIND_CLANGD] = "c",
-    [LSPKIND_PYLSP]   = "python",
-    [LSPKIND_RUST_ANALYZER] = "rust"
-};
-static char* lsp_kind_cstr[64] = {
-	[LSPKIND_CLANGD] = "CLANGD",
-    [LSPKIND_PYLSP]   = "PYLSP",
-    [LSPKIND_RUST_ANALYZER] = "RUST-ANALYZER"
-};
+
+static LSPFileSuffix* lsp_file_suffix_register = NULL;
+static LSPLanguageid* lsp_language_id_register = NULL;
 
 // Quite disgusting but I like it
 #define TYPE_CHECK_FIELD(obj, key, expected_type) 				 \
@@ -74,6 +71,7 @@ JsonValue* make_ccode_initialize_params(const char* root_uri) {
     json_add_child(textDocument, "versionSupport", json_new_bool(true));
 
     json_add_child(capabilities, "textDocument", textDocument);
+    json_add_child(params, "capabilities", capabilities);
 
     JsonValue* clientInfo = json_new_object();
     json_add_child(clientInfo, "name", json_new_string("C-LSP-Client"));
@@ -209,10 +207,7 @@ void handle_completion(CCode* ccode, JsonValue* message){
 	CompletionWindow* win = malloc(sizeof(CompletionWindow));
 	win->completion = message;
 	win->selected = 0;
-	win->items_count = 6;
-	if(arrlenu(items->array) < 6){
-		win->items_count = arrlenu(items->array);
-	} 
+	win->items_count = arrlenu(items->array) < 6 ? arrlenu(items->array) : 6;  
 
 	lcd->completion_window = win;
 	return;
@@ -227,43 +222,34 @@ void init_lsp_handler(){
 
 	shput(lsp_id_handler, "completion", handle_completion);
 
-	for (int i = 0; i < 64; i++)
-        lang_to_lspkind[i] = LSPKIND_UNKNOWN;
+	// TODO: Make LSPs register from json
 
-    lang_to_lspkind[LANG_C] = LSPKIND_CLANGD;
-    lang_to_lspkind[LANG_PYTHON] = LSPKIND_PYLSP;
-    lang_to_lspkind[LANG_RUST] = LSPKIND_RUST_ANALYZER;
+	// Register CLANGD
+	LSPID clangdid = register_lsp("clangd", "clangd");
+	if(clangdid > -1){
+		shput(lsp_file_suffix_register, "h", clangdid);
+		shput(lsp_file_suffix_register, "c", clangdid);
+		hmput(lsp_language_id_register, clangdid, "c");
+	}else{
+		printf("Could not register CLANGD\n");
+	}
 
-    get_installed_lsps();
-}
-
-bool is_lspkind_running(CCode* ccode, LSPKind lsp_kind){
-	if(ccode->lsp_ctxs == NULL){
-		return false;
+	// Register PYLSP
+	LSPID pylsp = register_lsp("pylsp", "pylsp");
+	if(pylsp > -1){
+		shput(lsp_file_suffix_register, "py", pylsp);
+		hmput(lsp_language_id_register, pylsp, "python");
+	}else{
+		printf("Could not register PYLSP\n");
 	}
-	for(size_t i = 0; i < arrlenu(ccode->lsp_ctxs); i++){
-		if(ccode->lsp_ctxs[i]->kind == lsp_kind){
-			return true;
-		}
-	}
-	return false;
-}
-
-LSPContext* get_running_lsp(CCode* ccode, LSPKind lsp_kind){
-	if(ccode->lsp_ctxs == NULL){
-		return NULL;
-	}
-	for(size_t i = 0; i < arrlenu(ccode->lsp_ctxs); i++){
-		if(ccode->lsp_ctxs[i]->kind == lsp_kind){
-			return ccode->lsp_ctxs[i];
-		}
-	}
-	return NULL;
 }
 
 void destory_lsp_handlers(){
 	shfree(lsp_method_handler);
 	shfree(lsp_id_handler);
+
+	shfree(lsp_file_suffix_register);
+	hmfree(lsp_language_id_register);
 }
 
 void handle_lsp(CCode* ccode, LSPContext* ctx){

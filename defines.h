@@ -308,6 +308,13 @@ char *flatten_buffer(LayerCodeData *code){
 void file_remove_callback(CCode* ccode, void* data);
 void file_not_remove_callback(CCode* ccode, void* data);
 void file_on_save_callback(CCode* ccode, void* data);
+
+// Used for LSP
+void file_on_open_callback(CCode* ccode, void* data);
+void file_on_close_callback(CCode* ccode, void* data);
+void file_on_change_callback(CCode* ccode, void* data);
+void file_on_type_callback(CCode* ccode, void* data);
+
 bool file_before_save_callback(CCode* ccode, void* data);
 
 #include "layers.h"

@@ -574,8 +574,7 @@ int main(int argc, char** argv) {
     destroy_commands();
     destroy_syntax_highlighting();
     destory_lsp_handlers();
-
-    arrfree(installed_lsps);
+    destroy_registered_lsps();
 
     // Clean up
     endwin();   // End curses mode
