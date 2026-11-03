@@ -1068,7 +1068,9 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
         (code_data->select_end != NULL && !(chr == KEY_DOWN || chr == KEY_UP));
 
     if((chr >= KEY_DOWN && chr <= KEY_RIGHT) && code_data->select_end){
-        free(code_data->select_end);
+        // set the cursor to the position that the selection ended
+        free(code_data->cursor);
+        code_data->cursor = code_data->select_end;
         code_data->select_end = NULL;
     }
 

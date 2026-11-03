@@ -13,7 +13,7 @@ typedef struct {
 #define LONGEST_COMMAND 7
 
 static CommandMap* commands = NULL;
-static char* commands_info[COMMAND_DIAGNOSTICS + 1] = {
+static char* commands_info[COMMAND_MOVE_MODE + 1] = {
     "<path>             | Opens a file",
     "                   | Quits the application",
     "<line> <character> | Jumps to line and character (optional)",
@@ -35,7 +35,8 @@ static char* commands_info[COMMAND_DIAGNOSTICS + 1] = {
     "                   | Splits two code layers into left and right side",
     "<path>             | Deletes a file in tree",
     "                   | Opens the configuration file",
-    "                   | Toggle of diagnostics in focused file"
+    "                   | Toggle of diagnostics in focused file",
+    "                   | Toggles move mode in split view layer"
 };
 
 void add_command(const char* command, CommandType type){
@@ -66,6 +67,7 @@ void init_commands(){
     add_command(":rm",     COMMAND_DELETE_FILE);
     add_command(":conf",   COMMAND_CONFIG);
     add_command(":diag",   COMMAND_DIAGNOSTICS);
+    add_command(":mv",     COMMAND_MOVE_MODE);
 }
 
 void destroy_commands(){

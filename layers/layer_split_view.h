@@ -16,6 +16,7 @@ Layer* new_layer_split_view(){
 	split_view->handle_keypress_function = &layer_split_view_handle_keypress;
 
 	LayerSplitViewData* lsvd = malloc(sizeof(LayerSplitViewData));
+	lsvd->move_mode = false;
 	lsvd->splitten_layers = NULL;
 	lsvd->virtual_windows = NULL;
 	lsvd->focused = -1;
@@ -185,7 +186,7 @@ bool layer_split_view_update(CCode* ccode, Layer* layer, int chr){
     	chr = -1;
     }
 
-    if(chr == KEY_SLEFT || chr == KEY_SRIGHT){
+    if(lsvd->move_mode && (chr == KEY_SLEFT || chr == KEY_SRIGHT)){
     	layer_split_view_resize(lsvd, chr == KEY_SLEFT ? -1 : 1);
     	chr = -1;
     }

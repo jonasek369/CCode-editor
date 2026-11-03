@@ -26,6 +26,17 @@ char* str_to_arr(const char* str){
     return arr;
 }
 
+bool str_arr_cmp(const char* a, const char* b){
+    if(arrlenu(a) != arrlenu(b)) return false;
+
+    for(size_t i = 0; i < arrlenu(a); i++){
+        if(a[i] != b[i]) return false;
+    }
+
+    return true;
+}
+
+
 bool can_read_file(const char* filepath) {
     #if _WIN32
     return _access(filepath, R_OK) == 0;

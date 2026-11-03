@@ -25,6 +25,12 @@
 
 #include "curses.h"
 
+
+// Needed for hmput to work using stb_ds
+#if defined(__GNUC__) || defined(__clang__)
+    #define typeof __typeof__
+#endif
+
 #define STB_DS_IMPLEMENTATION
 #include "stb_ds.h"
 #define CJSON_NO_STB_DS
@@ -102,7 +108,8 @@ typedef enum {
     COMMAND_SPLIT_VIEW,
     COMMAND_FLOATING_WINDOW,
     COMMAND_CONFIG,
-    COMMAND_DIAGNOSTICS
+    COMMAND_DIAGNOSTICS,
+    COMMAND_MOVE_MODE
 } CommandType;
 
 typedef enum {
@@ -216,8 +223,6 @@ typedef struct {
 typedef struct {
     char* console_buffer;
     int console_buffer_x;
-    char** history;
-    int history_index;
 } LayerConsoleData;
 
 typedef struct {
@@ -257,6 +262,7 @@ struct Layer {
 };
 
 typedef struct {
+    bool move_mode;
     Layer** splitten_layers;         // Array of split layers 
     VirtualWindow** virtual_windows;
     int focused;                     // index into splitten_layers

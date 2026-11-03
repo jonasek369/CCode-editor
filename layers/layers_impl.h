@@ -460,6 +460,10 @@ void draw_ui(CCode* ccode) {
         if(lcd->completion_function_params != NULL){
             mode = "CFP";
         }
+    }else if(layer_at_top->type == LAYER_SPLIT_VIEW && ((LayerSplitViewData*) layer_at_top->layer_data)->move_mode){
+        mode = "MV";
+    }else if(layer_at_top->type == LAYER_FLOATING_TREE){
+        mode = "FT";
     }
 
     if(layer_at_top->type == LAYER_CONSOLE){
@@ -502,8 +506,15 @@ void draw_ui(CCode* ccode) {
 
     if(layer_at_top->type == LAYER_CODE){
         LayerCodeData* lcd = (LayerCodeData*) layer_at_top->layer_data;
-        int cursor_screen_y = lcd->cursor->y - lcd->cursor->yoff + 1;
-        int cursor_screen_x = lcd->cursor->x - lcd->cursor->xoff;
+
+        Cursor* cursor = lcd->cursor;
+
+        if(lcd->select_end){
+            cursor = lcd->select_end;
+        }
+
+        int cursor_screen_y = cursor->y - cursor->yoff + 1;
+        int cursor_screen_x = cursor->x - cursor->xoff;
         move(cursor_screen_y, cursor_screen_x);
     }else if(layer_at_top->type == LAYER_CONSOLE){
         LayerConsoleData* lcd = (LayerConsoleData*) layer_at_top->layer_data;
@@ -523,14 +534,20 @@ void draw_ui(CCode* ccode) {
         }
     
         LayerCodeData* lcd = (LayerCodeData*) lsvd->splitten_layers[lsvd->focused]->layer_data;
-    
+        
+        Cursor* cursor = lcd->cursor;
+
+        if(lcd->select_end){
+            cursor = lcd->select_end;
+        }
+
         int virt_x, virt_y;
         if (lcd->virtual_window != NULL) {
-            virt_x = (lcd->cursor->x - lcd->cursor->xoff) + lcd->virtual_window->x;
-            virt_y = (lcd->cursor->y - lcd->cursor->yoff) + lcd->virtual_window->y;
+            virt_x = (cursor->x - cursor->xoff) + lcd->virtual_window->x;
+            virt_y = (cursor->y - cursor->yoff) + lcd->virtual_window->y;
         } else {
-            virt_x = lcd->cursor->x - lcd->cursor->xoff;
-            virt_y = lcd->cursor->y - lcd->cursor->yoff + 1;
+            virt_x = cursor->x - cursor->xoff;
+            virt_y = cursor->y - cursor->yoff + 1;
         }
     
         move(virt_y, virt_x);

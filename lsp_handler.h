@@ -252,7 +252,7 @@ void register_lsp_from_config(CCode* ccode){
 	for(size_t i = 0; i < arrlenu(config->lsps); i++){
 		ConfigLSP* clsp = config->lsps[i];
 		LSPID lsp_id = register_lsp(clsp->name, clsp->cmd);
-		if(lsp_id > -1){
+		if(lsp_id > 0){
 			for(size_t j = 0; j < arrlenu(clsp->file_suffixes); j++){
 				shput(lsp_file_suffix_register, clsp->file_suffixes[j], lsp_id);
 			}

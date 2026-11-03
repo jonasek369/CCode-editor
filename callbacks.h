@@ -113,23 +113,27 @@ void file_on_open_callback(CCode* ccode, void* data){
     LSPID matching_lsp = shget(lsp_file_suffix_register, suffix);
     if(matching_lsp < 1) return;
     char* language_id = hmget(lsp_language_id_register, matching_lsp);
+    bool running = false;
+    LSPContext* running_ctx = NULL;
     if(ccode->lsp_ctxs){
         for(size_t i = 0; i < arrlenu(ccode->lsp_ctxs); i++){
             LSPContext* ctx = ccode->lsp_ctxs[i];
             if(ctx->kind == matching_lsp){
-                // lsp is already running exit
-                return;
+                running = true;
+                running_ctx = ctx;
             }
         }
     }
-    LSPContext* ctx = start_lsp(matching_lsp, make_ccode_initialize_params(lcd->uri));
-    arrput(ccode->lsp_ctxs, ctx);
-    printf("Started LSP %d\n", matching_lsp);
+    if(!running){
+        running_ctx = start_lsp(matching_lsp, make_ccode_initialize_params(lcd->uri));
+        arrput(ccode->lsp_ctxs, running_ctx);
+        printf("Started LSP %d\n", matching_lsp);
+    }
     char* flatten = flatten_buffer(lcd);
     char* escaped = json_escape(flatten);
     JsonValue* params = make_didOpen_params(lcd->uri, language_id, 1, escaped);
     JsonValue* message = make_didOpen_notification(params);
-    tiny_queue_push(ctx->sender_queue, message);
+    tiny_queue_push(running_ctx->sender_queue, message);
     free(flatten);
     free(escaped);
 }

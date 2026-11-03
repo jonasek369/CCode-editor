@@ -5,6 +5,12 @@
 void layer_console_handle_keypress(CCode* ccode, Layer* layer, int chr, bool should_draw);
 bool layer_console_update(CCode* ccode, Layer* layer, int chr);
 
+// Defined outside the layer because we need this to persisnt between console opens
+static char** console_history = NULL;
+static int console_history_index = 0;
+static char* console_history_draft = NULL;
+static bool console_history_navigating = false;
+
 
 Layer* new_layer_console(){
     Layer* console = malloc(sizeof(Layer));
@@ -25,6 +31,7 @@ Layer* new_layer_console(){
     lcd->console_buffer = NULL;
     arrput(lcd->console_buffer, '\0');
     lcd->console_buffer_x = 0;
+
     console->layer_data = lcd;
     return console;
 }
@@ -568,6 +575,14 @@ void console_execute_command(CCode* ccode, const char* buffer){
             break;
         }
 
+        case COMMAND_MOVE_MODE: {
+            Layer* top_sv_layer = top_type_layer(ccode, LAYER_SPLIT_VIEW);
+            if(!top_sv_layer) break;
+            LayerSplitViewData* lsvd = top_sv_layer->layer_data;
+            lsvd->move_mode = !lsvd->move_mode;
+            break;
+        } 
+
         default: {
             break;
         }
@@ -684,6 +699,10 @@ bool layer_console_update(CCode* ccode, Layer* layer, int chr){
     } else if(chr == CUSTOM_KEY_ENTER){
         ccode->config->PrivateCloseConsole = true;
         console_execute_command(ccode, console_data->console_buffer);
+        char* arr_copy = str_to_arr(console_data->console_buffer);
+        
+        arrput(console_history, arr_copy);
+        console_history_index = arrlen(console_history);
     } else if(chr == CUSTOM_KEY_BACKSPACE){
         if(console_data->console_buffer_x > 0 && arrlen(console_data->console_buffer) > 1){
             (void) arrpop(console_data->console_buffer);
@@ -700,7 +719,50 @@ bool layer_console_update(CCode* ccode, Layer* layer, int chr){
         if(console_data->console_buffer_x < arrlen(console_data->console_buffer)-1){
             console_data->console_buffer_x++;
         }
-    } else if(chr == CUSTOM_KEY_TAB){
+    } else if(chr == KEY_UP) {
+        if(!console_history || arrlen(console_history) == 0)
+            return true;
+    
+        if(!console_history_navigating){
+            console_history_navigating = true;
+            if(console_history_draft){
+                arrfree(console_history_draft);
+            }
+            console_history_draft = str_to_arr(console_data->console_buffer);
+            console_history_index = arrlen(console_history);
+        }
+    
+        if(console_history_index > 0){
+            console_history_index--;
+        }
+    
+        arrfree(console_data->console_buffer);
+        console_data->console_buffer = str_to_arr(console_history[console_history_index]);
+        console_data->console_buffer_x = strlen(console_data->console_buffer);
+    } else if(chr == KEY_DOWN) {
+        if(!console_history_navigating)
+            return true;
+    
+        if(console_history_index < arrlen(console_history) - 1){
+            console_history_index++;
+    
+            arrfree(console_data->console_buffer);
+            console_data->console_buffer = str_to_arr(console_history[console_history_index]);
+        } else {
+            // restore draft
+            console_history_index = arrlen(console_history);
+    
+            arrfree(console_data->console_buffer);
+            console_data->console_buffer = str_to_arr(console_history_draft);
+    
+            console_history_navigating = false;
+    
+            arrfree(console_history_draft);
+            console_history_draft = NULL;
+        }
+    
+        console_data->console_buffer_x = strlen(console_data->console_buffer);
+    }else if(chr == CUSTOM_KEY_TAB){
         // typehint autocomplete
         if(arrlen(console_data->console_buffer) <= 1) return true;
 

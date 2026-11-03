@@ -53,7 +53,7 @@ int main(int argc, char **argv){
 
     // Build Ccode-editor
     nob_cmd_append(&cmd,
-        "cc", "-D_DEFAULT_SOURCE", "-m64", "-std=gnu11", "-g",
+        "cc", "-D_DEFAULT_SOURCE", "-m64", "-std=c11", "-g",
         "-I", incl,
         "-L", lib,
         "-I", "./tree-sitter/lib/include",
