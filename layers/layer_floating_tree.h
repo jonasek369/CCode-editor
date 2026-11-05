@@ -140,7 +140,7 @@ void layer_floating_tree_load_file(CCode* ccode, Layer* layer, LayerFloatingTree
         return;
     }
 	char* arr = str_to_arr(resolved_path);
-	read_file_to_code_layer(ccode, arr, arrlen(arr)-1);
+	read_file_to_code_layer(ccode, arr, arrlen(arr)-1, true);
 	arrfree(arr);
     layer_floating_tree_close(ccode, layer);
 }

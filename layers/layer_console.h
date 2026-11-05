@@ -102,7 +102,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
 
         case COMMAND_OPEN: {
             if (arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_STRING) {
-                read_file_to_code_layer(ccode, to.tokens[1].string.start, to.tokens[1].string.size);
+                read_file_to_code_layer(ccode, to.tokens[1].string.start, to.tokens[1].string.size, true);
             }
             break;
         }
@@ -550,7 +550,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
 
             get_config_directory(path, sizeof(path));
             snprintf(config_path, sizeof(config_path), "%s/config.json", path);
-            read_file_to_code_layer(ccode, config_path, strlen(config_path));
+            read_file_to_code_layer(ccode, config_path, strlen(config_path), true);
             break;
         }
 

@@ -102,7 +102,7 @@ bool layer_dir_walk_open(CCode* ccode, Layer* layer, LayerDirWalkData* ldwd){
         }
         default: {
             char* arr = str_to_arr(resolved_path);
-            read_file_to_code_layer(ccode, arr, arrlen(arr)-1);
+            read_file_to_code_layer(ccode, arr, arrlen(arr)-1, true);
             arrfree(arr);
             remove_layer(ccode, layer);
             free_layer(layer);

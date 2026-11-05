@@ -233,10 +233,39 @@ void handle_definition(CCode* ccode, JsonValue* message){
 			}
 		}
 	}
-	Layer* layer = read_file_to_code_layer(ccode, uri->string + 6, strlen(uri->string) - 6);
+	Layer* top_code_layer = NULL;
+	for(int i = 0; i < arrlen(ccode->layers); i++){
+        if(ccode->layers[i]->type == LAYER_CODE || ccode->layers[i]->type == LAYER_SPLIT_VIEW){
+        	top_code_layer = ccode->layers[i];
+        	break;
+        }
+    }
+    if(top_code_layer == NULL || top_code_layer == NULL){
+    	Layer* layer = read_file_to_code_layer(ccode, uri->string + 6, strlen(uri->string) - 6, true);
+		LayerCodeData* lcd = layer->layer_data;
+		lcd->cursor->x = range->start_character;
+		lcd->cursor->y = range->start_line;
+		goto defer;
+    }
+
+	Layer* layer = read_file_to_code_layer(ccode, uri->string + 6, strlen(uri->string) - 6, false);
 	LayerCodeData* lcd = layer->layer_data;
 	lcd->cursor->x = range->start_character;
 	lcd->cursor->y = range->start_line;
+	
+	make_parser(layer, get_filename(lcd->uri));
+	file_on_open_callback(ccode, (void*)layer);
+
+	remove_layer(ccode, top_code_layer);
+
+	Layer* split = new_layer_split_view();
+	LayerSplitViewData* lsvd = split->layer_data;
+	make_split_view(split, top_code_layer, layer);
+	lsvd->focused = 1;
+
+	push_layer_to_top(ccode, split);
+ 
+
 defer:
 	if(range){
 		free(range);

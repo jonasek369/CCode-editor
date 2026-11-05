@@ -43,7 +43,7 @@ void handle_args(CCode* ccode, int argc, char** argv){
         Layer* tree = new_layer_dir_walk(cwd);
         push_layer_to_top(ccode, tree);
     }else{
-        read_file_to_code_layer(ccode, argv[1], strlen(argv[1]));
+        read_file_to_code_layer(ccode, argv[1], strlen(argv[1]), true);
     }
 }
 

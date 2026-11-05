@@ -259,12 +259,7 @@ bool get_language_scm_query(SyntaxLanguage lang, Nob_String_Builder* out){
 }
 
 
-void make_parser(CCode* ccode, char* filename){
-    Layer* layer = top_type_layer(ccode, LAYER_CODE);
-    if(!layer){
-        return;
-    }
-
+void make_parser(Layer* layer, const char* filename){
     LayerCodeData* lcd = layer->layer_data;
 
     const TSLanguage* lang = get_filetype_language_parser(filename, &(lcd->lang));
@@ -316,7 +311,7 @@ void make_parser(CCode* ccode, char* filename){
     free(flatten);
 }
 
-Layer* read_file_to_code_layer(CCode* ccode, const char* filepath_start, size_t size){
+Layer* read_file_to_code_layer(CCode* ccode, const char* filepath_start, size_t size, bool add_to_ccode){
     Nob_String_Builder sb = {0};
     Nob_String_Builder filename = {0};
     nob_da_append_many(&filename, filepath_start, size);
@@ -377,9 +372,11 @@ Layer* read_file_to_code_layer(CCode* ccode, const char* filepath_start, size_t 
         arrput(lcd->code_buffer, line);
     }
     lcd->saved = true;
-    push_layer_to_top(ccode, file_layer);
-    make_parser(ccode, filename.items);
-    file_on_open_callback(ccode, (void*)file_layer);
+    if(add_to_ccode){
+        push_layer_to_top(ccode, file_layer);
+        make_parser(file_layer, filename.items);
+        file_on_open_callback(ccode, (void*)file_layer);
+    }
     nob_sb_free(sb);
     nob_sb_free(filename);
     
@@ -402,7 +399,7 @@ void change_filename(CCode* ccode, const char* new_filename, size_t size){
         arrput(lcd->filename, new_filename[i]);
     }
     arrput(lcd->filename, '\0');
-    make_parser(ccode, lcd->filename);
+    make_parser(top_code_layer, lcd->filename);
 }
 
 

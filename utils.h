@@ -39,7 +39,7 @@ const char *get_suffix(const char *path){
     return dot + 1;
 }
 
-const char* get_filename(char* path){
+const char* get_filename(const char* path){
     if(path == NULL)
         return NULL;
 
