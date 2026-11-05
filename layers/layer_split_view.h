@@ -186,8 +186,10 @@ bool layer_split_view_update(CCode* ccode, Layer* layer, int chr){
     	chr = -1;
     }
 
-    if(lsvd->move_mode && (chr == KEY_SLEFT || chr == KEY_SRIGHT)){
-    	layer_split_view_resize(lsvd, chr == KEY_SLEFT ? -1 : 1);
+    if(lsvd->move_mode && (chr == KEY_LEFT || chr == KEY_RIGHT)){
+    	layer_split_view_resize(lsvd, chr == KEY_LEFT ? -1 : 1);
+    	chr = -1;
+    }else if(lsvd->move_mode && is_cursor_movement_key(chr)){
     	chr = -1;
     }
 

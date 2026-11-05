@@ -90,14 +90,14 @@ static char* layer_code_center_text_in_buffer(const char* buffer, int w){
     char* centered_text = NULL;
     int offset = w-buffer_len;
 
-    for(size_t i = 0; i < offset/2; i++){
+    for(int i = 0; i < offset/2; i++){
         arrput(centered_text, ' ');
     }
     while(*buffer){
         arrput(centered_text, *buffer);
         buffer++;
     }
-    for(size_t i = 0; i < offset/2-1; i++){
+    for(int i = 0; i < offset/2-1; i++){
         arrput(centered_text, ' ');
     }
     arrput(centered_text, '\n');
@@ -109,14 +109,14 @@ static char* layer_code_left_allign_text_in_buffer(const char* buffer, int left_
     size_t buffer_len = strlen(buffer);
     char* left_allign = NULL;
     int rem = w-buffer_len-left_pad;
-    for(size_t i = 0; i < left_pad; i++){
+    for(int i = 0; i < left_pad; i++){
         arrput(left_allign, ' ');
     }
     while(*buffer){
         arrput(left_allign, *buffer);
         buffer++;
     }
-    for(size_t i = 0; i < rem-1; i++){
+    for(int i = 0; i < rem-1; i++){
         arrput(left_allign, ' ');
     }
     arrput(left_allign, '\n');
@@ -316,7 +316,7 @@ void make_parser(CCode* ccode, char* filename){
     free(flatten);
 }
 
-void read_file_to_code_layer(CCode* ccode, const char* filepath_start, size_t size){
+Layer* read_file_to_code_layer(CCode* ccode, const char* filepath_start, size_t size){
     Nob_String_Builder sb = {0};
     Nob_String_Builder filename = {0};
     nob_da_append_many(&filename, filepath_start, size);
@@ -331,7 +331,7 @@ void read_file_to_code_layer(CCode* ccode, const char* filepath_start, size_t si
 
         message_to_console(ccode, message);
         nob_sb_free(sb);
-        return;
+        return new_layer;
     }
 
     if(!nob_read_entire_file(filename.items, &sb)){
@@ -382,6 +382,8 @@ void read_file_to_code_layer(CCode* ccode, const char* filepath_start, size_t si
     file_on_open_callback(ccode, (void*)file_layer);
     nob_sb_free(sb);
     nob_sb_free(filename);
+    
+    return file_layer;
 }
 
 
@@ -1169,7 +1171,6 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
         }
     }
 
-
     if(inFindSubstrMode){
         FindingSubstr* fss = code_data->finding_substr;
         bool change = false;
@@ -1201,7 +1202,6 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
         }
         layer_code_add_character(chr, code_data, true);
     }
-
     else if(chr == CUSTOM_KEY_BACKSPACE){
         if(code_data->select_end != NULL){
             int64_t to_delete = layer_code_get_selection_delete_size(code_data);
@@ -1318,7 +1318,6 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
 
         code_data->saved = false;
     }
-
     else if(chr == CUSTOM_KEY_ENTER && code_data->completion_window){
         if(do_completion(ccode)){
             chr = -1;
@@ -1330,7 +1329,6 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
         }
         layer_code_handle_enter(code_data);
     }
-
     else if(!isCursorLocked && (chr == KEY_DOWN || chr == KEY_UP) && code_data->completion_window){
         if(chr == KEY_DOWN && code_data->completion_window->selected < code_data->completion_window->items_count){
             code_data->completion_window->selected++;
@@ -1418,7 +1416,6 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
 
         LABEL(carried_to_previous_line)
     }
-
     else if(chr == CTL_BKSP){
         if(code_data->select_end != NULL){
             layer_code_update(ccode, layer, CUSTOM_KEY_BACKSPACE);
@@ -1496,7 +1493,9 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
 
         TS_REPARSE(code_data);
     }
-
+    else if(chr == ALT_I){
+        file_find_definition_callback(ccode, layer);
+    }
     /* For debug CTRL + G */
     else if (!isCursorLocked && chr == 7){
         for(size_t i = 0; i < arrlenu(code_data->code_buffer[code_data->cursor->y]); i++){

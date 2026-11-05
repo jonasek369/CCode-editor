@@ -17,6 +17,59 @@ char* stringview_to_str(const char* view, size_t size) {
     return str;
 }
 
+const char *get_suffix(const char *path){
+    if(path == NULL)
+        return "";
+
+    const char *filename = strrchr(path, '/');
+
+    #ifdef _WIN32
+    const char *backslash = strrchr(path, '\\');
+    if(backslash && (!filename || backslash > filename))
+        filename = backslash;
+    #endif
+
+    filename = filename ? filename + 1 : path;
+
+    const char *dot = strrchr(filename, '.');
+
+    if(dot == NULL || dot == filename)
+        return "";
+
+    return dot + 1;
+}
+
+const char* get_filename(char* path){
+    if(path == NULL)
+        return NULL;
+
+    const char *filename = strrchr(path, '/');
+
+    #ifdef _WIN32
+    const char *backslash = strrchr(path, '\\');
+    if(backslash && (!filename || backslash > filename))
+        filename = backslash;
+    #endif
+
+    if(!filename) return NULL;
+    return filename;
+}
+
+char* project_uri_from_file_uri(const char *file_uri){
+    const char *lastSlash = strrchr(file_uri, '/');
+    char* folder = NULL;
+
+    if (lastSlash == NULL) {
+        arrput(folder, '\0');
+        return folder;
+    }
+    for(size_t i = 0; i < lastSlash - file_uri; i++){
+        arrput(folder, file_uri[i]);
+    }
+    arrput(folder, '\0');
+    return folder;
+}
+
 char* str_to_arr(const char* str){
     char* arr = NULL;
     for(int i = 0; i < strlen(str); i++){
@@ -26,16 +79,14 @@ char* str_to_arr(const char* str){
     return arr;
 }
 
-bool str_arr_cmp(const char* a, const char* b){
-    if(arrlenu(a) != arrlenu(b)) return false;
-
-    for(size_t i = 0; i < arrlenu(a); i++){
-        if(a[i] != b[i]) return false;
-    }
-
-    return true;
+bool is_cursor_movement_key(int chr){
+    return chr == KEY_LEFT  ||
+           chr == KEY_RIGHT ||
+           chr == KEY_UP    ||
+           chr == KEY_DOWN  ||
+           chr == KEY_SLEFT ||
+           chr == KEY_SRIGHT;
 }
-
 
 bool can_read_file(const char* filepath) {
     #if _WIN32

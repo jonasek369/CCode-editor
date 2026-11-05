@@ -308,6 +308,11 @@ char *flatten_buffer(LayerCodeData *code){
 
 #include "profiling.h"
 #include "syntax_highlighting.h"
+
+// used on definition find
+void push_layer_to_top(CCode* ccode, Layer* to_top);
+Layer* read_file_to_code_layer(CCode* ccode, const char* filepath_start, size_t size);
+
 #include "lsp_handler.h"
 
 // declaring callbacks that needs to be defined for layers.h
@@ -322,6 +327,7 @@ void file_on_change_callback(CCode* ccode, void* data);
 void file_on_type_callback(CCode* ccode, void* data);
 
 bool file_before_save_callback(CCode* ccode, void* data);
+void file_find_definition_callback(CCode* ccode, void* data);
 
 #include "layers.h"
 #include "callbacks.h"

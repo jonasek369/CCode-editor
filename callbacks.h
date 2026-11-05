@@ -83,28 +83,6 @@ void file_on_save_callback(CCode* ccode, void* data){
     }
 }
 
-const char *get_suffix(const char *path){
-    if(path == NULL)
-        return "";
-
-    const char *filename = strrchr(path, '/');
-
-    #ifdef _WIN32
-    const char *backslash = strrchr(path, '\\');
-    if(backslash && (!filename || backslash > filename))
-        filename = backslash;
-    #endif
-
-    filename = filename ? filename + 1 : path;
-
-    const char *dot = strrchr(filename, '.');
-
-    if(dot == NULL || dot == filename)
-        return "";
-
-    return dot + 1;
-}
-
 void file_on_open_callback(CCode* ccode, void* data){
     if(!data) return;
     Layer* code_layer = data;
@@ -230,6 +208,29 @@ void file_on_close_callback(CCode* ccode, void* data){
         printf("Shutdown LSP\n");
     }
     arrfree(code_layers);
+}
+
+void file_find_definition_callback(CCode* ccode, void* data){
+    if(!data) return;
+    Layer* code_layer = data;
+    LayerCodeData* lcd = code_layer->layer_data;
+    const char* suffix = get_suffix(lcd->filename);
+    LSPID matching_lsp = shget(lsp_file_suffix_register, suffix);
+    if(ccode->lsp_ctxs){
+        for(size_t i = 0; i < arrlenu(ccode->lsp_ctxs); i++){
+            LSPContext* ctx = ccode->lsp_ctxs[i];
+            if(ctx->kind == matching_lsp){
+                Cursor* cursor = lcd->cursor;
+
+                uint64_t line = cursor->y;
+                uint64_t character = cursor->x;
+
+                JsonValue* params = make_definition_params(lcd->uri, line, character);
+                JsonValue* message = make_definition_request(json_new_string("definition"), params);
+                tiny_queue_push(ctx->sender_queue, message);
+            }
+        }
+    }
 }
 
 #endif

@@ -29,7 +29,8 @@ void generate_compile_flags(Nob_Cmd* cmd){
     }
     FILE* f = fopen("compile_flags.txt", "w");
     if(!f){
-        exit(1);
+        fprintf(stderr, "Could not open file to generate 'compile_flags.txt'\n");
+        return;
     }
     for(size_t i = 1; i < cmd->count; i++){
         fprintf(f, "%s\n", cmd->items[i]);

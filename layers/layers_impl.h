@@ -405,7 +405,7 @@ void draw_ui(CCode* ccode) {
             if (label_len > cells_per_layer - 1) {
                 label_len = cells_per_layer - 1;
             }
-
+            
             for (int j = 0; j < label_len; j++) {
                 top_line[size++] = label[j];
             }

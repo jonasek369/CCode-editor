@@ -31,21 +31,24 @@ do { 			 												 \
     }               											 \
 } while(0) 													     \
 
-JsonValue* make_ccode_initialize_params(const char* root_uri) {
+JsonValue* make_ccode_initialize_params(const char* file_uri) {
     JsonValue* params = json_new_object();
 
     // processId (null is fine)
     json_add_child(params, "processId", json_new_null());
 
     // rootUri
-    if (root_uri) {
-        json_add_child(params, "rootUri", json_new_string(root_uri));
+    if (file_uri) {
+    	char* uri = project_uri_from_file_uri(file_uri); 
+        json_add_child(params, "rootUri", json_new_string(uri));
+        arrfree(uri);
     } else {
         json_add_child(params, "rootUri", json_new_null());
     }
 
     JsonValue* capabilities = json_new_object();
     JsonValue* textDocument = json_new_object();
+
 
     JsonValue* sync = json_new_object();
     json_add_child(sync, "didOpen", json_new_bool(true));
@@ -69,6 +72,13 @@ JsonValue* make_ccode_initialize_params(const char* root_uri) {
 
     json_add_child(textDocument, "completion", completion);
     json_add_child(textDocument, "versionSupport", json_new_bool(true));
+    json_add_child(textDocument, "linkSupport", json_new_bool(true));	
+
+    if(file_uri){
+        JsonValue* workspace_c   = json_new_object();
+    	json_add_child(workspace_c, "workspaceFolders", json_new_bool(true));
+    	json_add_child(capabilities, "workspace", workspace_c);	
+    }
 
     json_add_child(capabilities, "textDocument", textDocument);
     json_add_child(params, "capabilities", capabilities);
@@ -77,6 +87,19 @@ JsonValue* make_ccode_initialize_params(const char* root_uri) {
     json_add_child(clientInfo, "name", json_new_string("C-LSP-Client"));
     json_add_child(clientInfo, "version", json_new_string("0.1.0"));
     json_add_child(params, "clientInfo", clientInfo);
+
+    if(file_uri){
+		JsonValue* workspaces = json_new_array();
+
+    	JsonValue* workspace = json_new_object();
+    	char* uri = project_uri_from_file_uri(file_uri); 
+    	json_add_child(workspace, "uri", json_new_string(uri));
+    	json_add_child(workspace, "name", json_new_string("project"));
+    	arrfree(uri);
+    	json_add_child(workspaces, NULL, workspace);
+
+    	json_add_child(params, "workspaceFolders", workspaces);
+    }
 
     return params;
 }
@@ -168,6 +191,61 @@ defer:
 	return;
 }
 
+
+void handle_definition(CCode* ccode, JsonValue* message){
+	JsonValue* result = NULL;
+	JsonValue* uri = NULL;
+	LSPRange*  range = NULL;
+	TYPE_CHECK_FIELD(message, result, JSON_ARRAY);
+	if(arrlenu(result->array) > 1){
+		printf("Found multiple definitions opening only first!\n");
+	}
+	if(arrlenu(result->array) == 0){
+		goto defer;
+	}
+	JsonValue* first_result = result->array[0];
+	TYPE_CHECK_FIELD(first_result, uri, JSON_STRING);
+	range = get_range(first_result);
+	for(size_t i = 0; i < arrlenu(ccode->layers); i++){
+		if(ccode->layers[i]->type == LAYER_CODE){
+			LayerCodeData* lcd = ccode->layers[i]->layer_data;
+			if(!lcd->uri) continue;
+			if(strcmp(uri->string, lcd->uri) == 0){
+				push_layer_to_top(ccode, ccode->layers[i]);
+				lcd->cursor->x = range->start_character;
+				lcd->cursor->y = range->start_line;
+				goto defer;
+			} 
+		}else if(ccode->layers[i]->type == LAYER_SPLIT_VIEW){
+			LayerSplitViewData* lsvd = ccode->layers[i]->layer_data;
+			LayerCodeData* focused = lsvd->splitten_layers[(int)lsvd->focused]->layer_data;
+			LayerCodeData* unfocused = lsvd->splitten_layers[(int)(!lsvd->focused)]->layer_data;
+
+			if(focused->uri && strcmp(focused->uri, uri->string) == 0){
+				focused->cursor->x = range->start_character;
+				focused->cursor->y = range->start_line;
+				goto defer;
+			}else if(unfocused->uri && strcmp(unfocused->uri, uri->string) == 0){
+				lsvd->focused = !lsvd->focused;
+				unfocused->cursor->x = range->start_character;
+				unfocused->cursor->y = range->start_line;
+				goto defer;
+			}
+		}
+	}
+	Layer* layer = read_file_to_code_layer(ccode, uri->string + 6, strlen(uri->string) - 6);
+	LayerCodeData* lcd = layer->layer_data;
+	lcd->cursor->x = range->start_character;
+	lcd->cursor->y = range->start_line;
+defer:
+	if(range){
+		free(range);
+	}
+	json_free(message);
+	return;
+}
+
+
 void handle_completion(CCode* ccode, JsonValue* message){
 	Layer* top_code_layer = NULL;
 	for(int i = 0; i < arrlen(ccode->layers); i++){
@@ -221,6 +299,7 @@ void init_lsp_handler(){
 	shput(lsp_method_handler, "textDocument/publishDiagnostics", handle_publishDiagnostics);
 
 	shput(lsp_id_handler, "completion", handle_completion);
+	shput(lsp_id_handler, "definition", handle_definition);
 }
 
 void register_lsp_from_config(CCode* ccode){
