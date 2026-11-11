@@ -7,9 +7,50 @@ bool layer_console_update(CCode* ccode, Layer* layer, int chr);
 
 // Defined outside the layer because we need this to persisnt between console opens
 static char** console_history = NULL;
-static int console_history_index = 0;
+static int64_t console_history_index = 0;
 static char* console_history_draft = NULL;
 static bool console_history_navigating = false;
+
+
+bool has_token_types(Token* tokens, ...){
+    va_list args;
+    va_start(args, tokens);
+
+    bool result = true;
+    int i = 1;
+    int len = arrlen(tokens);
+
+    while (true){
+        ConsoleTokenType expected = va_arg(args, ConsoleTokenType);
+
+        if(expected == TOKEN_INVALID)
+            break;
+
+        if(i >= len || tokens[i].type != expected){
+            result = false;
+            break;
+        }
+
+        i++;
+    }
+
+    va_end(args);
+
+    return result;
+}
+
+
+void destroy_console_history(){
+    if(console_history){
+        for(int i = 0; i < arrlen(console_history); i++){
+            arrfree(console_history[i]);
+        }
+        arrfree(console_history);
+    }
+    if(console_history_draft){
+        arrfree(console_history_draft);
+    }
+}
 
 
 Layer* new_layer_console(){
@@ -101,20 +142,20 @@ void console_execute_command(CCode* ccode, const char* buffer){
         } 
 
         case COMMAND_OPEN: {
-            if (arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_STRING) {
+            if (has_token_types(to.tokens, TOKEN_STRING, NULL)) {
                 read_file_to_code_layer(ccode, to.tokens[1].string.start, to.tokens[1].string.size, true);
             }
             break;
         }
 
         case COMMAND_GOTO: {
-            if (arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_INTEGER && to.tokens[1].integer >= 0) {
+            if (has_token_types(to.tokens, TOKEN_INTEGER, NULL) && to.tokens[1].integer >= 0) {
                 Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
                 LayerCodeData* lcd = top_code_layer->layer_data;
                 if (!lcd->cursor) break;
 
                 lcd->cursor->y = to.tokens[1].integer > arrlen(lcd->code_buffer)-1 ? arrlen(lcd->code_buffer)-1 : to.tokens[1].integer;
-                if (arrlen(to.tokens) >= 3 && to.tokens[2].type == TOKEN_INTEGER && to.tokens[2].integer >= 0) {
+                if (has_token_types(to.tokens, TOKEN_INTEGER, TOKEN_INTEGER, NULL) && to.tokens[2].integer >= 0) {
                     lcd->cursor->x = to.tokens[2].integer;
                 }
             }
@@ -122,7 +163,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
         }
 
         case COMMAND_CHANGE_NAME: {
-            if (arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_STRING) {
+            if (has_token_types(to.tokens, TOKEN_STRING, NULL)) {
                 change_filename(ccode, to.tokens[1].string.start, to.tokens[1].string.size);
             }
             break;
@@ -173,7 +214,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
         }
 
         case COMMAND_SAVE: {
-            if (arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_STRING) {
+            if (has_token_types(to.tokens, TOKEN_STRING, NULL)) {
                 change_filename(ccode, to.tokens[1].string.start, to.tokens[1].string.size);
                 write_code_layer_to_file(ccode, false);
             }
@@ -196,7 +237,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
                 nth_occurence = to.tokens[2].integer;
             }
 
-            if (top_fs_layer->type == LAYER_CODE && arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_STRING) {
+            if (top_fs_layer->type == LAYER_CODE && has_token_types(to.tokens, TOKEN_STRING, NULL)) {
                 Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
                 if(top_code_layer){
                     LayerCodeData* lcd = top_code_layer->layer_data;
@@ -208,7 +249,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
                 }
                 find_jump(ccode, to.tokens[1].string.start, to.tokens[1].string.size, nth_occurence);
                 break;
-            }else if(top_fs_layer->type == LAYER_SPLIT_VIEW && arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_STRING){
+            }else if(top_fs_layer->type == LAYER_SPLIT_VIEW && has_token_types(to.tokens, TOKEN_STRING, NULL)){
                 Layer* active_code_layer = layer_split_view_get_active(top_fs_layer);
                 if(active_code_layer){
                     LayerCodeData* lcd = active_code_layer->layer_data;
@@ -261,7 +302,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
             if(top_tree_layer == NULL){
                 char* dir_arr = NULL;
 
-                if(arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_STRING){
+                if(has_token_types(to.tokens, TOKEN_STRING, NULL)){
                     char* as_str = stringview_to_str(to.tokens[1].string.start, to.tokens[1].string.size);
                     dir_arr = str_to_arr(as_str);
                     free(as_str);
@@ -287,7 +328,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
             }else{
                 char* dir_arr = NULL;
 
-                if(arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_STRING){
+                if(has_token_types(to.tokens, TOKEN_STRING, NULL)){
                     char* as_str = stringview_to_str(to.tokens[1].string.start, to.tokens[1].string.size);
                     dir_arr = str_to_arr(as_str);
                     free(as_str);
@@ -358,7 +399,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
         }
 
         case COMMAND_THEME: {
-            if(arrlen(to.tokens) >= 2 && to.tokens[1].type == TOKEN_STRING){
+            if(has_token_types(to.tokens, TOKEN_STRING, NULL)){
                 char* as_str = stringview_to_str(to.tokens[1].string.start, to.tokens[1].string.size);
                 printf("loading %s\n", as_str);
                 ColorTheme* new_theme = load_theme(as_str);
@@ -443,24 +484,20 @@ void console_execute_command(CCode* ccode, const char* buffer){
             int layer_count = arrlen(code_layers);
             if (layer_count < 2) {
                 message_to_console(ccode, "At least two code layers have to be opened!");
-                break;
+                goto sw_defer;
             }
         
             int win_a_index = 0;
             int win_b_index = 1;
         
-            if (arrlen(to.tokens) >= 2 &&
-                to.tokens[1].type == TOKEN_INTEGER) {
-        
+            if (has_token_types(to.tokens, TOKEN_INTEGER, NULL)) {
                 int idx = to.tokens[1].integer - 1;
                 if (idx >= 0 && idx < layer_count) {
                     win_a_index = idx;
                 }
             }
         
-            if (arrlen(to.tokens) >= 3 &&
-                to.tokens[2].type == TOKEN_INTEGER) {
-        
+            if (has_token_types(to.tokens, TOKEN_INTEGER, TOKEN_INTEGER, NULL)) {
                 int idx = to.tokens[2].integer - 1;
                 if (idx >= 0 && idx < layer_count) {
                     win_b_index = idx;
@@ -469,7 +506,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
         
             if (win_a_index == win_b_index) {
                 message_to_console(ccode, "Cannot split view with the same layer twice!");
-                break;
+                goto sw_defer;
             }
         
             Layer* layer_a = code_layers[win_a_index];
@@ -481,10 +518,11 @@ void console_execute_command(CCode* ccode, const char* buffer){
             Layer* split_view = new_layer_split_view();
             if (!split_view || !make_split_view(split_view, layer_a, layer_b)) {
                 if (split_view) free_layer(split_view);
-                break;
+                goto sw_defer;
             }
         
             push_layer_to_top(ccode, split_view);
+        sw_defer:
             arrfree(code_layers);
             break;
         }
@@ -504,7 +542,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
             LayerDirWalkData* ldwd = top_tree_layer->layer_data;
             const char* cwd = nob_get_current_dir_temp();
             char* as_str = NULL ;
-            if(arrlen(to.tokens) > 1 && to.tokens[1].type == TOKEN_STRING){
+            if(has_token_types(to.tokens, TOKEN_STRING, NULL)){
                 as_str = stringview_to_str(to.tokens[1].string.start, to.tokens[1].string.size);
             }else{
                 if(ldwd->current_dir_files == NULL || ldwd->selected == 0){
@@ -569,7 +607,7 @@ void console_execute_command(CCode* ccode, const char* buffer){
             if(!first_code_layer){
                 break;
             }
-            LayerCodeData* lcd= first_code_layer->layer_data;
+            LayerCodeData* lcd = first_code_layer->layer_data;
             lcd->allow_diagnostics = !lcd->allow_diagnostics;
 
             break;

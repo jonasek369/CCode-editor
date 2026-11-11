@@ -173,6 +173,7 @@ typedef struct {
     bool PrivateCloseConsole;
     bool profiling;
     bool close_code_layer_on_split_view_close;
+    bool open_definition_in_split_view;
     ColorTheme* theme;
     size_t tab_size;
     ConfigLSP** lsps;
@@ -247,6 +248,7 @@ CCodeConfig* make_default_config(){
     conf->theme = load_theme(NULL);
     conf->tab_size = 4;
     conf->close_code_layer_on_split_view_close = false;
+    conf->open_definition_in_split_view = true;
     conf->lsps = NULL;
     return conf;
 }
@@ -277,6 +279,7 @@ void save_config(CCodeConfig* config){
     json_add_child(json_config, "profiling", json_new_bool(config->profiling));
     json_add_child(json_config, "tab_size", json_new_integer(config->tab_size));
     json_add_child(json_config, "close_code_layer_on_split_view_close", json_new_bool(config->close_code_layer_on_split_view_close));
+    json_add_child(json_config, "open_definition_in_split_view", json_new_bool(config->open_definition_in_split_view));
     JsonValue* lsps = json_new_array();
     for(size_t i = 0; i < arrlenu(config->lsps); i++){
         json_add_child(lsps, NULL, config_lsp_to_json(config->lsps[i]));
@@ -364,6 +367,13 @@ CCodeConfig* load_config(const char* path){
         config->close_code_layer_on_split_view_close = false; // defualt
     }else{
         config->close_code_layer_on_split_view_close = close_code_on_sv_close->boolean;
+    }
+
+    JsonValue* open_definition_in_split_view = shget(json_config->object, "open_definition_in_split_view");
+    if(!open_definition_in_split_view || open_definition_in_split_view->type != JSON_BOOL){
+        config->open_definition_in_split_view = true; // defualt
+    }else {
+        config->open_definition_in_split_view = open_definition_in_split_view->boolean;
     }
 
 

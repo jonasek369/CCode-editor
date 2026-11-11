@@ -26,10 +26,7 @@ void free_ccode(CCode* ccode){
         arrfree(ccode->lsp_ctxs);
     }
     if(ccode->config){
-        if(ccode->config->theme){
-            free_theme(ccode->config->theme);
-        }
-        free(ccode->config);
+        free_config(ccode->config);
     }
 }
 
@@ -576,6 +573,7 @@ int main(int argc, char** argv) {
     destroy_syntax_highlighting();
     destory_lsp_handlers();
     destroy_registered_lsps();
+    destroy_console_history();
 
     // Clean up
     endwin();   // End curses mode

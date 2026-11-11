@@ -58,28 +58,32 @@ int main(int argc, char **argv){
         "-I", incl,
         "-L", lib,
         "-I", "./tree-sitter/lib/include",
-        "-L", "./tree-sitter",
+        "-L", "./tree-sitter");
+
     #ifndef _WIN32
-        "-Wl,-rpath=./PDCurses/x11",
-        "-Wl,-rpath=./tree-sitter",
+        nob_cmd_append(&cmd, "-Wl,-rpath=./PDCurses/x11", "-Wl,-rpath=./tree-sitter");
     #endif
-        "-o", output_file_name, "main.c", "./tiny_queue/tiny_queue.c",
+    
+    nob_cmd_append(&cmd, "-o", output_file_name, "main.c", "./tiny_queue/tiny_queue.c");
+    
     #if(OPTIMISATION == 1)
-        "-O3", "-march=native", "-flto=auto",
+        nob_cmd_append(&cmd, "-O3", "-march=native", "-flto=auto");
     #endif
+    
     #if(COMPILE_PROFILING == 1)
-        "-DCOMPILE_PROFILING=1",
+        nob_cmd_append(&cmd, "-DCOMPILE_PROFILING=1");
     #endif
-        "./tree-sitter/libtree-sitter.a",
-        "./build/libtslangs.a",
+    
+    nob_cmd_append(&cmd, "./tree-sitter/libtree-sitter.a", "./build/libtslangs.a");
+    
     #ifdef _WIN32
-        "-lpdcurses", "-lwinmm",
+        nob_cmd_append(&cmd, "-lpdcurses", "-lwinmm");
     #else
-        "-lXCurses",
-        "-lX11", "-lXext",
+        nob_cmd_append(&cmd, "-lXCurses", "-lX11", "-lXext");
     #endif
-        "-Wall", "-Wextra", "-Wno-sign-compare"
-    );
+
+    nob_cmd_append(&cmd, "-Wall", "-Wextra", "-Wno-sign-compare");
+    
     generate_compile_flags(&cmd);
     if (!nob_cmd_run_sync_and_reset(&cmd)) return 1;
 

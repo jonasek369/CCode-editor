@@ -247,23 +247,42 @@ void handle_definition(CCode* ccode, JsonValue* message){
 		lcd->cursor->y = range->start_line;
 		goto defer;
     }
+    if(ccode->config && ccode->config->open_definition_in_split_view){
+    	Layer* layer = read_file_to_code_layer(ccode, uri->string + 6, strlen(uri->string) - 6, false);
+		LayerCodeData* lcd = layer->layer_data;
+		lcd->cursor->x = range->start_character;
+		lcd->cursor->y = range->start_line;
+		
+		make_parser(layer, get_filename(lcd->uri));
+		file_on_open_callback(ccode, (void*)layer);
+		
+		if(top_code_layer->type != LAYER_CODE) {
+			// This happens when the top_code_layer is split view, take out the B window and open it
+			// in new split view
+			goto fallback;
+		}
 
-	Layer* layer = read_file_to_code_layer(ccode, uri->string + 6, strlen(uri->string) - 6, false);
-	LayerCodeData* lcd = layer->layer_data;
-	lcd->cursor->x = range->start_character;
-	lcd->cursor->y = range->start_line;
+		remove_layer(ccode, top_code_layer);
 	
-	make_parser(layer, get_filename(lcd->uri));
-	file_on_open_callback(ccode, (void*)layer);
+		Layer* split = new_layer_split_view();
+		LayerSplitViewData* lsvd = split->layer_data;
+		make_split_view(split, top_code_layer, layer);
+		lsvd->focused = 1;
+	
+		push_layer_to_top(ccode, split);
+    }else{
+    	fallback:
+    	Layer* layer = read_file_to_code_layer(ccode, uri->string + 6, strlen(uri->string) - 6, false);
+		LayerCodeData* lcd = layer->layer_data;
+		lcd->cursor->x = range->start_character;
+		lcd->cursor->y = range->start_line;
+		
+		make_parser(layer, get_filename(lcd->uri));
+		file_on_open_callback(ccode, (void*)layer);
 
-	remove_layer(ccode, top_code_layer);
+		push_layer_to_top(ccode, layer);
+    }
 
-	Layer* split = new_layer_split_view();
-	LayerSplitViewData* lsvd = split->layer_data;
-	make_split_view(split, top_code_layer, layer);
-	lsvd->focused = 1;
-
-	push_layer_to_top(ccode, split);
  
 
 defer:
