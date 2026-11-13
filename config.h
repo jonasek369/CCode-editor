@@ -336,7 +336,8 @@ CCodeConfig* load_config(const char* path){
     }
 
     if(json_config->type != JSON_OBJECT){
-        free(json_config);
+        json_free(json_config);
+        free(config);
         return NULL;
     }
 
@@ -513,6 +514,9 @@ void free_config(CCodeConfig* cfg){
                     free(lsp->file_suffixes[j]);
                 }
                 arrfree(lsp->file_suffixes);
+            }
+            if(lsp){
+                free(lsp);
             }
         }
         arrfree(cfg->lsps);
