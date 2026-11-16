@@ -161,6 +161,13 @@ void print_layer(Layer* l){
     }
 }
 
+void print_layers(CCode* ccode){
+    printf("Layers:\n");
+    for(size_t i = 0; i < arrlenu(ccode->layers); i++){
+        Layer* l = ccode->layers[i];
+        print_layer(l);
+    }
+}
 
 /*
     Layer cleanup

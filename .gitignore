@@ -12,5 +12,6 @@ build_grammar
 compile_flags.txt
 stb_ds.h
 nob.h
+flag.h
 LSP.h
 parser.h

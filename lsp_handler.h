@@ -354,7 +354,8 @@ void register_lsp_from_config(CCode* ccode){
 	CCodeConfig* config = ccode->config;
 
 	if(!config->lsps) return;
-	printf("loading lsps\n");
+	
+	printf("Loading lsps from config!\n");
 
 	if(lsp_file_suffix_register){
 		shfree(lsp_file_suffix_register);

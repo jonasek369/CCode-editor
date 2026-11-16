@@ -193,6 +193,15 @@ typedef struct {
 
 static VirtualWindow default_virtual_window = {.x = 0, .y = 1, .width = 0, .height = 0};
 
+bool is_inside_virtual_window(int x, int y, VirtualWindow* w){
+    return (
+        x >= w->x &&
+        x <  w->x + w->width &&
+        y >= w->y &&
+        y <  w->y + w->height
+    );
+}
+
 
 typedef struct {
     bool allow_diagnostics;
@@ -330,5 +339,22 @@ void file_find_definition_callback(CCode* ccode, void* data);
 #include "layers.h"
 #include "lsp_handler.h"
 #include "callbacks.h"
+
+void free_ccode(CCode* ccode){
+    for(size_t i = 0; i < arrlenu(ccode->layers); i++){
+        free_layer(ccode->layers[i]);
+    }
+    arrfree(ccode->layers);
+    if(ccode->lsp_ctxs){
+        for(size_t i = 0; i < arrlenu(ccode->lsp_ctxs); i++){
+            destroy_lsp(ccode->lsp_ctxs[i]);
+        }
+        arrfree(ccode->lsp_ctxs);
+    }
+    if(ccode->config){
+        free_config(ccode->config);
+    }
+}
+
 
 #endif

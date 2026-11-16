@@ -106,6 +106,10 @@ void message_to_console(CCode* ccode, const char* message){
         ccode->config->PrivateCloseConsole = false;
     }
     Layer* console = top_type_layer(ccode, LAYER_CONSOLE);
+    if(console == NULL){
+        fprintf(stderr, "Trying to write to console but no console is present in ccode->layers\n");
+        return;
+    }
     LayerConsoleData* layer_console_data = (LayerConsoleData*) console->layer_data;
     size_t zero = 0;
     arrsetlen(layer_console_data->console_buffer, zero);

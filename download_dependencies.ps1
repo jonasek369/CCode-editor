@@ -79,6 +79,7 @@ function Download-File {
 # ===== Download headers =====
 Download-File "https://raw.githubusercontent.com/nothings/stb/refs/heads/master/stb_ds.h" "stb_ds.h"
 Download-File "https://raw.githubusercontent.com/tsoding/nob.h/refs/heads/main/nob.h" "nob.h"
+Download-File "https://raw.githubusercontent.com/tsoding/flag.h/refs/heads/master/flag.h" "flag.h"
 Download-File "https://raw.githubusercontent.com/jonasek369/C-LSP-Client/refs/heads/main/LSP.h" "LSP.h"
 Download-File "https://raw.githubusercontent.com/jonasek369/C-JSON/refs/heads/main/parser.h" "parser.h"
 
