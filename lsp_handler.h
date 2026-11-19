@@ -403,12 +403,15 @@ void destory_lsp_handlers(){
 	hmfree(lsp_language_id_register);
 }
 
-void handle_lsp(CCode* ccode, LSPContext* ctx){
+// Returns true if any message was handled
+bool handle_lsp(CCode* ccode, LSPContext* ctx){
+	bool handled = false;
 	while(1){
 		JsonValue* message = tiny_queue_pop_nowait(ctx->receiver_queue);
 		if(!message){
 			break;
 		}
+		handled = true;
 		JsonValue* method = shget(message->object, "method");
 		if(!method || method->type != JSON_STRING){
 			JsonValue* id = shget(message->object, "id");
@@ -437,7 +440,7 @@ void handle_lsp(CCode* ccode, LSPContext* ctx){
 		}
 		free(unescaped_method);
 	}
-	return;
+	return handled;
 }
 
 #endif // _H_LSP_HANDLER

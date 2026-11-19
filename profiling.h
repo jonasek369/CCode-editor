@@ -128,7 +128,7 @@
     static void prof_pop_print_ms() {}
     static void prof_pop_print_ns() {}
 
-    static void prof_print(WINDOW* win) {}
+    static void prof_print(WINDOW* win) { (void) win; }
     static void prof_reset() {}
 #endif
 

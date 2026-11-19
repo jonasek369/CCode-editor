@@ -235,6 +235,11 @@ static int pair_to_attrs(int pair_id){
 }
 
 
+// Reused between frames instead of allocating them every render
+static TSQueryCursor* highlight_query_cursor = NULL;
+static HSpan*         highlight_spans        = NULL;
+
+
 void init_syntax_highlighting(ColorTheme* theme) {
     init_type_map();
     init_syntax_colors(theme);
@@ -243,6 +248,11 @@ void init_syntax_highlighting(ColorTheme* theme) {
 void destroy_syntax_highlighting(void) {
     shfree(type_map);
     type_map = NULL;
+    if(highlight_query_cursor){
+        ts_query_cursor_delete(highlight_query_cursor);
+        highlight_query_cursor = NULL;
+    }
+    arrfree(highlight_spans);
 }
 
 
@@ -277,11 +287,15 @@ void syntax_highlighting_render(LayerCodeData* lcd) {
     int xoff = cur->xoff;
     int yoff = cur->yoff;
 
-    HSpan* spans     = NULL;
+    HSpan* spans = highlight_spans;
+    arrsetlen(spans, 0);
 
     uint32_t capture_count = ts_query_capture_count(lcd->query);
 
-    TSQueryCursor* ts_cursor = ts_query_cursor_new();
+    if(!highlight_query_cursor){
+        highlight_query_cursor = ts_query_cursor_new();
+    }
+    TSQueryCursor* ts_cursor = highlight_query_cursor;
     TSNode root = ts_tree_root_node(lcd->tree);
 
     ts_query_cursor_set_point_range(ts_cursor,
@@ -318,7 +332,6 @@ void syntax_highlighting_render(LayerCodeData* lcd) {
         }
     }
     END_PROFILING("collection");
-    ts_query_cursor_delete(ts_cursor);
     int span_count = arrlen(spans);
     // not needed for now
     //if (span_count > 0)
@@ -334,12 +347,13 @@ void syntax_highlighting_render(LayerCodeData* lcd) {
         int _sy = win_y + ((buf_row) - yoff);                             \
         if (_sx >= win_x && _sx < win_x + win_w &&                        \
             _sy >= win_y && _sy < win_y + win_h) {                        \
-            attron(COLOR_PAIR(pair) | (attrs));                            \
-            mvaddch(_sy, _sx, (ch));                                       \
-            attroff(COLOR_PAIR(pair) | (attrs));                           \
+            mvaddch(_sy, _sx, (ch) | COLOR_PAIR(pair) | (attrs));          \
         }                                                                  \
     } while (0)
     START_PROFILING();
+    // spans come roughly ordered by start, rows only grow so the first span
+    // reaching the current row never moves back
+    int span_base = 0;
     for (int sr = 0; sr < win_h; sr++) {
         int br = sr + yoff;
 
@@ -353,9 +367,8 @@ void syntax_highlighting_render(LayerCodeData* lcd) {
         const char* line     = lcd->code_buffer[br];
         int         line_len = (int)strlen(line);
 
-        int span_base = 0;
-        for (int s = 0; s < span_count; s++) {
-            if (spans[s].end_row >= br) { span_base = s; break; }
+        while (span_base < span_count && spans[span_base].end_row < br) {
+            span_base++;
         }
 
         int bc = xoff;   /* current buffer column */
@@ -447,5 +460,5 @@ void syntax_highlighting_render(LayerCodeData* lcd) {
 
     move(win_y + (cur->y - yoff), win_x + (cur->x - xoff));
     END_PROFILING("syntax_highlighting_render");
-    arrfree(spans);
+    highlight_spans = spans;
 }

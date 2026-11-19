@@ -164,7 +164,7 @@ int64_t atoint64(const char *str, int n) {
 
 
 int random_id(){
-    return (int)((rand()/RAND_MAX)*INT_MAX);
+    return rand();
 }
 
 

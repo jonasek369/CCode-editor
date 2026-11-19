@@ -1,15 +1,6 @@
 #define NOB_IMPLEMENTATION
 #include "nob.h"
 
-#define RELEASE 0
-
-#if(RELEASE == 1)
-    #define OPTIMISATION       1
-    #define COMPILE_PROFILING  0
-#else
-    #define OPTIMISATION       0
-    #define COMPILE_PROFILING  1
-#endif
 
 #ifdef _WIN32
     #define grammar_file_name "build_grammar.exe"
@@ -39,6 +30,12 @@ void generate_compile_flags(Nob_Cmd* cmd){
 int main(int argc, char **argv){
     NOB_GO_REBUILD_URSELF(argc, argv);
     Nob_Cmd cmd = {0};
+
+    // -release builds with optimisations and without the profiler
+    bool release = false;
+    for(int i = 1; i < argc; i++){
+        if(strcmp(argv[i], "-release") == 0) release = true;
+    }
     // Build the NOB script for build_grammar if it isnt already build
     if(!nob_file_exists("./"grammar_file_name)){
         nob_cmd_append(&cmd, "cc", "build_grammar.c", "-o", grammar_file_name);
@@ -61,13 +58,11 @@ int main(int argc, char **argv){
     
     nob_cmd_append(&cmd, "-o", output_file_name, "main.c", "./tiny_queue/tiny_queue.c");
     
-    #if(OPTIMISATION == 1)
+    if(release){
         nob_cmd_append(&cmd, "-O3", "-march=native", "-flto=auto");
-    #endif
-    
-    #if(COMPILE_PROFILING == 1)
+    }else{
         nob_cmd_append(&cmd, "-DCOMPILE_PROFILING=1");
-    #endif
+    }
     
     nob_cmd_append(&cmd, "./tree-sitter/libtree-sitter.a", "./build/libtslangs.a");
     

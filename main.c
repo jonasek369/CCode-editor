@@ -128,7 +128,9 @@ int main(int argc, char** argv) {
     raw();
     nonl(); // keep Enter as '\r' instead of translating it to '\n'
     keypad(stdscr, TRUE);
-    nodelay(stdscr, TRUE);
+    // getch waits for input instead of returning right away, the loop
+    // still wakes up regularly to pick up LSP messages
+    timeout(INPUT_TIMEOUT_MS);
     noecho();
     mousemask(ALL_MOUSE_EVENTS | REPORT_MOUSE_POSITION, NULL);
     // report press and release separately, clicks are resolved in handle_mouse
@@ -171,6 +173,12 @@ int main(int argc, char** argv) {
     default_virtual_window.width = x;
     default_virtual_window.height = y;
 
+    // Frames left to draw since the last input. Frames without input are skipped,
+    // but one more is drawn after input because some state set during a keypress
+    // (e.g. PrivateCloseConsole) is only acted on in the following frame
+    int frames_to_draw = 2;
+    Layer** layers_snapshot = NULL;
+
     while(ccode.config->PrivateRunning) {
         START_PROFILING();
 
@@ -188,6 +196,7 @@ int main(int argc, char** argv) {
         
         if(ch == KEY_MOUSE){
             handle_mouse(&ccode);
+            frames_to_draw = 2;
             // we dont redraw on mouse event because
             // mouse event can be mouse move and if user
             // has mouse with poll rate high enough editor starts
@@ -203,13 +212,30 @@ int main(int argc, char** argv) {
             default_virtual_window.width = x;
             default_virtual_window.height = y;
             ch = -1;
+            frames_to_draw = 2;
         }
 
         // handle LSPs if some are active
+        bool lsp_activity = false;
         if(ccode.lsp_ctxs){
             for(size_t i = 0; i < arrlenu(ccode.lsp_ctxs); i++){
-                handle_lsp(&ccode, ccode.lsp_ctxs[i]);
+                if(handle_lsp(&ccode, ccode.lsp_ctxs[i])){
+                    lsp_activity = true;
+                }
             }
+        }
+
+        if(ch != -1 || lsp_activity){
+            frames_to_draw = 2;
+        }
+        // nothing changed, skip the frame (profiling output updates every frame)
+        if(frames_to_draw == 0 && !ccode.config->profiling){
+            // reset the profiler depth because were skipping the frame
+            depth--;
+            continue;
+        }
+        if(frames_to_draw > 0){
+            frames_to_draw--;
         }
 
         // Code switch
@@ -334,9 +360,10 @@ int main(int argc, char** argv) {
             print_layers(&ccode);
         }*/
         START_PROFILING();
-        Layer** layers_snapshot = NULL;
-        for(int i = 0; i < arrlen(ccode.layers); i++){
-            arrput(layers_snapshot, ccode.layers[i]);
+        // layers can add or remove layers while handling keys, iterate over a copy
+        arrsetlen(layers_snapshot, arrlen(ccode.layers));
+        if(arrlen(ccode.layers) > 0){
+            memcpy(layers_snapshot, ccode.layers, arrlen(ccode.layers) * sizeof(Layer*));
         }
         for (int i = arrlen(layers_snapshot) - 1; i >= 0; i--){
             Layer* layer = layers_snapshot[i];
@@ -363,7 +390,6 @@ int main(int argc, char** argv) {
                 }
             }
         }
-        arrfree(layers_snapshot);
 
         END_PROFILING("Layers updates");
         START_PROFILING();
@@ -381,6 +407,7 @@ int main(int argc, char** argv) {
         prof_reset();
         refresh();
     }
+    arrfree(layers_snapshot);
     free_ccode(&ccode);
 
     destroy_commands();

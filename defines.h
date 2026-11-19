@@ -11,6 +11,8 @@
 #define LIMIT_FPS 0 
 #define FPS 240
 #define FRAME_NS (1000000000L / FPS)
+// How long getch waits for a key before the main loop checks LSP messages again
+#define INPUT_TIMEOUT_MS 16
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -224,6 +226,8 @@ bool is_inside_virtual_window(int x, int y, VirtualWindow* w){
 typedef struct {
     bool allow_diagnostics;
     bool saved;
+    // buffer changed since the last reparse and LSP didChange
+    bool pending_edit;
     char* filename;
     char** code_buffer;
     Cursor* cursor;
@@ -310,18 +314,31 @@ typedef struct {
     void*          userdata;
 } LayerFloatingDialogData;
 
+// Lines are stb arrays ending with '\0', their length is known without strlen
+static inline size_t line_length(const char* line){
+    size_t len = arrlenu(line);
+    return len > 0 ? len - 1 : 0;
+}
+
+// Line length without the trailing '\n'
+static inline size_t line_content_length(const char* line){
+    size_t len = line_length(line);
+    if(len > 0 && line[len - 1] == '\n') len--;
+    return len;
+}
+
 char *flatten_buffer(LayerCodeData *code){
     size_t total = 0;
 
     for(int i = 0; i < arrlen(code->code_buffer); i++) {
-        total += strlen(code->code_buffer[i]);
+        total += line_length(code->code_buffer[i]);
     }
 
     char *result = malloc(total + 1);
     size_t pos = 0;
 
     for (int i = 0; i < arrlen(code->code_buffer); i++) {
-        size_t len = strlen(code->code_buffer[i]);
+        size_t len = line_length(code->code_buffer[i]);
         memcpy(result + pos, code->code_buffer[i], len);
         pos += len;
     }

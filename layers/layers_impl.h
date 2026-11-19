@@ -129,7 +129,7 @@ size_t buffer_byte_offset(LayerCodeData *code, int row, int col){
     size_t offset = 0;
 
     for(int i = 0; i < row; i++) {
-        offset += strlen(code->code_buffer[i]);
+        offset += line_length(code->code_buffer[i]);
     }
 
     offset += col;
