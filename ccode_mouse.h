@@ -1,9 +1,57 @@
 #ifndef _H_CCODE_MOUSE
 #define _H_CCODE_MOUSE
 
+// ncurses only enables click reporting, drag reporting (xterm mode 1002)
+// has to be requested from the terminal directly
+void set_mouse_drag_reporting(FILE* terminal, bool enable){
+    fputs(enable ? "\033[?1002h" : "\033[?1002l", terminal);
+    fflush(terminal);
+}
+
+// Code layer that mouse selection applies to, NULL if the top layer has none
+LayerCodeData* mouse_selection_target(Layer* layer){
+    if(layer->type == LAYER_SPLIT_VIEW){
+        LayerSplitViewData* lsvd = layer->layer_data;
+        return lsvd->splitten_layers[lsvd->focused]->layer_data;
+    }
+    if(layer->type == LAYER_CODE){
+        return layer->layer_data;
+    }
+    return NULL;
+}
+
+// Converts screen position to clamped buffer position, false if outside the buffer
+bool mouse_to_buffer_pos(LayerCodeData* lcd, MEVENT* event, int* x, int* y){
+    // split view panes are offset on screen, a lone code layer starts below the tab bar
+    VirtualWindow* win = lcd->virtual_window ? lcd->virtual_window : &default_virtual_window;
+
+    int target_y = lcd->cursor->yoff + event->y - win->y;
+    if(target_y < 0 || target_y >= arrlen(lcd->code_buffer)){
+        return false;
+    }
+
+    int len = arrlen(lcd->code_buffer[target_y])-2;
+    int target_x = lcd->cursor->xoff + event->x - win->x;
+
+    if(target_x > len) target_x = len;
+    if(target_x < 0) target_x = 0;
+
+    *x = target_x;
+    *y = target_y;
+    return true;
+}
+
 void handle_mouse(CCode* ccode){
+    // with mouseinterval(0) ncurses never reports clicks, a release
+    // where the button was pressed is treated as one
+    static bool dragging = false;
+    static int press_x = -1;
+    static int press_y = -1;
+
     MEVENT event;
-    nc_getmouse(&event);
+    if(getmouse(&event) != OK){
+        return;
+    }
 
     Layer* current_top_layer = top_layer(ccode);
 
@@ -11,73 +59,80 @@ void handle_mouse(CCode* ccode){
         return;
     }
 
-    if(
-        event.bstate & BUTTON1_PRESSED &&
-        (current_top_layer->type == LAYER_CODE || current_top_layer->type == LAYER_SPLIT_VIEW)
-    ){
+    // Pressing in a split view pane focuses it, so the selection starts there
+    if(event.bstate & BUTTON1_PRESSED && current_top_layer->type == LAYER_SPLIT_VIEW){
+        LayerSplitViewData* lsvd = current_top_layer->layer_data;
+        for(size_t i = 0; i < arrlenu(lsvd->splitten_layers); i++){
+            LayerCodeData* lcd = lsvd->splitten_layers[i]->layer_data;
+            if(lcd && lcd->virtual_window && is_inside_virtual_window(event.x, event.y, lcd->virtual_window)){
+                lsvd->focused = i;
+                break;
+            }
+        }
+    }
+
+    LayerCodeData* selection_lcd = mouse_selection_target(current_top_layer);
+
+    if(event.bstate & BUTTON1_PRESSED){
+        dragging = true;
+        press_x = event.x;
+        press_y = event.y;
+
         // Create the base of selection
-        LayerCodeData* lcd = NULL;
-        if(current_top_layer->type == LAYER_SPLIT_VIEW){
-            LayerSplitViewData* lsvd = current_top_layer->layer_data;
-            lcd = lsvd->splitten_layers[lsvd->focused]->layer_data; 
-        }else {
-            lcd = current_top_layer->layer_data;
-        }        
-        if(!lcd && lcd->select_end){
-            return;
+        if(selection_lcd){
+            int x, y;
+            if(mouse_to_buffer_pos(selection_lcd, &event, &x, &y)){
+                if(!selection_lcd->select_end){
+                    selection_lcd->select_end = malloc(sizeof(Cursor));
+                }
+                selection_lcd->select_end->x = x;
+                selection_lcd->select_end->y = y;
+                // cursor is the moving end of the selection
+                selection_lcd->cursor->x = x;
+                selection_lcd->cursor->y = y;
+            }else if(selection_lcd->select_end){
+                free(selection_lcd->select_end);
+                selection_lcd->select_end = NULL;
+            }
         }
-        lcd->select_end = malloc(sizeof(Cursor));
-        int target_y = lcd->cursor->yoff + event.y - 1;
+    }else if(event.bstate & REPORT_MOUSE_POSITION){
+        // Drag, moves the end of selection with the mouse
+        if(dragging && selection_lcd && selection_lcd->select_end){
+            // Dragging onto the tab bar puts the cursor above the view and scrolls up.
+            // The code window ends at the screen bottom with no row past it,
+            // so the last row is treated as one below to scroll down too
+            int screen_h, screen_w;
+            (void) screen_w;
+            getmaxyx(stdscr, screen_h, screen_w);
+            if(event.y >= screen_h - 1){
+                event.y = screen_h;
+            }
 
-        if(target_y < 0 || target_y >= arrlen(lcd->code_buffer)){
-            free(lcd->select_end);
-            lcd->select_end = NULL;
-            return;
+            int x, y;
+            if(mouse_to_buffer_pos(selection_lcd, &event, &x, &y)){
+                selection_lcd->cursor->x = x;
+                selection_lcd->cursor->y = y;
+            }
         }
-
-        lcd->select_end->y = target_y;
-            
-        char* line = lcd->code_buffer[target_y];
-        int len = arrlen(line)-2;
-            
-        int target_x = lcd->cursor->xoff + event.x;
-            
-        if(target_x > len) target_x = len;
-        if(target_x < 0) target_x = 0;
-            
-        lcd->select_end->x = target_x;
-    }else if(
-        event.bstate & BUTTON1_RELEASED &&
-        (current_top_layer->type == LAYER_CODE || current_top_layer->type == LAYER_SPLIT_VIEW)
-    ){
-        // Creates the end of selection
-        LayerCodeData* lcd = NULL;
-        if(current_top_layer->type == LAYER_SPLIT_VIEW){
-            LayerSplitViewData* lsvd = current_top_layer->layer_data;
-            lcd = lsvd->splitten_layers[lsvd->focused]->layer_data; 
-        }else {
-            lcd = current_top_layer->layer_data;
-        }  
-        if(!lcd && !lcd->select_end){
-            return;
+    }else if(event.bstate & BUTTON1_RELEASED){
+        bool was_dragging = dragging;
+        dragging = false;
+        if(was_dragging && event.x == press_x && event.y == press_y){
+            // Click, drop the empty selection made by the press
+            if(selection_lcd && selection_lcd->select_end){
+                free(selection_lcd->select_end);
+                selection_lcd->select_end = NULL;
+            }
+            event.bstate |= BUTTON1_CLICKED;
+        }else if(selection_lcd && selection_lcd->select_end){
+            // Creates the end of selection
+            int x, y;
+            if(mouse_to_buffer_pos(selection_lcd, &event, &x, &y)){
+                selection_lcd->cursor->x = x;
+                selection_lcd->cursor->y = y;
+            }
         }
-        int target_y = lcd->cursor->yoff + event.y - 1;
-
-        if(target_y < 0 || target_y >= arrlen(lcd->code_buffer))
-            return;
-
-        lcd->cursor->y = target_y;
-            
-        char* line = lcd->code_buffer[target_y];
-        int len = arrlen(line)-2;
-            
-        int target_x = lcd->cursor->xoff + event.x;
-            
-        if(target_x > len) target_x = len;
-        if(target_x < 0) target_x = 0;
-            
-        lcd->cursor->x = target_x;
-    }   
+    }
 
     // scroll up
     if(event.bstate & BUTTON4_PRESSED){

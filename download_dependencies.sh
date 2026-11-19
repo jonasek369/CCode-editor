@@ -20,22 +20,6 @@ run_limited() {
     done
 }
 
-build_pdcurses() {
-    (
-        echo "==> Building PDCurses..."
-
-        clone_repo_if_needed "https://github.com/wmcbrine/PDCurses" "PDCurses"
-
-        cd PDCurses/x11
-
-        [[ ! -f Makefile ]] && ./configure
-
-        make -j"$JOBS"
-
-        echo "==> PDCurses done"
-    ) &
-}
-
 build_tree_sitter() {
     (
         echo "==> Building Tree-sitter..."
@@ -60,6 +44,11 @@ download_tree_sitter_language() {
     ) &
 }
 
+if ! printf '#include <curses.h>\nint main(void){return 0;}\n' | cc -x c - -lncursesw -o /dev/null 2>/dev/null; then
+    echo "==> ncurses (ncursesw) not found, install it with your package manager (e.g. ncurses / libncurses-dev)"
+    exit 1
+fi
+
 echo "==> downloading headers in parallel"
 
 wget https://raw.githubusercontent.com/nothings/stb/refs/heads/master/stb_ds.h -O stb_ds.h &
@@ -73,7 +62,6 @@ wait
 clone_repo_if_needed "https://github.com/jonasek369/tiny_queue" "tiny_queue" &
 
 # start builds ASAP (parallel)
-build_pdcurses
 build_tree_sitter
 
 mkdir -p tree-sitter-grammar

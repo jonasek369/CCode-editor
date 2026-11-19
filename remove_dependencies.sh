@@ -15,7 +15,6 @@ remove_if_exists() {
 }
 
 # Repos
-remove_if_exists "PDCurses"
 remove_if_exists "tree-sitter"
 remove_if_exists "tiny_queue"
 

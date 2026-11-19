@@ -14,30 +14,6 @@ function Clone-RepoIfNeeded {
     }
 }
 
-function Build-PDCurses {
-    $repoUrl = "https://github.com/wmcbrine/PDCurses"
-    $repoDir = "PDCurses"
-
-    Write-Host "==> Building PDCurses..."
-
-    Clone-RepoIfNeeded $repoUrl $repoDir
-
-    Push-Location "$repoDir/wincon"
-
-    if (-not (Test-Path "Makefile")) {
-        if (Test-Path "configure") {
-            bash configure
-        }
-    }
-
-    make
-    Rename-Item pdcurses.a libpdcurses.a
-    
-    Pop-Location
-
-    Write-Host "==> PDCurses build complete."
-}
-
 function Build-TreeSitter {
     $repoUrl = "https://github.com/tree-sitter/tree-sitter"
     $repoDir = "tree-sitter"
@@ -86,7 +62,7 @@ Download-File "https://raw.githubusercontent.com/jonasek369/C-JSON/refs/heads/ma
 Clone-RepoIfNeeded "https://github.com/jonasek369/tiny_queue" "tiny_queue"
 
 # ===== Build dependencies =====
-Build-PDCurses
+# ncurses is not built here, install it through MSYS2 (mingw-w64-x86_64-ncurses)
 Build-TreeSitter
 
 # ===== Languages =====

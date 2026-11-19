@@ -1,3 +1,6 @@
+#ifndef _H_LSP_HANDLER
+#define _H_LSP_HANDLER
+
 typedef void (*LSPResponseHandler)(CCode* ccode, JsonValue* message);
 
 typedef struct {
@@ -436,3 +439,5 @@ void handle_lsp(CCode* ccode, LSPContext* ctx){
 	}
 	return;
 }
+
+#endif // _H_LSP_HANDLER

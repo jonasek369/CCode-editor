@@ -41,8 +41,8 @@ bool file_before_save_callback(CCode* ccode, void* data){
     if(!data) return true;
     LayerCodeData* lcd = ((Layer*)data)->layer_data;
     
-    char path[4096];
-    char config_path[8096];
+    char path[MAX_PATH];
+    char config_path[MAX_PATH + 192];
 
     get_config_directory(path, sizeof(path));
     snprintf(config_path, sizeof(config_path), "%s/config.json", path);

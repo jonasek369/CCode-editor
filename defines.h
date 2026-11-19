@@ -23,7 +23,25 @@
 #include <limits.h>
 #include <tree_sitter/api.h>
 
-#include "curses.h"
+#include <curses.h>
+
+// Keys PDCurses defined but ncurses does not. ncurses reports these either
+// as extended key codes (> KEY_MAX) or raw bytes, read_key() in ccode_keys.h
+// translates them into the values below.
+// Base is well past KEY_MAX and the extended codes ncurses hands out
+#define CCODE_KEY_BASE 0x1000
+#define CTL_TAB    (CCODE_KEY_BASE + 0)
+#define CTL_BKSP   (CCODE_KEY_BASE + 1)
+#define CTL_UP     (CCODE_KEY_BASE + 2)
+#define CTL_DOWN   (CCODE_KEY_BASE + 3)
+#define CTL_LEFT   (CCODE_KEY_BASE + 4)
+#define CTL_RIGHT  (CCODE_KEY_BASE + 5)
+#define CTL_PGUP   (CCODE_KEY_BASE + 6)
+#define CTL_PGDN   (CCODE_KEY_BASE + 7)
+#define ALT_I      (CCODE_KEY_BASE + 8)
+// ncurses calls shift+up/down "scroll reverse"/"scroll forward"
+#define KEY_SUP    KEY_SR
+#define KEY_SDOWN  KEY_SF
 
 
 // Needed for hmput to work using stb_ds

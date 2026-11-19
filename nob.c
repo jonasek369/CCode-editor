@@ -11,13 +11,10 @@
     #define COMPILE_PROFILING  1
 #endif
 
-#define incl "./PDCurses"
 #ifdef _WIN32
-    #define lib "./PDCurses/wincon"
     #define grammar_file_name "build_grammar.exe"
     #define output_file_name "main.exe"
 #else
-    #define lib "./PDCurses/x11"
     #define grammar_file_name "build_grammar"
     #define output_file_name "main"
 #endif
@@ -55,13 +52,11 @@ int main(int argc, char **argv){
     // Build Ccode-editor
     nob_cmd_append(&cmd,
         "cc", "-D_DEFAULT_SOURCE", "-m64", "-std=c11", "-g",
-        "-I", incl,
-        "-L", lib,
         "-I", "./tree-sitter/lib/include",
         "-L", "./tree-sitter");
 
     #ifndef _WIN32
-        nob_cmd_append(&cmd, "-Wl,-rpath=./PDCurses/x11", "-Wl,-rpath=./tree-sitter");
+        nob_cmd_append(&cmd, "-Wl,-rpath=./tree-sitter");
     #endif
     
     nob_cmd_append(&cmd, "-o", output_file_name, "main.c", "./tiny_queue/tiny_queue.c");
@@ -77,9 +72,9 @@ int main(int argc, char **argv){
     nob_cmd_append(&cmd, "./tree-sitter/libtree-sitter.a", "./build/libtslangs.a");
     
     #ifdef _WIN32
-        nob_cmd_append(&cmd, "-lpdcurses", "-lwinmm");
+        nob_cmd_append(&cmd, "-lncursesw", "-lwinmm");
     #else
-        nob_cmd_append(&cmd, "-lXCurses", "-lX11", "-lXext");
+        nob_cmd_append(&cmd, "-lncursesw");
     #endif
 
     nob_cmd_append(&cmd, "-Wall", "-Wextra", "-Wno-sign-compare");

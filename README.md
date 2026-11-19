@@ -21,6 +21,7 @@ It features Tree-sitter parsing and LSP integration.
 
 This project uses the following libraries:
 
+- [ncurses](https://invisible-island.net/ncurses/) (system package, wide-char `ncursesw`)
 - [stb_ds.h](https://github.com/nothings/stb)
 - [nob.h](https://github.com/tsoding/nob.h)
 - [C-LSP-Client](https://github.com/jonasek369/C-LSP-Client)

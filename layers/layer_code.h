@@ -501,23 +501,31 @@ bool do_completion(CCode* ccode){
     size_t completion_string_len = strlen(new_text->string);
     CompletionFunctionParams* cfp = malloc(sizeof(CompletionFunctionParams));
     cfp->index_char_positions = NULL;
+    cfp->indecies_size = NULL;
     cfp->chars_offseted = 0;
     cfp->at_index = 0;
+    cfp->total_len = 0;
 
     for(size_t i = 0; i < completion_string_len; i++){
         if(new_text->string[i] == '$' && i+1 < completion_string_len && new_text->string[i+1] == '{'){
-            size_t start = i;
+            size_t placeholder_start = i;
             while(i < completion_string_len && new_text->string[i] != '}'){
                 i++;
             }
-            arrput(cfp->index_char_positions, start);
-            arrput(cfp->indecies_size, i-start+1);
+            // positions are line columns, the completion is inserted at start
+            arrput(cfp->index_char_positions, start + placeholder_start);
+            arrput(cfp->indecies_size, i-placeholder_start+1);
         }
     }
 
     if(cfp->index_char_positions == NULL){
+        arrfree(cfp->indecies_size);
         free(cfp);
         cfp = NULL;
+    }else{
+        // empty stop behind the inserted text, the last TAB jumps out of the call
+        arrput(cfp->index_char_positions, start + new_len);
+        arrput(cfp->indecies_size, 0);
     }
 
     for(int k = (int)end; k < cur_len; k++){
@@ -562,24 +570,11 @@ bool do_completion(CCode* ccode){
         if(len == 0){
             return true;
         }
-        lcd->cursor->x = cfp->index_char_positions[0];
-        if(len > 1){
-            size_t chars = cfp->indecies_size[0];
-            lcd->cursor->x = cfp->index_char_positions[1]-2;
-            for(size_t i = 0; i < chars; i++){
-                layer_code_update(ccode, top_code_layer, CUSTOM_KEY_BACKSPACE);
-            }
-        }else{
-            // if the function has only one parameter we just move it to that and free completion_function_params
-            size_t chars =  cfp->indecies_size[0];
-            lcd->cursor->x = completion_string_len-1;
-            for(size_t i = 0; i < chars; i++){
-                layer_code_update(ccode, top_code_layer, CUSTOM_KEY_BACKSPACE);
-            }
-            arrfree(lcd->completion_function_params->index_char_positions);
-            arrfree(lcd->completion_function_params->indecies_size);
-            free(lcd->completion_function_params);
-            lcd->completion_function_params = NULL;
+        // move behind the first placeholder and delete it, TAB continues with the next one
+        size_t chars = cfp->indecies_size[0];
+        lcd->cursor->x = cfp->index_char_positions[0] + chars;
+        for(size_t i = 0; i < chars; i++){
+            layer_code_update(ccode, top_code_layer, CUSTOM_KEY_BACKSPACE);
         }
     }
 
@@ -933,14 +928,40 @@ char* layer_code_selection_to_buffer(LayerCodeData* lcd){
 
 
 
+// Draws buffer columns [start, end) of row highlighted, clipped to the virtual window
+void layer_code_draw_selection_row(LayerCodeData* lcd, int row, int start, int end, VirtualWindow* win){
+    int xoff = lcd->cursor->xoff;
+    int screen_y = win->y + row - lcd->cursor->yoff;
+    if(screen_y < win->y || screen_y >= win->y + win->height){
+        return;
+    }
+
+    const char* line = lcd->code_buffer[row];
+    int line_len = (int)strlen(line);
+    // newline is not drawn, addch would clear the rest of the screen row
+    while(line_len > 0 && (line[line_len-1] == '\n' || line[line_len-1] == '\r')){
+        line_len--;
+    }
+
+    if(start < xoff) start = xoff;
+    if(end > line_len) end = line_len;
+    if(end > xoff + win->width) end = xoff + win->width;
+
+    for(int c = start; c < end; c++){
+        mvaddch(screen_y, win->x + c - xoff, (unsigned char)line[c]);
+    }
+}
+
 void layer_code_draw_text_selection(LayerCodeData* lcd){
     if(lcd->select_end == NULL){
         return;
     }
-    VirtualWindow* virt_win = lcd->virtual_window;
+    int screen_h, screen_w;
+    getmaxyx(stdscr, screen_h, screen_w);
 
-    int win_x = virt_win ? virt_win->x      : 0;
-    int win_y = virt_win ? virt_win->y      : 1;
+    VirtualWindow win = lcd->virtual_window ? *lcd->virtual_window : (VirtualWindow){
+        .x = 0, .y = 1, .width = screen_w, .height = screen_h-1
+    };
 
     Cursor* first_cursor = lcd->cursor;
     Cursor* second_cursor = lcd->select_end;
@@ -948,64 +969,19 @@ void layer_code_draw_text_selection(LayerCodeData* lcd){
         first_cursor = lcd->select_end;
         second_cursor = lcd->cursor;
     }
-    int y_diffrence = second_cursor->y - first_cursor->y;
-    attron(A_BLINK);
-    if(y_diffrence >= 2){
-        mvprintw(
-            first_cursor->y + win_y - lcd->cursor->yoff,
-            first_cursor->x + win_x - lcd->cursor->xoff,
-            "%.*s",
-            arrlen(lcd->code_buffer[first_cursor->y])-first_cursor->x,
-            lcd->code_buffer[first_cursor->y] + first_cursor->x
-        );
-        for(int64_t i = 1; i < y_diffrence; i++){
-            mvprintw(
-                first_cursor->y + win_y + i  - lcd->cursor->yoff,
-                win_x  - lcd->cursor->xoff,
-                "%s",
-                lcd->code_buffer[first_cursor->y + i]
-            );
-        }
-        mvprintw(
-            second_cursor->y + win_y - lcd->cursor->yoff,
-            win_x - lcd->cursor->xoff,
-            "%.*s",
-            second_cursor->x,
-            lcd->code_buffer[second_cursor->y]
-        );
-    }else if (y_diffrence == 1){
-        mvprintw(
-            first_cursor->y + win_y  - lcd->cursor->yoff,
-            first_cursor->x + win_x  - lcd->cursor->xoff,
-            "%.*s",
-            arrlen(lcd->code_buffer[first_cursor->y])-first_cursor->x,
-            lcd->code_buffer[first_cursor->y] + first_cursor->x
-        );
-        mvprintw(
-            second_cursor->y + win_y  - lcd->cursor->yoff,
-            win_x  - lcd->cursor->xoff,
-            "%.*s",
-            second_cursor->x,
-            lcd->code_buffer[second_cursor->y]
-        );
+    attron(A_REVERSE);
+    if(first_cursor->y == second_cursor->y){
+        int smallest = first_cursor->x < second_cursor->x ? first_cursor->x : second_cursor->x;
+        int highest  = first_cursor->x > second_cursor->x ? first_cursor->x : second_cursor->x;
+        layer_code_draw_selection_row(lcd, first_cursor->y, smallest, highest, &win);
     }else{
-        int smallest = first_cursor->x;
-        int highest = first_cursor->x;
-        if(smallest > second_cursor->x){
-            smallest = second_cursor->x;
+        layer_code_draw_selection_row(lcd, first_cursor->y, first_cursor->x, INT_MAX, &win);
+        for(int row = first_cursor->y + 1; row < second_cursor->y; row++){
+            layer_code_draw_selection_row(lcd, row, 0, INT_MAX, &win);
         }
-        if(highest < second_cursor->x){
-            highest = second_cursor->x;
-        }
-        mvprintw(
-            second_cursor->y+win_y - lcd->cursor->yoff,
-            smallest + win_x - lcd->cursor->xoff,
-            "%.*s",
-            highest - smallest,
-            lcd->code_buffer[second_cursor->y] + smallest
-        );
+        layer_code_draw_selection_row(lcd, second_cursor->y, 0, second_cursor->x, &win);
     }
-    attroff(A_BLINK);
+    attroff(A_REVERSE);
 }
 
 int64_t layer_code_get_selection_delete_size(LayerCodeData* lcd){
@@ -1154,6 +1130,12 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
                 arrfree(cfp->indecies_size);
                 free(cfp);
                 code_data->completion_function_params = NULL;
+            }
+            // suggestions for the argument just typed no longer apply
+            if(code_data->completion_window){
+                json_free(code_data->completion_window->completion);
+                free(code_data->completion_window);
+                code_data->completion_window = NULL;
             }
             chr = -1;
         }
@@ -1565,13 +1547,13 @@ bool layer_code_update(CCode* ccode, Layer* layer, int chr){
     END_PROFILING("handle_keypress");
     START_PROFILING();
 
-    bool is_file_edit = isprint(chr) ||
+    bool is_printable = (chr >= 0 && chr <= 255) && isprint(chr);
+
+    bool is_file_edit = is_printable ||
                         chr == CUSTOM_KEY_BACKSPACE ||
                         chr == CUSTOM_KEY_ENTER ||
                         chr == CTL_BKSP         ||
                         chr == KEY_DC;
-
-    bool is_printable = isprint(chr);
 
 
     if(is_file_edit){

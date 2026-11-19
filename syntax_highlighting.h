@@ -142,6 +142,11 @@ void init_syntax_colors(ColorTheme* theme) {
         if (fg == NULL || bg == NULL) { init_pair((short)pair_id, 1, 0); }
         else{init_pair((short)pair_id, fg->id, bg->id);}
     }
+
+    // Blank cells (erase, clrtoeol, the '\n' at line ends) use the window background.
+    // Left at pair 0 ncurses assumes they're already on screen after its initial clear,
+    // never sends them, and the terminal shows its own unthemed background there
+    bkgd(COLOR_PAIR(COLOR_PAIR_DEFAULT));
 }
 
 
@@ -431,13 +436,13 @@ void syntax_highlighting_render(LayerCodeData* lcd) {
 
     if(lcd->finding_substr != NULL){
         move(win_y + (cur->y - yoff), win_x + (cur->x - xoff));
-        attron(A_BLINK);
+        attron(A_REVERSE);
         char* str = lcd->finding_substr->substr;
         while(*str != 0){
             addch(*str);
             str++;
         }
-        attroff(A_BLINK);
+        attroff(A_REVERSE);
     }
 
     move(win_y + (cur->y - yoff), win_x + (cur->x - xoff));

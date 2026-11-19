@@ -1,5 +1,6 @@
 #include "defines.h"
 #include "ccode_mouse.h"
+#include "ccode_keys.h"
 
 #define FLAG_IMPLEMENTATION
 #include "flag.h"
@@ -17,7 +18,13 @@ void usage(FILE *stream){
     flag_print_options(stream);
 }
 
-void handle_args(CCode* ccode, int argc, char** argv){
+typedef struct {
+    bool open_tree;
+    char* file;
+} Args;
+
+// Runs before curses starts so usage and errors reach the terminal
+Args parse_args(int argc, char** argv){
     bool* help            = flag_bool("help", false, "Print this help to stdout and exit with 0");
     bool* open_tree       = flag_bool("tree", false, "Open the tree layer on startup");
     bool* open_tree_short = flag_bool("t",    false, "Open the tree layer on startup");
@@ -35,15 +42,22 @@ void handle_args(CCode* ccode, int argc, char** argv){
         exit(0);
     }
 
-    if(argc > 0){
-        read_file_to_code_layer(ccode, argv[0], strlen(argv[0]), true);
+    return (Args){
+        .open_tree = *open_tree || *open_tree_short,
+        .file      = argc > 0 ? argv[0] : NULL,
+    };
+}
+
+void handle_args(CCode* ccode, Args* args){
+    if(args->file){
+        read_file_to_code_layer(ccode, args->file, strlen(args->file), true);
     }
 
-    if(*open_tree || *open_tree_short){
-        char* cwd = str_to_arr(nob_get_current_dir_temp());
-        nob_temp_reset();
-        Layer* tree = new_layer_dir_walk(cwd);
-        push_layer_to_top(ccode, tree);
+    if(args->open_tree){
+        Layer* tree = new_layer_dir_walk();
+        if(tree){
+            push_layer_to_top(ccode, tree);
+        }
     }
 }
 
@@ -56,6 +70,8 @@ int main(int argc, char** argv) {
     (void) prof_pop_print_ms;
 
     
+    Args args = parse_args(argc, argv);
+
     // For random file ids for LSP
     srand(time(NULL));
     ensure_config_dir_existence();
@@ -66,7 +82,7 @@ int main(int argc, char** argv) {
     get_config_directory(path, sizeof(path));
     snprintf(config_path, sizeof(config_path), "%s/config.json", path);
 
-    #ifdef __linux__
+    #ifdef __linux__ 
         char themes_path[MAX_PATH + 192];
         snprintf(themes_path, sizeof(themes_path), "%s/themes", path);
         if(!nob_file_exists(themes_path) && nob_file_exists("/usr/share/ccode-editor/themes")){
@@ -79,6 +95,22 @@ int main(int argc, char** argv) {
         }
     #endif
 
+    #ifndef _WIN32
+        // Debug prints and LSP server logs would draw over the editor,
+        // send them to a log file and give curses its own handle to the terminal
+        fflush(stdout);
+        FILE* terminal = fdopen(dup(STDOUT_FILENO), "w");
+        char log_path[MAX_PATH + 192];
+        snprintf(log_path, sizeof(log_path), "%s/ccode.log", path);
+        int log_fd = open(log_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if(terminal && log_fd != -1){
+            dup2(log_fd, STDOUT_FILENO);
+            dup2(log_fd, STDERR_FILENO);
+            setvbuf(stdout, NULL, _IOLBF, 0);
+        }
+        if(log_fd != -1) close(log_fd);
+    #endif
+
     CCode ccode   = {0};
     ccode.layers  = NULL;
     ccode.config  = load_config(config_path);
@@ -86,12 +118,30 @@ int main(int argc, char** argv) {
 
     int ch;
 
-    initscr();
+    // ncurses waits a full second after ESC by default to see if a sequence follows
+    set_escdelay(25);
+    #ifndef _WIN32
+        SCREEN* screen = newterm(NULL, terminal ? terminal : stdout, stdin);
+    #else
+        initscr();
+    #endif
     raw();
+    nonl(); // keep Enter as '\r' instead of translating it to '\n'
     keypad(stdscr, TRUE);
     nodelay(stdscr, TRUE);
     noecho();
-    mousemask(ALL_MOUSE_EVENTS, NULL);
+    mousemask(ALL_MOUSE_EVENTS | REPORT_MOUSE_POSITION, NULL);
+    // report press and release separately, clicks are resolved in handle_mouse
+    mouseinterval(0);
+    // flush ncurses' own mouse mode first, it would override drag reporting
+    refresh();
+    #ifndef _WIN32
+        FILE* mouse_terminal = terminal ? terminal : stdout;
+    #else
+        FILE* mouse_terminal = stdout;
+    #endif
+    set_mouse_drag_reporting(mouse_terminal, true);
+    init_keys();
 
     move(1, 0);
 
@@ -101,7 +151,7 @@ int main(int argc, char** argv) {
 
     detect_clipboard_support();
     
-    handle_args(&ccode, argc, argv);
+    handle_args(&ccode, &args);
 
     if(ccode.layers == NULL){
         arrpush(ccode.layers, new_layer_code());
@@ -130,7 +180,7 @@ int main(int argc, char** argv) {
             clock_gettime(CLOCK_MONOTONIC, &frame_start);
         #endif
 
-        ch = getch();
+        ch = read_key();
         
         // if(ch != -1){
         //     printf("%d\n", ch);
@@ -146,6 +196,13 @@ int main(int argc, char** argv) {
             // reset the profiler depth because were skipping the frame
             depth--;
             continue;
+        }
+
+        if(ch == KEY_RESIZE){
+            getmaxyx(stdscr, y, x);
+            default_virtual_window.width = x;
+            default_virtual_window.height = y;
+            ch = -1;
         }
 
         // handle LSPs if some are active
@@ -170,8 +227,8 @@ int main(int argc, char** argv) {
             push_layer_to_top(&ccode, next);
             push_layer_to_bot(&ccode, top);
         }
-        // 64 Reserved by pdcurses
-        if(ch > KEY_F0 && ch <= KEY_F0+64 && arrlen(ccode.layers) >= 1){
+        // ncurses reserves 64 function keys, KEY_F(0) to KEY_F(63)
+        if(ch > KEY_F0 && ch <= KEY_F0+63 && arrlen(ccode.layers) >= 1){
             if(top_layer(&ccode)->type == LAYER_CODE){
                 int index = (ch-KEY_F0)-1;
                 Layer** code_layers = all_type_layers(&ccode, LAYER_CODE);
@@ -272,7 +329,7 @@ int main(int argc, char** argv) {
         }
         int propagated_ch = ch;
         END_PROFILING("propagation");
-        clear();
+        erase();
         /*if(ch != -1){
             print_layers(&ccode);
         }*/
@@ -333,7 +390,12 @@ int main(int argc, char** argv) {
     destroy_console_history();
 
     // Clean up
+    set_mouse_drag_reporting(mouse_terminal, false);
     endwin();   // End curses mode
+    #ifndef _WIN32
+        delscreen(screen);
+        if(terminal) fclose(terminal);
+    #endif
 
     return 0;
 }
