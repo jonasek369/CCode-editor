@@ -47,7 +47,7 @@ bool file_before_save_callback(CCode* ccode, void* data){
     get_config_directory(path, sizeof(path));
     snprintf(config_path, sizeof(config_path), "%s/config.json", path);
     if(strncmp(config_path, lcd->filename, strlen(config_path)) == 0){
-        char question[4096] = {0};
+        char question[512] = {0};
 
         snprintf(question, sizeof(question), "Are you sure you want to save config.json? If the file contains invalid syntax, the editor will fallback to default");
 
@@ -70,8 +70,8 @@ void file_on_save_callback(CCode* ccode, void* data){
 
     file_on_change_callback(ccode, data);
 
-    char path[4096];
-    char config_path[8096];
+    char path[MAX_PATH];
+    char config_path[MAX_PATH + 192];
 
     get_config_directory(path, sizeof(path));
     snprintf(config_path, sizeof(config_path), "%s/config.json", path);

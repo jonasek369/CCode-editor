@@ -2,15 +2,97 @@
 #define _H_CLIPBOARD
 
 #include <assert.h>
+#include <stdbool.h>
 
 static bool clipboard_suport = false;
 
 #ifdef _WIN32
-	assert(false && "Not implemented!");
+    // assert(false && "Not implemented!");
+    #include <windows.h>
+    #include <winuser.h>
+
+    void detect_clipboard_support(){
+        clipboard_suport = true;
+    }   
+
+    char* get_clipboard_content(void) {
+        if (!clipboard_suport) {
+            return NULL;
+        }
+    
+        if (!OpenClipboard(NULL)) {
+            return NULL;
+        }
+    
+        HANDLE cb = GetClipboardData(CF_TEXT);
+        if (!cb) {
+            CloseClipboard();
+            return NULL;
+        }
+    
+        const char* clipboard_string = (const char*)GlobalLock(cb);
+        if (!clipboard_string) {
+            CloseClipboard();
+            return NULL;
+        }
+    
+        size_t len = strlen(clipboard_string);
+    
+        char* data = malloc(len + 1);
+        if (data) {
+            memcpy(data, clipboard_string, len + 1);
+        }
+    
+        GlobalUnlock(cb);
+        CloseClipboard();
+    
+        return data;
+    }
+    
+    void set_clipboard_content(const char* data) {
+        if (!clipboard_suport || !data) {
+            return;
+        }
+    
+        if (!OpenClipboard(NULL)) {
+            return;
+        }
+    
+        if (!EmptyClipboard()) {
+            CloseClipboard();
+            return;
+        }
+    
+        size_t len = strlen(data) + 1;
+    
+        HGLOBAL cb = GlobalAlloc(GMEM_MOVEABLE, len);
+        if (!cb) {
+            CloseClipboard();
+            return;
+        }
+    
+        char* buffer = (char*)GlobalLock(cb);
+        if (!buffer) {
+            GlobalFree(cb);
+            CloseClipboard();
+            return;
+        }
+    
+        memcpy(buffer, data, len);
+    
+        GlobalUnlock(cb);
+    
+        if (!SetClipboardData(CF_TEXT, cb)) {
+            GlobalFree(cb);
+        }
+    
+        CloseClipboard();
+    }
+
 #endif
 
 #ifdef __linux__
-	
+    
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,7 +137,7 @@ char* get_clipboard_content(void){
 
     int c;
     while ((c = fgetc(fp)) != EOF) {
-    	arrput(buf, (char)c);
+        arrput(buf, (char)c);
     }
 
     arrput(buf, '\0');

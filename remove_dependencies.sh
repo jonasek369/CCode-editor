@@ -33,6 +33,11 @@ remove_if_exists "main"
 remove_if_exists "nob.old"
 remove_if_exists "build_grammar"
 remove_if_exists "build_grammar.old"
+remove_if_exists "nob.exe"
+remove_if_exists "main.exe"
+
+# Debugger
+remove_if_exists "main.rdi"
 
 remove_if_exists "compile_flags.txt"
 

@@ -3,6 +3,8 @@
 /tiny_queue
 /tree-sitter
 /tree-sitter-grammar
+/win-deps
+/win-build
 *.old
 *.exe
 nob
