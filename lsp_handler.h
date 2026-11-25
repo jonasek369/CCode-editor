@@ -325,20 +325,25 @@ void handle_completion(CCode* ccode, JsonValue* message){
 	TYPE_CHECK_FIELD(message, result, JSON_OBJECT);
 	TYPE_CHECK_FIELD(result, items, JSON_ARRAY);
 	
-	if(lcd->completion_window){
-		json_free(lcd->completion_window->completion);
-		free(lcd->completion_window);
-		lcd->completion_window = NULL;
-	}
+	completion_close(lcd);
 	if(arrlenu(items->array) == 0){
 		goto defer;
 	}
-	CompletionWindow* win = malloc(sizeof(CompletionWindow));
+	// the answer is for where the cursor was, drop it if the user moved on
+	{
+		char* line = lcd->code_buffer[lcd->cursor->y];
+		int x = lcd->cursor->x;
+		char before = x > 0 ? line[x-1] : 0;
+		if(!(before && (is_word_byte((unsigned char)before) || before == '.' || before == '>' || before == ':'))){
+			goto defer;
+		}
+	}
+	CompletionWindow* win = calloc(1, sizeof(CompletionWindow));
 	win->completion = message;
 	win->selected = 0;
-	win->items_count = arrlenu(items->array) < 6 ? arrlenu(items->array) : 6;  
-
+	win->row = lcd->cursor->y;
 	lcd->completion_window = win;
+	completion_refilter(lcd);
 	return;
 
 defer:

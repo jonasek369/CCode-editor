@@ -21,8 +21,24 @@ static const CCodeKeyDef ccode_key_defs[] = {
     {"kLFT5", "\033[1;5D",    CTL_LEFT},
     {"kPRV5", "\033[5;5~",    CTL_PGUP},
     {"kNXT5", "\033[6;5~",    CTL_PGDN},
+    {"kHOM5", "\033[1;5H",    CTL_HOME},
+    {"kEND5", "\033[1;5F",    CTL_END},
+    {"kHOM6", "\033[1;6H",    CTL_SHOME},
+    {"kEND6", "\033[1;6F",    CTL_SEND},
+    {"kLFT6", "\033[1;6D",    CTL_SLEFT},
+    {"kRIT6", "\033[1;6C",    CTL_SRIGHT},
+    {"kDC5",  "\033[3;5~",    CTL_DEL},
+    {"kUP3",  "\033[1;3A",    ALT_UP},
+    {"kDN3",  "\033[1;3B",    ALT_DOWN},
+    {"kLFT3", "\033[1;3D",    ALT_LEFT},
+    {"kRIT3", "\033[1;3C",    ALT_RIGHT},
     {NULL,    "\033[1;2A",    KEY_SUP},
     {NULL,    "\033[1;2B",    KEY_SDOWN},
+    {NULL,    "\033[1;2H",    KEY_SHOME},
+    {NULL,    "\033[1;2F",    KEY_SEND},
+    // bracketed paste markers
+    {NULL,    "\033[200~",    KEY_PASTE_BEGIN},
+    {NULL,    "\033[201~",    KEY_PASTE_END},
     // Ctrl+Tab, only sent by terminals with modifyOtherKeys / CSI u enabled
     {NULL,    "\033[27;5;9~", CTL_TAB},
     {NULL,    "\033[9;5u",    CTL_TAB},
@@ -51,8 +67,44 @@ void init_keys(void){
     }
 }
 
+// Turns bracketed paste on, the terminal then marks pasted text so it is inserted
+// as is instead of being typed (no auto indent, no auto pairs)
+void set_bracketed_paste(FILE* terminal, bool enable){
+    fputs(enable ? "\033[?2004h" : "\033[?2004l", terminal);
+    fflush(terminal);
+}
+
+// Reads the pasted text up to the end marker into pasted_text
+static void read_paste(void){
+    arrsetlen(pasted_text, 0);
+    int idle = 0;
+    int prev_raw = 0;
+    for(;;){
+        int c = getch();
+        if(c == ERR){
+            // the end marker never came
+            if(++idle > 60) break;
+            continue;
+        }
+        idle = 0;
+        if(c == KEY_PASTE_END) break;
+        // "\r\n" is one line break
+        if(c == '\n' && prev_raw == '\r'){ prev_raw = c; continue; }
+        prev_raw = c;
+        if(c == KEY_ENTER || c == '\r') c = '\n';
+        if(c == KEY_BACKSPACE) c = 127;
+        if(c > 255) continue;
+        arrput(pasted_text, (char)c);
+    }
+    arrput(pasted_text, '\0');
+}
+
 int read_key(void){
     int ch = getch();
+    if(ch == KEY_PASTE_BEGIN){
+        read_paste();
+        return KEY_PASTE;
+    }
     switch(ch){
         case KEY_BACKSPACE:
         case 127: {
@@ -69,7 +121,11 @@ int read_key(void){
         case CUSTOM_KEY_ESCAPE: {
             // Alt+key arrives as ESC immediately followed by the key
             int next = getch();
-            if(next == 'i') return ALT_I;
+            if(next >= 32 && next < 127) return ALT_KEY(next);
+            if(next == KEY_UP)    return ALT_UP;
+            if(next == KEY_DOWN)  return ALT_DOWN;
+            if(next == KEY_LEFT)  return ALT_LEFT;
+            if(next == KEY_RIGHT) return ALT_RIGHT;
             if(next != ERR) ungetch(next);
             return CUSTOM_KEY_ESCAPE;
         }

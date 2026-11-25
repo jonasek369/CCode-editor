@@ -23,6 +23,12 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <limits.h>
+#include <stdarg.h>
+#include <time.h>
+#include <locale.h>
+#include <errno.h>
+#include <strings.h>
+#include <sys/stat.h>
 #include <tree_sitter/api.h>
 
 #include <curses.h>
@@ -40,7 +46,25 @@
 #define CTL_RIGHT  (CCODE_KEY_BASE + 5)
 #define CTL_PGUP   (CCODE_KEY_BASE + 6)
 #define CTL_PGDN   (CCODE_KEY_BASE + 7)
-#define ALT_I      (CCODE_KEY_BASE + 8)
+#define CTL_HOME   (CCODE_KEY_BASE + 9)
+#define CTL_END    (CCODE_KEY_BASE + 10)
+#define CTL_SHOME  (CCODE_KEY_BASE + 11)
+#define CTL_SEND   (CCODE_KEY_BASE + 12)
+#define CTL_SLEFT  (CCODE_KEY_BASE + 13)
+#define CTL_SRIGHT (CCODE_KEY_BASE + 14)
+#define CTL_DEL    (CCODE_KEY_BASE + 15)
+#define ALT_UP     (CCODE_KEY_BASE + 16)
+#define ALT_DOWN   (CCODE_KEY_BASE + 17)
+#define ALT_LEFT   (CCODE_KEY_BASE + 18)
+#define ALT_RIGHT  (CCODE_KEY_BASE + 19)
+#define KEY_PASTE_BEGIN (CCODE_KEY_BASE + 20)
+#define KEY_PASTE_END   (CCODE_KEY_BASE + 21)
+// A bracketed paste was read, the text is in pasted_text
+#define KEY_PASTE       (CCODE_KEY_BASE + 22)
+// Alt+<key> arrives as ESC followed by the key
+#define ALT_KEY(c) (CCODE_KEY_BASE + 0x100 + (c))
+#define ALT_I      ALT_KEY('i')
+#define CTRL_KEY(c) ((c) & 0x1f)
 // ncurses calls shift+up/down "scroll reverse"/"scroll forward"
 #define KEY_SUP    KEY_SR
 #define KEY_SDOWN  KEY_SF
@@ -129,7 +153,15 @@ typedef enum {
     COMMAND_FLOATING_WINDOW,
     COMMAND_CONFIG,
     COMMAND_DIAGNOSTICS,
-    COMMAND_MOVE_MODE
+    COMMAND_MOVE_MODE,
+    COMMAND_FORCE_QUIT,
+    COMMAND_NEW,
+    COMMAND_REPLACE,
+    COMMAND_HELP,
+    COMMAND_SET,
+    COMMAND_RELOAD,
+    COMMAND_WRITE_ALL,
+    COMMAND_COUNT
 } CommandType;
 
 typedef enum {
@@ -200,8 +232,10 @@ typedef struct {
 
 typedef struct {
     JsonValue* completion;
-    size_t selected;
-    size_t items_count;
+    size_t selected;     // index into visible
+    size_t items_count;  // number of visible items
+    size_t* visible;     // stb array, indices of the items matching the typed word
+    int row;             // line the completion was requested on
 } CompletionWindow;
 
 typedef struct {
@@ -222,6 +256,19 @@ bool is_inside_virtual_window(int x, int y, VirtualWindow* w){
     );
 }
 
+
+// One reversible buffer edit. Edits made by one key press share a group and are
+// undone together
+typedef struct {
+    bool   insert;    // true: text was inserted at row/col, false: text was deleted from there
+    int    row;
+    int    col;
+    char*  text;      // malloc'd, len bytes, may contain '\n'
+    size_t len;
+    int    cursor_x;  // cursor before the edit, restored on undo
+    int    cursor_y;
+    int    group;
+} UndoEntry;
 
 typedef struct {
     bool allow_diagnostics;
@@ -249,6 +296,27 @@ typedef struct {
     JsonValue* diagnostics; // object
     LSPRange** ranges;
     CompletionWindow* completion_window;
+
+    // Undo / redo
+    UndoEntry* undo_stack;     // stb array
+    UndoEntry* redo_stack;     // stb array
+    int  undo_group;           // group new edits are recorded into
+    int  saved_undo_len;       // undo_stack length at the last save, -1 when unreachable
+    bool undo_replaying;       // set while undo/redo applies edits so they are not recorded
+    bool typing_run;           // last edit was plain typing, consecutive typing undoes as one
+
+    // File format, restored on save
+    bool crlf;                 // file used \r\n line endings
+    bool use_tabs;             // indentation unit is '\t'
+    bool read_only;            // could not be written last time
+
+    int  preferred_col;        // display column kept while moving up/down, -1 when unset
+    long long mtime;           // modification time of the file when loaded/saved
+
+    int  tab_order;            // creation order, the tab bar and F1-F9 are sorted by it
+    bool is_welcome;           // welcome / help text, not a file the user has to save
+    int  last_cx, last_cy;     // cursor at the last render, the view follows it when it moves
+    bool final_newline;        // the file ended with a newline when it was loaded
 } LayerCodeData;
 
 typedef struct {
@@ -304,6 +372,24 @@ struct CCode{
     LSPContext** lsp_ctxs;
     CCodeConfig* config;
 };
+
+// Short message shown in the status bar (errors, "saved", ...)
+static char   status_message[512] = {0};
+static time_t status_message_time = 0;
+static bool   status_message_error = false;
+
+#if defined(__GNUC__)
+__attribute__((format(printf, 2, 3)))
+#endif
+void set_status(bool error, const char* fmt, ...);
+void set_status(bool error, const char* fmt, ...){
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(status_message, sizeof(status_message), fmt, args);
+    va_end(args);
+    status_message_time = time(NULL);
+    status_message_error = error;
+}
 
 typedef struct {
     VirtualWindow* virtual_window;

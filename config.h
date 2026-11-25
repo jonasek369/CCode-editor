@@ -177,7 +177,46 @@ typedef struct {
     ColorTheme* theme;
     size_t tab_size;
     ConfigLSP** lsps;
+    // Editing / display options
+    bool line_numbers;          // draw a line number gutter
+    bool relative_line_numbers; // gutter shows distance from the cursor line
+    bool auto_indent;           // Enter keeps the indentation of the current line
+    bool auto_pair;             // typing an opening bracket or quote inserts the closing one
+    bool highlight_current_line;
+    bool highlight_matching_bracket;
+    bool show_whitespace;       // draw tabs and trailing spaces visibly
+    bool trim_trailing_whitespace; // strip trailing spaces when saving
+    bool insert_final_newline;  // make sure saved files end with a newline
+    bool use_tabs;              // Tab inserts '\t' instead of spaces (detected per file when possible)
+    int  scroll_margin;         // lines kept visible above/below the cursor
 } CCodeConfig;
+
+// Fills every editing option with its default
+void config_set_editing_defaults(CCodeConfig* conf){
+    conf->line_numbers = true;
+    conf->relative_line_numbers = false;
+    conf->auto_indent = true;
+    conf->auto_pair = true;
+    conf->highlight_current_line = true;
+    conf->highlight_matching_bracket = true;
+    conf->show_whitespace = false;
+    conf->trim_trailing_whitespace = false;
+    conf->insert_final_newline = true;
+    conf->use_tabs = false;
+    conf->scroll_margin = 3;
+}
+
+static bool config_read_bool(JsonValue* obj, const char* key, bool def){
+    JsonValue* v = shget(obj->object, key);
+    if(!v || v->type != JSON_BOOL) return def;
+    return v->boolean;
+}
+
+static int64_t config_read_int(JsonValue* obj, const char* key, int64_t def){
+    JsonValue* v = shget(obj->object, key);
+    if(!v || v->type != JSON_NUMBER) return def;
+    return json_get_integer(v);
+}
 
 
 ColorTheme* load_theme(const char* path){
@@ -250,6 +289,7 @@ CCodeConfig* make_default_config(){
     conf->close_code_layer_on_split_view_close = false;
     conf->open_definition_in_split_view = true;
     conf->lsps = NULL;
+    config_set_editing_defaults(conf);
     return conf;
 }
 
@@ -280,6 +320,17 @@ void save_config(CCodeConfig* config){
     json_add_child(json_config, "tab_size", json_new_integer(config->tab_size));
     json_add_child(json_config, "close_code_layer_on_split_view_close", json_new_bool(config->close_code_layer_on_split_view_close));
     json_add_child(json_config, "open_definition_in_split_view", json_new_bool(config->open_definition_in_split_view));
+    json_add_child(json_config, "line_numbers", json_new_bool(config->line_numbers));
+    json_add_child(json_config, "relative_line_numbers", json_new_bool(config->relative_line_numbers));
+    json_add_child(json_config, "auto_indent", json_new_bool(config->auto_indent));
+    json_add_child(json_config, "auto_pair", json_new_bool(config->auto_pair));
+    json_add_child(json_config, "highlight_current_line", json_new_bool(config->highlight_current_line));
+    json_add_child(json_config, "highlight_matching_bracket", json_new_bool(config->highlight_matching_bracket));
+    json_add_child(json_config, "show_whitespace", json_new_bool(config->show_whitespace));
+    json_add_child(json_config, "trim_trailing_whitespace", json_new_bool(config->trim_trailing_whitespace));
+    json_add_child(json_config, "insert_final_newline", json_new_bool(config->insert_final_newline));
+    json_add_child(json_config, "use_tabs", json_new_bool(config->use_tabs));
+    json_add_child(json_config, "scroll_margin", json_new_integer(config->scroll_margin));
     JsonValue* lsps = json_new_array();
     for(size_t i = 0; i < arrlenu(config->lsps); i++){
         json_add_child(lsps, NULL, config_lsp_to_json(config->lsps[i]));
@@ -377,6 +428,21 @@ CCodeConfig* load_config(const char* path){
         config->open_definition_in_split_view = open_definition_in_split_view->boolean;
     }
 
+
+    config_set_editing_defaults(config);
+    config->line_numbers               = config_read_bool(json_config, "line_numbers", config->line_numbers);
+    config->relative_line_numbers      = config_read_bool(json_config, "relative_line_numbers", config->relative_line_numbers);
+    config->auto_indent                = config_read_bool(json_config, "auto_indent", config->auto_indent);
+    config->auto_pair                  = config_read_bool(json_config, "auto_pair", config->auto_pair);
+    config->highlight_current_line     = config_read_bool(json_config, "highlight_current_line", config->highlight_current_line);
+    config->highlight_matching_bracket = config_read_bool(json_config, "highlight_matching_bracket", config->highlight_matching_bracket);
+    config->show_whitespace            = config_read_bool(json_config, "show_whitespace", config->show_whitespace);
+    config->trim_trailing_whitespace   = config_read_bool(json_config, "trim_trailing_whitespace", config->trim_trailing_whitespace);
+    config->insert_final_newline       = config_read_bool(json_config, "insert_final_newline", config->insert_final_newline);
+    config->use_tabs                   = config_read_bool(json_config, "use_tabs", config->use_tabs);
+    config->scroll_margin              = (int)config_read_int(json_config, "scroll_margin", config->scroll_margin);
+    if(config->scroll_margin < 0) config->scroll_margin = 0;
+    if(config->tab_size < 1 || config->tab_size > 16) config->tab_size = 4;
 
     JsonValue* lsps = shget(json_config->object, "lsps");
     if(!lsps || lsps->type != JSON_ARRAY){

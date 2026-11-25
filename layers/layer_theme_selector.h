@@ -113,7 +113,7 @@ bool layer_theme_selector_update(CCode* ccode, Layer* layer, int chr){
     getmaxyx(stdscr, screen_y, screen_x);
     (void)screen_x;
 
-    int list_height = screen_y - 1;
+    int list_height = screen_y - 2; // rows 1 .. status bar
 
     if(chr == KEY_DOWN){
         if((ltsd->selected + 1) < arrlen(ltsd->current_dir_files)){
@@ -160,7 +160,7 @@ void layer_theme_selector_render(CCode* ccode, Layer* layer){
 
     int draw_y = 1;
     for(size_t i = ltsd->offset; i < arrlenu(ltsd->current_dir_files); i++){
-        if(draw_y >= y) break;
+        if(draw_y >= y - 1) break; // the last row is the status bar
         Nob_File_Type ft = dir_walk_get_file_type(ltsd->theme_dir_path, ltsd->current_dir_files[i]);
         if(ft == NOB_FILE_DIRECTORY){
             attron(COLOR_PAIR(COLOR_DIR));

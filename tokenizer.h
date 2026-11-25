@@ -13,30 +13,46 @@ typedef struct {
 #define LONGEST_COMMAND 7
 
 static CommandMap* commands = NULL;
-static char* commands_info[COMMAND_MOVE_MODE + 1] = {
-    "<path>             | Opens a file",
-    "                   | Quits the application",
-    "<line> <character> | Jumps to line and character (optional)",
-    "<command>          | Executes a system command",
-    "                   | Saves the current focused file",
-    "<path>             | Writes the current file to a path",
-    "                   | Saves the current file and quits",
-    "                   | Opens a floating window",
-    "<substr>           | Finds text in the current file",
-    "                   | Force-closes the current file",
-    "                   | Closes the current file",
-    "<name>             | Changes the current file name",
-    "                   | Opens the file tree",
-    "<path>             | Changes the file tree directory",
-    "                   | Toggles the display of profiling information",
-    "                   | Opens theme picker",
-    "<filename>         | Creates a new file in tree",
-    "<dirname>          | Creates a new directory in tree",
-    "                   | Splits two code layers into left and right side",
-    "<path>             | Deletes a file in tree",
-    "                   | Opens the configuration file",
-    "                   | Toggle of diagnostics in focused file",
-    "                   | Toggles move mode in split view layer"
+// Description of each command, indexed by CommandType - 1
+static char* commands_info[COMMAND_COUNT] = {0};
+
+typedef struct {
+    const char* key;
+    CommandType type;
+    const char* info;
+} CommandDef;
+
+static const CommandDef command_defs[] = {
+    {":o",      COMMAND_OPEN,            "<path>             | Opens a file (creates it when saved if it doesn't exist)"},
+    {":new",    COMMAND_NEW,             "                   | Opens a new empty buffer"},
+    {":w",      COMMAND_WRITE,           "                   | Saves the current file"},
+    {":s",      COMMAND_SAVE,            "<path>             | Saves the current file under a new path"},
+    {":wa",     COMMAND_WRITE_ALL,       "                   | Saves all modified files"},
+    {":wq",     COMMAND_WRITE_QUIT,      "                   | Saves the current file and quits"},
+    {":q",      COMMAND_QUIT,            "                   | Quits (asks first when files are unsaved)"},
+    {":q!",     COMMAND_FORCE_QUIT,      "                   | Quits and discards unsaved changes"},
+    {":c",      COMMAND_CLOSE,           "                   | Closes the current file"},
+    {":c!",     COMMAND_FORCE_CLOSE,     "                   | Closes the current file, discarding changes"},
+    {":reload", COMMAND_RELOAD,          "                   | Rereads the current file from disk"},
+    {":gt",     COMMAND_GOTO,            "<line> <column>    | Jumps to a line (and column)"},
+    {":f",      COMMAND_FIND,            "<text>             | Finds text, arrows jump between matches"},
+    {":r",      COMMAND_REPLACE,         "<find> <replace>   | Replaces every occurrence in the file"},
+    {":chn",    COMMAND_CHANGE_NAME,     "<name>             | Changes the current file name"},
+    {":set",    COMMAND_SET,             "<option> [value]   | Changes an editor option (:set alone lists them)"},
+    {":sys",    COMMAND_SYS,             "<command>          | Executes a system command"},
+    {":tree",   COMMAND_TREE,            "[path]             | Opens the file tree"},
+    {":cd",     COMMAND_TREE_CHANGE_DIR, "<path>             | Changes the file tree directory"},
+    {":ft",     COMMAND_FLOATING_WINDOW, "                   | Opens the fuzzy file finder"},
+    {":mkfile", COMMAND_MAKE_FILE,       "<filename>         | Creates a new file in tree"},
+    {":mkdir",  COMMAND_MAKE_DIRECTORY,  "<dirname>          | Creates a new directory in tree"},
+    {":rm",     COMMAND_DELETE_FILE,     "<path>             | Deletes a file in tree"},
+    {":sw",     COMMAND_SPLIT_VIEW,      "[a] [b]            | Splits two open files side by side"},
+    {":mv",     COMMAND_MOVE_MODE,       "                   | Toggles resizing of the split view"},
+    {":theme",  COMMAND_THEME,           "[path]             | Opens the theme picker"},
+    {":conf",   COMMAND_CONFIG,          "                   | Opens the configuration file"},
+    {":diag",   COMMAND_DIAGNOSTICS,     "                   | Toggles diagnostics in the focused file"},
+    {":prof",   COMMAND_PROFILING,       "                   | Toggles the profiler overlay"},
+    {":help",   COMMAND_HELP,            "                   | Shows keyboard shortcuts and commands"},
 };
 
 void add_command(const char* command, CommandType type){
@@ -45,29 +61,10 @@ void add_command(const char* command, CommandType type){
 }
 
 void init_commands(){
-    add_command(":o",      COMMAND_OPEN);
-    add_command(":q",      COMMAND_QUIT);
-    add_command(":gt",     COMMAND_GOTO);
-    add_command(":sys",    COMMAND_SYS);
-    add_command(":s",      COMMAND_SAVE);
-    add_command(":w",      COMMAND_WRITE);
-    add_command(":wq",     COMMAND_WRITE_QUIT);
-    add_command(":ft",     COMMAND_FLOATING_WINDOW);
-    add_command(":f",      COMMAND_FIND);
-    add_command(":c!",     COMMAND_FORCE_CLOSE);
-    add_command(":c",      COMMAND_CLOSE);
-    add_command(":chn",    COMMAND_CHANGE_NAME);
-    add_command(":tree",   COMMAND_TREE);
-    add_command(":cd",     COMMAND_TREE_CHANGE_DIR);
-    add_command(":prof",   COMMAND_PROFILING);
-    add_command(":theme",  COMMAND_THEME);
-    add_command(":mkfile", COMMAND_MAKE_FILE);
-    add_command(":mkdir",  COMMAND_MAKE_DIRECTORY);
-    add_command(":sw",     COMMAND_SPLIT_VIEW);
-    add_command(":rm",     COMMAND_DELETE_FILE);
-    add_command(":conf",   COMMAND_CONFIG);
-    add_command(":diag",   COMMAND_DIAGNOSTICS);
-    add_command(":mv",     COMMAND_MOVE_MODE);
+    for(size_t i = 0; i < sizeof(command_defs)/sizeof(command_defs[0]); i++){
+        add_command(command_defs[i].key, command_defs[i].type);
+        commands_info[command_defs[i].type - 1] = (char*)command_defs[i].info;
+    }
 }
 
 void destroy_commands(){

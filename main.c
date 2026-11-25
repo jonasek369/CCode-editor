@@ -20,7 +20,7 @@ void usage(FILE *stream){
 
 typedef struct {
     bool open_tree;
-    char* file;
+    char** files;   // stb array, each may end in :line or :line:column
 } Args;
 
 // Runs before curses starts so usage and errors reach the terminal
@@ -42,16 +42,52 @@ Args parse_args(int argc, char** argv){
         exit(0);
     }
 
-    return (Args){
-        .open_tree = *open_tree || *open_tree_short,
-        .file      = argc > 0 ? argv[0] : NULL,
-    };
+    Args args = { .open_tree = *open_tree || *open_tree_short, .files = NULL };
+    for(int i = 0; i < argc; i++) arrput(args.files, argv[i]);
+    return args;
+}
+
+// Splits "path:line:column" into its parts, the numbers are 0 when missing
+static size_t split_file_position(const char* arg, int* line, int* column){
+    *line = 0;
+    *column = 0;
+    size_t len = strlen(arg);
+    // an existing file wins over the position syntax (names may contain ':')
+    if(nob_file_exists(arg) == 1) return len;
+    size_t end = len;
+    int numbers[2] = {0, 0};
+    int found = 0;
+    while(found < 2){
+        size_t p = end;
+        while(p > 0 && isdigit((unsigned char)arg[p-1])) p--;
+        if(p == end || p == 0 || arg[p-1] != ':') break;
+        numbers[found++] = atoi(arg + p);
+        end = p - 1;
+    }
+    if(found == 1){ *line = numbers[0]; }
+    if(found == 2){ *line = numbers[1]; *column = numbers[0]; }
+    return end;
 }
 
 void handle_args(CCode* ccode, Args* args){
-    if(args->file){
-        read_file_to_code_layer(ccode, args->file, strlen(args->file), true);
+    Layer* first = NULL;
+    for(size_t i = 0; i < arrlenu(args->files); i++){
+        const char* arg = args->files[i];
+        int line, column;
+        size_t len = split_file_position(arg, &line, &column);
+        Layer* layer = read_file_to_code_layer(ccode, arg, len, true);
+        if(!layer || layer->type != LAYER_CODE) continue;
+        if(!first) first = layer;
+        LayerCodeData* lcd = layer->layer_data;
+        if(line > 0){
+            int n = arrlen(lcd->code_buffer);
+            lcd->cursor->y = line - 1 < n ? line - 1 : n - 1;
+            lcd->cursor->x = column > 0 ? view_byte_at_col(lcd->code_buffer[lcd->cursor->y], column - 1) : 0;
+        }
     }
+    // the first file named is the one shown
+    if(first) push_layer_to_top(ccode, first);
+    arrfree(args->files);
 
     if(args->open_tree){
         Layer* tree = new_layer_dir_walk();
@@ -60,8 +96,6 @@ void handle_args(CCode* ccode, Args* args){
         }
     }
 }
-
-
 
 int main(int argc, char** argv) {
     // Unused in release build,
@@ -112,11 +146,19 @@ int main(int argc, char** argv) {
     #endif
 
     CCode ccode   = {0};
+    global_ccode  = &ccode;
     ccode.layers  = NULL;
     ccode.config  = load_config(config_path);
     register_lsp_from_config(&ccode);
 
     int ch;
+
+    // UTF-8 text is drawn as characters, not bytes
+    setlocale(LC_ALL, "");
+    #ifdef _WIN32
+        SetConsoleOutputCP(CP_UTF8);
+        SetConsoleCP(CP_UTF8);
+    #endif
 
     // ncurses waits a full second after ESC by default to see if a sequence follows
     set_escdelay(25);
@@ -143,6 +185,8 @@ int main(int argc, char** argv) {
         FILE* mouse_terminal = stdout;
     #endif
     set_mouse_drag_reporting(mouse_terminal, true);
+    set_bracketed_paste(mouse_terminal, true);
+    tty_output = mouse_terminal;
     init_keys();
 
     move(1, 0);
@@ -170,8 +214,9 @@ int main(int argc, char** argv) {
     int x, y;
     getmaxyx(stdscr, y, x);
 
+    // row 0 is the tab bar, the last row the status bar
     default_virtual_window.width = x;
-    default_virtual_window.height = y;
+    default_virtual_window.height = y - 2;
 
     // Frames left to draw since the last input. Frames without input are skipped,
     // but one more is drawn after input because some state set during a keypress
@@ -210,9 +255,26 @@ int main(int argc, char** argv) {
         if(ch == KEY_RESIZE){
             getmaxyx(stdscr, y, x);
             default_virtual_window.width = x;
-            default_virtual_window.height = y;
+            default_virtual_window.height = y - 2;
+            for(size_t i = 0; i < arrlenu(ccode.layers); i++){
+                if(ccode.layers[i]->type == LAYER_SPLIT_VIEW) layer_split_view_relayout(ccode.layers[i]);
+            }
             ch = -1;
             frames_to_draw = 2;
+        }
+
+        // reload files changed by other programs
+        if(check_external_changes(&ccode)){
+            frames_to_draw = 2;
+        }
+
+        // the status message disappears after a while, redraw when it does
+        if(status_message[0] && time(NULL) - status_message_time >= 6 && time(NULL) - status_message_time < 8){
+            static time_t cleared = 0;
+            if(cleared != status_message_time){
+                cleared = status_message_time;
+                frames_to_draw = 2;
+            }
         }
 
         // handle LSPs if some are active
@@ -238,54 +300,68 @@ int main(int argc, char** argv) {
             frames_to_draw--;
         }
 
-        // Code switch
-        if(ch == CTL_TAB && arrlen(ccode.layers) >= 2 && top_layer(&ccode)->type != LAYER_CONSOLE){
+        Layer* top_now = top_layer(&ccode);
+        bool editing = top_now && (top_now->type == LAYER_CODE || top_now->type == LAYER_SPLIT_VIEW);
+
+        // Ctrl+Tab goes back to the previously used file
+        if(ch == CTL_TAB && arrlen(ccode.layers) >= 2 && top_now->type == LAYER_CODE){
             Layer* top = top_type_layer(&ccode, LAYER_CODE);
-            if(top == NULL){
-                continue;
+            if(top != NULL){
+                remove_layer(&ccode, top);
+                Layer* next = top_type_layer(&ccode, LAYER_CODE);
+                push_layer_to_top(&ccode, next ? next : top);
+                if(next) push_layer_to_bot(&ccode, top);
             }
-            remove_layer(&ccode, top);
-            Layer* next = top_type_layer(&ccode, LAYER_CODE);
-            if(next == NULL){
-                push_layer_to_top(&ccode, top);
-                continue;
-            }
-            push_layer_to_top(&ccode, next);
-            push_layer_to_bot(&ccode, top);
+            ch = -1;
         }
-        // ncurses reserves 64 function keys, KEY_F(0) to KEY_F(63)
-        if(ch > KEY_F0 && ch <= KEY_F0+63 && arrlen(ccode.layers) >= 1){
-            if(top_layer(&ccode)->type == LAYER_CODE){
-                int index = (ch-KEY_F0)-1;
-                Layer** code_layers = all_type_layers(&ccode, LAYER_CODE);
-                if(arrlen(code_layers) <= index){
-                    arrfree(code_layers);
-                }else{
-                    Layer* layer = code_layers[index];
-                    remove_layer(&ccode, layer);
-                    push_layer_to_top(&ccode, layer);
-                    arrfree(code_layers);
-                } 
-            }else if(top_layer(&ccode)->type == LAYER_SPLIT_VIEW){
-                int index = (ch-KEY_F0)-1;
-                if(index >= 0 && index <= 1){
-                    LayerSplitViewData* lsvd = top_layer(&ccode)->layer_data;
-                    lsvd->focused = index;
-                }
+        // Alt+Left/Right and Ctrl+PgUp/PgDn walk through the tabs
+        if(editing && (ch == ALT_LEFT || ch == CTL_PGUP || ch == ALT_KEY(','))){
+            switch_tab_relative(&ccode, -1);
+            ch = -1;
+        }
+        if(editing && (ch == ALT_RIGHT || ch == CTL_PGDN || ch == ALT_KEY('.'))){
+            switch_tab_relative(&ccode, 1);
+            ch = -1;
+        }
+        // F1..F9 and Alt+1..Alt+9 jump to a tab
+        if(editing && ((ch >= KEY_F(1) && ch <= KEY_F(9)) || (ch >= ALT_KEY('1') && ch <= ALT_KEY('9')))){
+            int index = (ch >= ALT_KEY('1') && ch <= ALT_KEY('9')) ? ch - ALT_KEY('1') : ch - KEY_F(1);
+            if(top_now->type == LAYER_SPLIT_VIEW && index <= 1 && ch < ALT_KEY('1')){
+                // F1/F2 in a split view focus its panes
+                LayerSplitViewData* lsvd = top_now->layer_data;
+                if(index < arrlen(lsvd->splitten_layers)) lsvd->focused = index;
+            }else{
+                switch_tab_index(&ccode, index);
+            }
+            ch = -1;
+        }
+        // Escape first cancels what is going on in the editor
+        if(ch == CUSTOM_KEY_ESCAPE && editing){
+            Layer* code = top_type_layer(&ccode, LAYER_CODE);
+            LayerCodeData* lcd = code ? code->layer_data : NULL;
+            if(lcd && lcd->finding_substr){
+                free(lcd->finding_substr->substr);
+                free(lcd->finding_substr);
+                lcd->finding_substr = NULL;
+                ch = -1;
+            }else if(lcd && lcd->select_end && !lcd->completion_window && !lcd->completion_function_params){
+                sel_clear(lcd);
+                ch = -1;
             }
         }
+        // dialogs answer Escape with "No" themselves
+        bool dialog_on_top = top_layer(&ccode) && top_layer(&ccode)->type == LAYER_FLOATING_DIALOG;
         // Console switching
-        if(ch == CUSTOM_KEY_ESCAPE || ccode.config->PrivateCloseConsole){
+        if((ch == CUSTOM_KEY_ESCAPE && !dialog_on_top) || ccode.config->PrivateCloseConsole){
             // if top layer has opened completion window remove it
-            if(arrlenu(ccode.layers) > 1 && ch == CUSTOM_KEY_ESCAPE){
-                int index = top_layer(&ccode)->type == LAYER_CONSOLE ? 1 : 0;
+            int esc_index = (arrlenu(ccode.layers) > 0 && top_layer(&ccode)->type == LAYER_CONSOLE) ? 1 : 0;
+            if((int)arrlenu(ccode.layers) > esc_index && ch == CUSTOM_KEY_ESCAPE){
+                int index = esc_index;
                 switch(ccode.layers[index]->type){
                     case(LAYER_CODE): {
                         LayerCodeData* lcd = ccode.layers[index]->layer_data;
                         if(lcd->completion_window){
-                            json_free(lcd->completion_window->completion);
-                            free(lcd->completion_window);
-                            lcd->completion_window = NULL;
+                            completion_close(lcd);
                             continue;
                         }
                         break;
@@ -415,8 +491,10 @@ int main(int argc, char** argv) {
     destory_lsp_handlers();
     destroy_registered_lsps();
     destroy_console_history();
+    destroy_code_render();
 
     // Clean up
+    set_bracketed_paste(mouse_terminal, false);
     set_mouse_drag_reporting(mouse_terminal, false);
     endwin();   // End curses mode
     #ifndef _WIN32

@@ -22,23 +22,26 @@ LayerCodeData* mouse_selection_target(Layer* layer){
 
 // Converts screen position to clamped buffer position, false if outside the buffer
 bool mouse_to_buffer_pos(LayerCodeData* lcd, MEVENT* event, int* x, int* y){
-    // split view panes are offset on screen, a lone code layer starts below the tab bar
-    VirtualWindow* win = lcd->virtual_window ? lcd->virtual_window : &default_virtual_window;
+    return view_screen_to_pos(lcd, event->y, event->x, y, x, false);
+}
 
-    int target_y = lcd->cursor->yoff + event->y - win->y;
-    if(target_y < 0 || target_y >= arrlen(lcd->code_buffer)){
-        return false;
-    }
+// Milliseconds from a monotonic clock, for double clicks
+static long long mouse_now_ms(void){
+    #ifdef _WIN32
+        return (long long)GetTickCount64();
+    #else
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        return (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    #endif
+}
 
-    int len = arrlen(lcd->code_buffer[target_y])-2;
-    int target_x = lcd->cursor->xoff + event->x - win->x;
-
-    if(target_x > len) target_x = len;
-    if(target_x < 0) target_x = 0;
-
-    *x = target_x;
-    *y = target_y;
-    return true;
+// Scrolls a code layer by delta lines without moving its cursor
+static void mouse_scroll_code(LayerCodeData* lcd, int delta){
+    int n = arrlen(lcd->code_buffer);
+    lcd->cursor->yoff += delta;
+    if(lcd->cursor->yoff > n - 1) lcd->cursor->yoff = n - 1;
+    if(lcd->cursor->yoff < 0) lcd->cursor->yoff = 0;
 }
 
 void handle_mouse(CCode* ccode){
@@ -59,6 +62,36 @@ void handle_mouse(CCode* ccode){
         return;
     }
 
+    // clicking a tab switches to it
+    if(event.y == 0 && (event.bstate & BUTTON1_PRESSED) &&
+       (current_top_layer->type == LAYER_CODE || current_top_layer->type == LAYER_SPLIT_VIEW)){
+        Layer* tab = tab_at_x(event.x);
+        if(tab) focus_tab(ccode, tab);
+        dragging = false;
+        return;
+    }
+
+    // the wheel scrolls the view, the cursor stays where it is
+    if((event.bstate & (BUTTON4_PRESSED | BUTTON5_PRESSED)) &&
+       (current_top_layer->type == LAYER_CODE || current_top_layer->type == LAYER_SPLIT_VIEW)){
+        LayerCodeData* lcd = NULL;
+        if(current_top_layer->type == LAYER_CODE){
+            lcd = current_top_layer->layer_data;
+        }else{
+            LayerSplitViewData* lsvd = current_top_layer->layer_data;
+            for(size_t i = 0; i < arrlenu(lsvd->splitten_layers); i++){
+                LayerCodeData* pane = lsvd->splitten_layers[i]->layer_data;
+                if(pane->virtual_window && is_inside_virtual_window(event.x, event.y, pane->virtual_window)) lcd = pane;
+            }
+        }
+        if(lcd){
+            #ifdef BUTTON5_PRESSED
+            mouse_scroll_code(lcd, (event.bstate & BUTTON4_PRESSED) ? -3 : 3);
+            #endif
+        }
+        return;
+    }
+
     // Pressing in a split view pane focuses it, so the selection starts there
     if(event.bstate & BUTTON1_PRESSED && current_top_layer->type == LAYER_SPLIT_VIEW){
         LayerSplitViewData* lsvd = current_top_layer->layer_data;
@@ -73,10 +106,30 @@ void handle_mouse(CCode* ccode){
 
     LayerCodeData* selection_lcd = mouse_selection_target(current_top_layer);
 
+    static long long last_click_ms = 0;
+    static int last_click_x = -1, last_click_y = -1;
+
     if(event.bstate & BUTTON1_PRESSED){
         dragging = true;
         press_x = event.x;
         press_y = event.y;
+
+        // double click selects the word
+        long long now = mouse_now_ms();
+        if(selection_lcd && now - last_click_ms < 400 && event.x == last_click_x && event.y == last_click_y){
+            int x, y;
+            if(mouse_to_buffer_pos(selection_lcd, &event, &x, &y)){
+                selection_lcd->cursor->x = x;
+                selection_lcd->cursor->y = y;
+                layer_code_select_word(selection_lcd);
+            }
+            dragging = false;
+            last_click_ms = 0;
+            return;
+        }
+        last_click_ms = now;
+        last_click_x = event.x;
+        last_click_y = event.y;
 
         // Create the base of selection
         if(selection_lcd){
@@ -109,9 +162,10 @@ void handle_mouse(CCode* ccode){
             }
 
             int x, y;
-            if(mouse_to_buffer_pos(selection_lcd, &event, &x, &y)){
+            if(view_screen_to_pos(selection_lcd, event.y, event.x, &y, &x, true)){
                 selection_lcd->cursor->x = x;
                 selection_lcd->cursor->y = y;
+                selection_lcd->preferred_col = -1;
             }
         }
     }else if(event.bstate & BUTTON1_RELEASED){
@@ -134,15 +188,15 @@ void handle_mouse(CCode* ccode){
         }
     }
 
-    // scroll up
+    // scroll lists with the wheel
     if(event.bstate & BUTTON4_PRESSED){
         current_top_layer->update_function(ccode, current_top_layer, KEY_UP);
     }
-
-    // scroll down
+    #ifdef BUTTON5_PRESSED
     if(event.bstate & BUTTON5_PRESSED){
         current_top_layer->update_function(ccode, current_top_layer, KEY_DOWN);
     }
+    #endif
 
     if(event.x < 0) event.x = 0;
     if(event.y < 0) event.y = 0;
@@ -153,36 +207,14 @@ void handle_mouse(CCode* ccode){
             case LAYER_CODE: {
                 LayerCodeData* lcd = current_top_layer->layer_data;
                 if(!lcd || !lcd->cursor) break;
-            
-                int target_y = lcd->cursor->yoff + event.y - 1;
-
-                if(target_y < 0 || target_y >= arrlen(lcd->code_buffer))
-                    break;
-
-                if(lcd->completion_function_params){
-                    arrfree(lcd->completion_function_params->index_char_positions);
-                    arrfree(lcd->completion_function_params->indecies_size);
-                    free(lcd->completion_function_params);
-                    lcd->completion_function_params = NULL;
-                }
-
-                lcd->cursor->y = target_y;
-            
-                char* line = lcd->code_buffer[target_y];
-                int len = arrlen(line)-2;
-            
-                int target_x = lcd->cursor->xoff + event.x;
-            
-                if(target_x > len) target_x = len;
-                if(target_x < 0) target_x = 0;
-            
-                lcd->cursor->x = target_x;
-                
-                if(lcd->select_end){
-                    free(lcd->select_end);
-                    lcd->select_end = NULL;
-                }
-
+                int x, y;
+                if(!view_screen_to_pos(lcd, event.y, event.x, &y, &x, false)) break;
+                cfp_free(lcd);
+                completion_close(lcd);
+                lcd->cursor->y = y;
+                lcd->cursor->x = x;
+                lcd->preferred_col = -1;
+                sel_clear(lcd);
                 break;
             }
             case LAYER_DIR_WALK: {
@@ -230,9 +262,10 @@ void handle_mouse(CCode* ccode){
                 if(event.y == y-1){
                     LayerConsoleData* lcd = current_top_layer->layer_data;
 
-                    if(event.x > arrlen(lcd->console_buffer)-1) break;
+                    int bx = event.x + console_scroll_offset(lcd, x);
+                    if(bx > arrlen(lcd->console_buffer)-1) break;
 
-                    lcd->console_buffer_x = event.x;
+                    lcd->console_buffer_x = bx;
                 }
                 break;
             }
@@ -243,23 +276,12 @@ void handle_mouse(CCode* ccode){
                     if(!lcd || !lcd->virtual_window) continue;
                     if(!is_inside_virtual_window(event.x, event.y, lcd->virtual_window)) continue;
                     lsvd->focused = i;
-                    int target_y = lcd->cursor->yoff + event.y - lcd->virtual_window->y;
-            
-                    if(target_y < 0 || target_y >= arrlen(lcd->code_buffer))
-                        break;
-                
-                    lcd->cursor->y = target_y;
-                
-                    char* line = lcd->code_buffer[target_y];
-                    int len = arrlen(line)-2;
-                
-                    int target_x = lcd->cursor->xoff + event.x - lcd->virtual_window->x;
-                
-                    if(target_x > len) target_x = len;
-                    if(target_x < 0) target_x = 0;
-                
-                    lcd->cursor->x = target_x;
-                
+                    int x, y;
+                    if(!view_screen_to_pos(lcd, event.y, event.x, &y, &x, false)) break;
+                    lcd->cursor->y = y;
+                    lcd->cursor->x = x;
+                    lcd->preferred_col = -1;
+                    sel_clear(lcd);
                     break;
                 }
                 break;

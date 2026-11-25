@@ -30,6 +30,7 @@ Layer* new_layer_floating_dialog(const char* message, void (*on_yes)(CCode*, voi
     int width = msg_len + 4;
     if(width < min_width) width = min_width;
     if(width > x)         width = x;
+    if(width < 1)         width = 1;
 
     int height = 5;
     lfd->virtual_window = malloc(sizeof(VirtualWindow));
@@ -110,7 +111,7 @@ void layer_floating_dialog_render(CCode* ccode, Layer* layer){
         int msg_len = (int)strlen(lfd->message);
         int msg_col = virt_win->x + (virt_win->width - msg_len) / 2;
         if(msg_col < virt_win->x) msg_col = virt_win->x;
-        mvprintw(virt_win->y + 1, msg_col, "%s", lfd->message);
+        mvaddnstr(virt_win->y + 1, msg_col, lfd->message, virt_win->width);
     }
 
     for(int j = 0; j < virt_win->width; j++){

@@ -107,7 +107,7 @@ void message_to_console(CCode* ccode, const char* message){
     }
     Layer* console = top_type_layer(ccode, LAYER_CONSOLE);
     if(console == NULL){
-        fprintf(stderr, "Trying to write to console but no console is present in ccode->layers\n");
+        set_status(true, "%s", message);
         return;
     }
     LayerConsoleData* layer_console_data = (LayerConsoleData*) console->layer_data;
@@ -123,6 +123,181 @@ void message_to_console(CCode* ccode, const char* message){
 }
 
 
+
+// Every code layer, including the ones inside split views
+Layer** collect_code_layers(CCode* ccode){
+    Layer** out = NULL;
+    for(size_t i = 0; i < arrlenu(ccode->layers); i++){
+        Layer* l = ccode->layers[i];
+        if(l->type == LAYER_CODE){
+            arrput(out, l);
+        }else if(l->type == LAYER_SPLIT_VIEW){
+            LayerSplitViewData* lsvd = l->layer_data;
+            for(size_t j = 0; j < arrlenu(lsvd->splitten_layers); j++) arrput(out, lsvd->splitten_layers[j]);
+        }
+    }
+    return out;
+}
+
+// Number of code layers with unsaved changes, the first one's name is stored in first
+int count_unsaved(CCode* ccode, const char** first){
+    Layer** all = collect_code_layers(ccode);
+    int count = 0;
+    for(size_t i = 0; i < arrlenu(all); i++){
+        LayerCodeData* lcd = all[i]->layer_data;
+        if(!lcd->saved){
+            if(count == 0 && first) *first = lcd->filename;
+            count++;
+        }
+    }
+    arrfree(all);
+    return count;
+}
+
+// Raw text after the command name, the find/replace arguments keep their exact
+// spelling this way (numbers, leading dashes, ...). Quoted arguments may contain spaces
+static const char* console_args_start(const char* buffer){
+    const char* p = buffer;
+    while(*p && !is_whitespace[(uint8_t)*p]) p++;
+    while(*p && is_whitespace[(uint8_t)*p]) p++;
+    return p;
+}
+
+// Reads one argument (quoted or up to whitespace) into a malloc'd string
+static char* console_next_arg(const char** p){
+    const char* s = *p;
+    while(*s && is_whitespace[(uint8_t)*s]) s++;
+    if(!*s){ *p = s; return NULL; }
+    Nob_String_Builder sb = {0};
+    if(*s == '"'){
+        s++;
+        while(*s && *s != '"'){
+            if(*s == '\\' && (s[1] == '"' || s[1] == '\\')) s++;
+            nob_da_append(&sb, *s);
+            s++;
+        }
+        if(*s == '"') s++;
+    }else{
+        while(*s && !is_whitespace[(uint8_t)*s]){
+            nob_da_append(&sb, *s);
+            s++;
+        }
+    }
+    nob_da_append(&sb, '\0');
+    *p = s;
+    char* out = strdup(sb.items);
+    nob_sb_free(sb);
+    return out;
+}
+
+static bool parse_bool_value(const char* v, bool current, bool* ok){
+    *ok = true;
+    if(!v) return !current;
+    if(strcasecmp(v, "on") == 0 || strcasecmp(v, "true") == 0 || strcmp(v, "1") == 0 || strcasecmp(v, "yes") == 0) return true;
+    if(strcasecmp(v, "off") == 0 || strcasecmp(v, "false") == 0 || strcmp(v, "0") == 0 || strcasecmp(v, "no") == 0) return false;
+    *ok = false;
+    return current;
+}
+
+void console_set_option(CCode* ccode, const char* args){
+    CCodeConfig* c = ccode->config;
+    const char* p = args;
+    char* name = console_next_arg(&p);
+    char* value = console_next_arg(&p);
+    Layer* top = top_type_layer(ccode, LAYER_CODE);
+    LayerCodeData* lcd = top ? top->layer_data : NULL;
+
+    if(!name){
+        message_to_console(ccode, nob_temp_sprintf(
+            "tab_size=%d use_tabs=%s line_numbers=%s relative_line_numbers=%s auto_indent=%s auto_pair=%s "
+            "show_whitespace=%s trim_trailing_whitespace=%s insert_final_newline=%s scroll_margin=%d crlf=%s",
+            (int)c->tab_size, (lcd ? lcd->use_tabs : c->use_tabs) ? "on" : "off", c->line_numbers ? "on" : "off",
+            c->relative_line_numbers ? "on" : "off", c->auto_indent ? "on" : "off", c->auto_pair ? "on" : "off",
+            c->show_whitespace ? "on" : "off", c->trim_trailing_whitespace ? "on" : "off",
+            c->insert_final_newline ? "on" : "off", c->scroll_margin, (lcd && lcd->crlf) ? "on" : "off"));
+        nob_temp_reset();
+        return;
+    }
+
+    struct { const char* name; bool* field; } bools[] = {
+        {"line_numbers", &c->line_numbers}, {"relative_line_numbers", &c->relative_line_numbers},
+        {"auto_indent", &c->auto_indent}, {"auto_pair", &c->auto_pair},
+        {"show_whitespace", &c->show_whitespace}, {"trim_trailing_whitespace", &c->trim_trailing_whitespace},
+        {"insert_final_newline", &c->insert_final_newline}, {"highlight_current_line", &c->highlight_current_line},
+        {"highlight_matching_bracket", &c->highlight_matching_bracket},
+        {"use_tabs", lcd ? &lcd->use_tabs : &c->use_tabs}, {"crlf", lcd ? &lcd->crlf : NULL},
+    };
+    bool handled = false;
+    for(size_t i = 0; i < sizeof(bools)/sizeof(bools[0]); i++){
+        if(strcmp(name, bools[i].name) != 0 || !bools[i].field) continue;
+        bool ok;
+        bool v = parse_bool_value(value, *bools[i].field, &ok);
+        if(!ok){
+            message_to_console(ccode, "Expected on/off");
+        }else{
+            *bools[i].field = v;
+            // a different line ending is a change that has to be saved
+            if(strcmp(name, "crlf") == 0 && lcd) lcd->saved = false;
+            message_to_console(ccode, nob_temp_sprintf("%s = %s", name, v ? "on" : "off"));
+            nob_temp_reset();
+        }
+        handled = true;
+        break;
+    }
+    if(!handled && (strcmp(name, "tab_size") == 0 || strcmp(name, "scroll_margin") == 0)){
+        int v = value ? atoi(value) : -1;
+        if(strcmp(name, "tab_size") == 0){
+            if(v < 1 || v > 16) message_to_console(ccode, "tab_size has to be between 1 and 16");
+            else { c->tab_size = (size_t)v; message_to_console(ccode, nob_temp_sprintf("tab_size = %d", v)); }
+        }else{
+            if(v < 0) message_to_console(ccode, "scroll_margin has to be 0 or more");
+            else { c->scroll_margin = v; message_to_console(ccode, nob_temp_sprintf("scroll_margin = %d", v)); }
+        }
+        nob_temp_reset();
+        handled = true;
+    }
+    if(!handled){
+        message_to_console(ccode, nob_temp_sprintf("Unknown option '%s', type :set to list options", name));
+        nob_temp_reset();
+    }
+    free(name);
+    free(value);
+}
+
+void open_help_buffer(CCode* ccode){
+    Layer* help = new_layer_code();
+    LayerCodeData* lcd = help->layer_data;
+    arrsetlen(lcd->filename, 0);
+    const char* name = "[help]";
+    for(const char* p = name; *p; p++) arrput(lcd->filename, *p);
+    arrput(lcd->filename, '\0');
+    layer_code_make_welcome_screen(help);
+    lcd->is_welcome = true;
+    push_layer_to_top(ccode, help);
+}
+
+static void quit_confirmed_callback(CCode* ccode, void* data){
+    (void) data;
+    ccode->config->PrivateRunning = false;
+}
+
+static void close_confirmed_callback(CCode* ccode, void* data){
+    (void) data;
+    close_code_layer(ccode, true);
+}
+
+static void dialog_noop_callback(CCode* ccode, void* data){
+    (void) ccode;
+    (void) data;
+}
+
+static bool dialog_open(CCode* ccode){
+    for(size_t i = 0; i < arrlenu(ccode->layers); i++){
+        if(ccode->layers[i]->type == LAYER_FLOATING_DIALOG) return true;
+    }
+    return false;
+}
+
 void console_execute_command(CCode* ccode, const char* buffer){
     TokenizationOutput to = {0};
     if(tokenize_console_command(buffer, &to)){
@@ -130,20 +305,117 @@ void console_execute_command(CCode* ccode, const char* buffer){
         return;
     }
     if (arrlen(to.tokens) < 1 || to.tokens[0].type != TOKEN_COMMAND) {
+        const char* b = buffer;
+        while(*b && is_whitespace[(uint8_t)*b]) b++;
+        if(*b){
+            char name[64] = {0};
+            int k = 0;
+            while(b[k] && !is_whitespace[(uint8_t)b[k]] && k < 63){ name[k] = b[k]; k++; }
+            message_to_console(ccode, nob_temp_sprintf("Unknown command '%s', :help lists all commands", name));
+            nob_temp_reset();
+        }
         goto defer;
     }
 
     switch (to.tokens[0].command_type) {
         case COMMAND_QUIT: {
+            const char* first = NULL;
+            int unsaved = count_unsaved(ccode, &first);
+            if(unsaved > 0){
+                if(!dialog_open(ccode)){
+                    const char* q = unsaved == 1
+                        ? nob_temp_sprintf("'%s' has unsaved changes. Quit anyway?", path_basename(first))
+                        : nob_temp_sprintf("%d files have unsaved changes. Quit anyway?", unsaved);
+                    push_layer_to_top(ccode, new_layer_floating_dialog(q, &quit_confirmed_callback, &dialog_noop_callback, NULL));
+                    nob_temp_reset();
+                }
+                set_status(true, "Unsaved changes: :wa saves all, :q! quits without saving");
+                break;
+            }
+            ccode->config->PrivateRunning = false;
+            break;
+        }
+
+        case COMMAND_FORCE_QUIT: {
             ccode->config->PrivateRunning = false;
             break;
         }
 
         case COMMAND_WRITE_QUIT: {
             write_code_layer_to_file(ccode, false);
+            const char* first = NULL;
+            int unsaved = count_unsaved(ccode, &first);
+            if(unsaved > 0){
+                message_to_console(ccode, nob_temp_sprintf("'%s' is not saved, use :wa to save all or :q! to discard", first));
+                nob_temp_reset();
+                break;
+            }
             ccode->config->PrivateRunning = false;
             break;
-        } 
+        }
+
+        case COMMAND_WRITE_ALL: {
+            Layer** all = collect_code_layers(ccode);
+            int written = 0;
+            Layer* top = top_layer(ccode);
+            for(size_t i = 0; i < arrlenu(all); i++){
+                LayerCodeData* lcd = all[i]->layer_data;
+                if(lcd->saved || lcd->is_welcome) continue;
+                write_layer_to_file(ccode, all[i], false);
+                if(lcd->saved) written++;
+            }
+            if(top) push_layer_to_top(ccode, top);
+            arrfree(all);
+            message_to_console(ccode, nob_temp_sprintf("Saved %d file%s", written, written == 1 ? "" : "s"));
+            nob_temp_reset();
+            break;
+        }
+
+        case COMMAND_NEW: {
+            Layer* layer = new_layer_code();
+            push_layer_to_top(ccode, layer);
+            break;
+        }
+
+        case COMMAND_HELP: {
+            open_help_buffer(ccode);
+            break;
+        }
+
+        case COMMAND_SET: {
+            console_set_option(ccode, console_args_start(buffer));
+            break;
+        }
+
+        case COMMAND_RELOAD: {
+            Layer* top = top_type_layer(ccode, LAYER_CODE);
+            if(!top) break;
+            reload_code_layer(ccode, top);
+            break;
+        }
+
+        case COMMAND_REPLACE: {
+            Layer* top = top_type_layer(ccode, LAYER_CODE);
+            if(!top){
+                message_to_console(ccode, "No file to replace in");
+                break;
+            }
+            const char* p = console_args_start(buffer);
+            char* from = console_next_arg(&p);
+            char* to_text = console_next_arg(&p);
+            if(!from || !*from){
+                message_to_console(ccode, "Usage: :r <find> <replace>");
+            }else{
+                LayerCodeData* lcd = top->layer_data;
+                int count = layer_code_replace_all(lcd, from, to_text ? to_text : "");
+                layer_code_flush_edit(ccode, top);
+                message_to_console(ccode, nob_temp_sprintf("Replaced %d occurrence%s of '%s'", count, count == 1 ? "" : "s", from));
+                nob_temp_reset();
+            }
+            free(from);
+            free(to_text);
+            break;
+        }
 
         case COMMAND_OPEN: {
             if (has_token_types(to.tokens, TOKEN_STRING, NULL)) {
@@ -155,13 +427,27 @@ void console_execute_command(CCode* ccode, const char* buffer){
         case COMMAND_GOTO: {
             if (has_token_types(to.tokens, TOKEN_INTEGER, NULL) && to.tokens[1].integer >= 0) {
                 Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
+                if(!top_code_layer) break;
                 LayerCodeData* lcd = top_code_layer->layer_data;
                 if (!lcd->cursor) break;
 
-                lcd->cursor->y = to.tokens[1].integer > arrlen(lcd->code_buffer)-1 ? arrlen(lcd->code_buffer)-1 : to.tokens[1].integer;
-                if (has_token_types(to.tokens, TOKEN_INTEGER, TOKEN_INTEGER, NULL) && to.tokens[2].integer >= 0) {
-                    lcd->cursor->x = to.tokens[2].integer;
+                // lines and columns are counted from 1 like in the status bar
+                int64_t line = to.tokens[1].integer - 1;
+                if(line < 0) line = 0;
+                if(line > arrlen(lcd->code_buffer)-1) line = arrlen(lcd->code_buffer)-1;
+                lcd->cursor->y = (int)line;
+                lcd->cursor->x = 0;
+                if (has_token_types(to.tokens, TOKEN_INTEGER, TOKEN_INTEGER, NULL) && to.tokens[2].integer >= 1) {
+                    lcd->cursor->x = view_byte_at_col(lcd->code_buffer[line], (int)to.tokens[2].integer - 1);
+                }else{
+                    lcd->cursor->x = first_non_blank(lcd->code_buffer[line]);
                 }
+                lcd->preferred_col = -1;
+                sel_clear(lcd);
+                // center the target line
+                VirtualWindow text = view_text_area(lcd);
+                lcd->cursor->yoff = lcd->cursor->y - text.height / 2;
+                if(lcd->cursor->yoff < 0) lcd->cursor->yoff = 0;
             }
             break;
         }
@@ -227,56 +513,81 @@ void console_execute_command(CCode* ccode, const char* buffer){
 
         case COMMAND_FIND: {
             Layer* top_fs_layer = top_fullsceen_layer(ccode);
-            if(top_fs_layer == NULL){
-                message_to_console(ccode, "no available layer to look for string");
+            if(top_fs_layer == NULL || (top_fs_layer->type != LAYER_CODE && top_fs_layer->type != LAYER_SPLIT_VIEW)){
+                message_to_console(ccode, "cannot find text in this layer");
                 break;
             }
-            if(top_fs_layer->type != LAYER_CODE && top_fs_layer->type != LAYER_SPLIT_VIEW){ 
-                message_to_console(ccode, "cannot find string in this layer");
+            // the whole rest of the line is the search text, "quotes" are optional
+            const char* raw = console_args_start(buffer);
+            char* text = NULL;
+            if(*raw == '"'){
+                const char* p = raw;
+                text = console_next_arg(&p);
+            }else{
+                text = strdup(raw);
+                size_t l = strlen(text);
+                while(l > 0 && is_whitespace[(uint8_t)text[l-1]]) text[--l] = '\0';
+            }
+            if(!text || !*text){
+                free(text);
+                message_to_console(ccode, "Usage: :f <text>");
                 break;
             }
-
-            int32_t nth_occurence = 1;
-            if(arrlen(to.tokens) >= 3 && to.tokens[2].type == TOKEN_INTEGER){
-                nth_occurence = to.tokens[2].integer;
-            }
-
-            if (top_fs_layer->type == LAYER_CODE && has_token_types(to.tokens, TOKEN_STRING, NULL)) {
-                Layer* top_code_layer = top_type_layer(ccode, LAYER_CODE);
-                if(top_code_layer){
-                    LayerCodeData* lcd = top_code_layer->layer_data;
-                    if(lcd->finding_substr != NULL){
-                        free(lcd->finding_substr->substr);
-                        free(lcd->finding_substr);
-                        lcd->finding_substr = NULL;
+            Layer* code = top_type_layer(ccode, LAYER_CODE);
+            if(code){
+                LayerCodeData* lcd = code->layer_data;
+                if(lcd->finding_substr != NULL){
+                    free(lcd->finding_substr->substr);
+                    free(lcd->finding_substr);
+                    lcd->finding_substr = NULL;
+                }
+                // start at the first match after the cursor
+                int nth = 1;
+                bool ic = search_ignore_case(text);
+                int count = 0;
+                bool found_after = false;
+                for(int r = 0; r < arrlen(lcd->code_buffer) && !found_after; r++){
+                    char* line = lcd->code_buffer[r];
+                    char* p = line;
+                    while((p = find_case_strstr(p, text, ic)) != NULL){
+                        count++;
+                        int c = (int)(p - line);
+                        if(r > lcd->cursor->y || (r == lcd->cursor->y && c >= lcd->cursor->x)){
+                            nth = count;
+                            found_after = true;
+                            break;
+                        }
+                        p += strlen(text);
                     }
                 }
-                find_jump(ccode, to.tokens[1].string.start, to.tokens[1].string.size, nth_occurence);
-                break;
-            }else if(top_fs_layer->type == LAYER_SPLIT_VIEW && has_token_types(to.tokens, TOKEN_STRING, NULL)){
-                Layer* active_code_layer = layer_split_view_get_active(top_fs_layer);
-                if(active_code_layer){
-                    LayerCodeData* lcd = active_code_layer->layer_data;
-                    if(lcd->finding_substr != NULL){
-                        free(lcd->finding_substr->substr);
-                        free(lcd->finding_substr);
-                        lcd->finding_substr = NULL;
-                    }
-                }
-                find_jump(ccode, to.tokens[1].string.start, to.tokens[1].string.size, nth_occurence);
+                find_jump(ccode, text, (int32_t)strlen(text), nth);
             }
+            free(text);
             break;
-
         }
 
         case COMMAND_CLOSE: {
-            Layer* second_layer = layer_at_index(ccode, 1); // first will always be console
+            // the layer below the console (commands also run without it from shortcuts)
+            Layer* second_layer = NULL;
+            for(size_t li = 0; li < arrlenu(ccode->layers); li++){
+                if(ccode->layers[li]->type != LAYER_CONSOLE){ second_layer = ccode->layers[li]; break; }
+            }
             if(!second_layer){
                 break;
             }
 
             if(second_layer->type == LAYER_CODE){
-                close_code_layer(ccode, false);
+                Layer* code = top_type_layer(ccode, LAYER_CODE);
+                LayerCodeData* lcd = code ? code->layer_data : NULL;
+                if(lcd && !lcd->saved){
+                    if(!dialog_open(ccode)){
+                        const char* q = nob_temp_sprintf("Discard unsaved changes to '%s'?", path_basename(lcd->filename));
+                        push_layer_to_top(ccode, new_layer_floating_dialog(q, &close_confirmed_callback, &dialog_noop_callback, NULL));
+                        nob_temp_reset();
+                    }
+                }else{
+                    close_code_layer(ccode, false);
+                }
             }else if(second_layer->type == LAYER_DIR_WALK || second_layer->type == LAYER_THEME_SELECTOR){
                 remove_layer(ccode, second_layer);
                 free_layer(second_layer);
@@ -287,14 +598,18 @@ void console_execute_command(CCode* ccode, const char* buffer){
         }
 
         case COMMAND_FORCE_CLOSE: {
-            Layer* second_layer = layer_at_index(ccode, 1); // first will always be console
+            // the layer below the console (commands also run without it from shortcuts)
+            Layer* second_layer = NULL;
+            for(size_t li = 0; li < arrlenu(ccode->layers); li++){
+                if(ccode->layers[li]->type != LAYER_CONSOLE){ second_layer = ccode->layers[li]; break; }
+            }
             if(!second_layer){
                 break;
             }
 
-            if(second_layer->type == LAYER_CODE){
+            if(second_layer->type == LAYER_CODE || second_layer->type == LAYER_SPLIT_VIEW){
                 close_code_layer(ccode, true);
-            }else if(second_layer->type == LAYER_DIR_WALK){
+            }else if(second_layer->type == LAYER_DIR_WALK || second_layer->type == LAYER_THEME_SELECTOR){
                 remove_layer(ccode, second_layer);
                 free_layer(second_layer);
             }
@@ -630,14 +945,6 @@ void console_execute_command(CCode* ccode, const char* buffer){
         }
     }
 
-    printf("Tokenization output:\n");
-    for(size_t i = 0; i < arrlenu(to.tokens); i++ ){
-        if(to.tokens[i].type == TOKEN_STRING || to.tokens[i].type == TOKEN_COMMAND){
-            printf("  %u (%.*s)\n", to.tokens[i].type, (int)to.tokens[i].string.size, to.tokens[i].string.start);
-        }else if(to.tokens[i].type == TOKEN_INTEGER){
-            printf("  %d N=%ld\n", to.tokens[i].type, to.tokens[i].integer);
-        }
-    }
 defer:
     arrfree(to.tokens);
     free(to.string_storage);
@@ -713,9 +1020,6 @@ bool layer_console_update(CCode* ccode, Layer* layer, int chr){
         return false;
     }
     LayerConsoleData* console_data = (LayerConsoleData*) layer->layer_data;
-    int y, x;
-    (void)y;
-    getmaxyx(stdscr, y, x);
 
     if((chr >= 0 && chr <= 255) && isprint(chr)){
         int line_len = arrlen(console_data->console_buffer);
@@ -735,8 +1039,25 @@ bool layer_console_update(CCode* ccode, Layer* layer, int chr){
         }
         arrput(console_data->console_buffer, '\0');
 
-        if(console_data->console_buffer_x + 1 < x){
+        console_data->console_buffer_x++;
+    } else if(chr == KEY_PASTE && pasted_text){
+        // pasted text goes in at the cursor, line breaks become spaces
+        for(size_t i = 0; i + 1 < arrlenu(pasted_text); i++){
+            char c = pasted_text[i] == '\n' || pasted_text[i] == '\t' ? ' ' : pasted_text[i];
+            if(!isprint((unsigned char)c) && (unsigned char)c < 0x80) continue;
+            (void) arrpop(console_data->console_buffer);
+            arrins(console_data->console_buffer, console_data->console_buffer_x, c);
+            arrput(console_data->console_buffer, '\0');
             console_data->console_buffer_x++;
+        }
+    } else if(chr == KEY_HOME){
+        console_data->console_buffer_x = 0;
+    } else if(chr == KEY_END){
+        console_data->console_buffer_x = (int)strlen(console_data->console_buffer);
+    } else if(chr == KEY_DC){
+        int len = (int)strlen(console_data->console_buffer);
+        if(console_data->console_buffer_x < len){
+            arrdel(console_data->console_buffer, console_data->console_buffer_x);
         }
     } else if(chr == CUSTOM_KEY_ENTER){
         ccode->config->PrivateCloseConsole = true;
@@ -840,6 +1161,12 @@ bool layer_console_update(CCode* ccode, Layer* layer, int chr){
 }
 
 
+// First buffer column shown on screen
+int console_scroll_offset(LayerConsoleData* console_data, int width){
+    int off = console_data->console_buffer_x - (width - 1);
+    return off > 0 ? off : 0;
+}
+
 void layer_console_render(CCode* ccode, Layer* layer){
     if(!ccode || !layer || layer->type != LAYER_CONSOLE || layer->layer_data == NULL){
         return;
@@ -848,16 +1175,15 @@ void layer_console_render(CCode* ccode, Layer* layer){
     int y, x;
     getmaxyx(stdscr, y, x);
 
-    char top_line[x+1];
-    size_t size = snprintf(top_line, x + 1, "%s", console_data->console_buffer);
-    if ((int)size > x) size = x;
-    for (int i = size; i < x; i++) top_line[i] = ' ';
-    top_line[x] = '\0';
+    // long commands scroll so the cursor stays visible
+    int off = console_scroll_offset(console_data, x);
+    const char* visible = console_data->console_buffer + off;
 
     attron(A_REVERSE);
-    mvprintw(y-1, 0, "%s", top_line);
+    mvhline(y-1, 0, ' ', x);
+    mvaddnstr(y-1, 0, visible, x);
     attroff(A_REVERSE);
-    layer_console_draw_type_hint(ccode, layer);
+    if(off == 0) layer_console_draw_type_hint(ccode, layer);
 }
 
 

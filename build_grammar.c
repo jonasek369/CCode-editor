@@ -61,15 +61,14 @@ int main(int argc, char **argv)
     for (size_t i = 0; i < count; i++) {
         const char *obj = nob_temp_sprintf("%s/%s", build_dir, files[i].obj);
         if (nob_needs_rebuild1(obj, files[i].src)) {
-            nob_cmd_append(&cmd,
-                compiler,
-                "-c",
-                "-O3",
-                "-march=native",
-                "-flto=auto");
- 
+            nob_cmd_append(&cmd, compiler, "-c");
+
             if (!target_windows) {
-                nob_cmd_append(&cmd, "-fPIC");
+                nob_cmd_append(&cmd, "-O3", "-march=native", "-flto=auto", "-fPIC");
+            } else {
+                // No -march=native: the exe has to run on other machines, and mingw gcc
+                // can't keep the stack aligned for AVX code on win64 (crashes at random)
+                nob_cmd_append(&cmd, "-O2");
             }
  
             nob_cmd_append(&cmd,

@@ -46,13 +46,13 @@ bool make_split_view(Layer* split_view, Layer* layer_a, Layer* layer_b){
 	virt_win_a->x = 0;
 	virt_win_a->y = 1;
 	virt_win_a->width  = left_w;
-	virt_win_a->height = y - 1;
+	virt_win_a->height = y - 2; // tab bar and status bar
 	
 	VirtualWindow* virt_win_b = malloc(sizeof(VirtualWindow));
 	virt_win_b->x = left_w;
 	virt_win_b->y = 1;
 	virt_win_b->width  = right_w;
-	virt_win_b->height = y - 1;
+	virt_win_b->height = y - 2;
 
 	arrput(lsvd->splitten_layers, layer_a);
 	arrput(lsvd->splitten_layers, layer_b);
@@ -65,6 +65,22 @@ bool make_split_view(Layer* split_view, Layer* layer_a, Layer* layer_b){
 
 	lsvd->focused = 0;
 	return true;
+}
+
+// Fits the panes to a resized terminal, keeping their proportions
+void layer_split_view_relayout(Layer* split_view){
+	LayerSplitViewData* lsvd = split_view->layer_data;
+	if(!lsvd || arrlen(lsvd->virtual_windows) != 2) return;
+	int y, x;
+	getmaxyx(stdscr, y, x);
+	VirtualWindow* a = lsvd->virtual_windows[0];
+	VirtualWindow* b = lsvd->virtual_windows[1];
+	int old_total = a->width + b->width;
+	int left_w = old_total > 0 ? (int)((long)a->width * x / old_total) : x / 2;
+	if(left_w < 1) left_w = 1;
+	if(left_w > x - 1) left_w = x - 1;
+	a->x = 0; a->y = 1; a->width = left_w; a->height = y - 2;
+	b->x = left_w; b->y = 1; b->width = x - left_w; b->height = y - 2;
 }
 
 void layer_split_view_close(CCode* ccode, Layer* split_view){
@@ -107,6 +123,13 @@ void layer_split_view_render(CCode* ccode, Layer* layer){
 
     for(size_t i = 0; i < arrlenu(lsvd->splitten_layers); i++){
     	layer_code_render(ccode, lsvd->splitten_layers[i]);
+    }
+    // separator on the left edge of the right pane
+    if(arrlen(lsvd->virtual_windows) == 2){
+        VirtualWindow* b = lsvd->virtual_windows[1];
+        attrset(COLOR_PAIR(COLOR_PAIR_COMMENT));
+        mvvline(b->y, b->x, ACS_VLINE, b->height);
+        attrset(A_NORMAL);
     }
 }
 

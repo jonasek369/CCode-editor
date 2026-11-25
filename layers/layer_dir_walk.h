@@ -131,7 +131,7 @@ bool layer_dir_walk_update(CCode* ccode, Layer* layer, int chr){
     getmaxyx(stdscr, screen_y, screen_x);
     (void)screen_x;
 
-    int list_height = screen_y - 3;
+    int list_height = screen_y - 4; // rows 3 .. status bar
 
     if(chr == KEY_DOWN){
         if((ldwd->selected + 1) < arrlen(ldwd->current_dir_files)){
@@ -174,7 +174,7 @@ void layer_dir_walk_render(CCode* ccode, Layer* layer){
 
     int draw_y = 3;
     for(size_t i = ldwd->offset; i < arrlenu(ldwd->current_dir_files); i++){
-        if(draw_y >= y) break;
+        if(draw_y >= y - 1) break; // the last row is the status bar
         char* cwd = strdup(nob_get_current_dir_temp());
         Nob_File_Type ft = dir_walk_get_file_type(cwd, ldwd->current_dir_files[i]);
         free(cwd);
